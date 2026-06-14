@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'" />
+  <title>Slash It</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="drag-region"></div>
+
+  <!-- Edit Mode -->
+  <div id="edit-view" class="view">
+    <header class="edit-header">
+      <h1 class="edit-title">Today:</h1>
+      <form id="add-braindump-form" class="braindump-add-form braindump-add-form--header">
+        <input
+          id="new-braindump-input"
+          type="text"
+          placeholder="Add a Task:"
+          autocomplete="off"
+          spellcheck="true"
+        />
+        <input
+          id="new-braindump-limit"
+          type="text"
+          class="limit-input"
+          placeholder="20m"
+          title="Optional time limit"
+          autocomplete="off"
+        />
+      </form>
+    </header>
+
+    <div class="edit-columns">
+      <div class="column-divider" aria-hidden="true"></div>
+
+      <section class="task-section task-section--braindump">
+        <div class="section-header">
+          <h2 class="section-label">Braindump</h2>
+          <button id="add-all-to-session-btn" class="section-action-btn" type="button" disabled>Add all to session</button>
+        </div>
+        <ul id="braindump-list" class="task-list" data-list="braindump"></ul>
+      </section>
+
+      <section class="task-section task-section--session">
+        <div class="section-header">
+          <h2 class="section-label section-label--bright">Next Session:</h2>
+          <button id="clear-session-btn" class="section-action-btn" type="button" disabled>Clear tasks in this session</button>
+        </div>
+        <ul id="session-list" class="task-list" data-list="session"></ul>
+      </section>
+    </div>
+
+    <footer class="edit-footer">
+      <button id="start-btn" class="start-session-btn" disabled>Start Session</button>
+    </footer>
+
+    <div id="clear-session-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="clear-session-title">
+      <div class="clear-session-modal-card">
+        <h3 id="clear-session-title" class="clear-session-modal-title">Clear session tasks</h3>
+        <div class="clear-session-modal-actions">
+          <button id="clear-session-all-btn" class="clear-session-modal-btn" type="button">Clear all tasks</button>
+          <button id="clear-session-completed-btn" class="clear-session-modal-btn" type="button">Clear only completed tasks</button>
+          <button id="clear-session-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Focus Mode -->
+  <div id="focus-view" class="view hidden">
+    <div class="focus-stack" id="focus-stack">
+      <div id="session-drawer" class="session-drawer" aria-hidden="true">
+        <ul id="session-drawer-list" class="session-drawer-list"></ul>
+      </div>
+      <div class="timer-bar" id="timer-bar">
+        <button id="timer-display" class="timer-display" type="button" title="Click to pause/resume">0:00</button>
+      <span id="current-task" class="current-task"></span>
+      <div id="timer-actions" class="timer-actions">
+        <button id="pause-btn" class="pause-btn" type="button" title="Pause" aria-label="Pause">
+          <svg class="pause-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <rect x="6" y="4" width="4" height="16" rx="1"/>
+            <rect x="14" y="4" width="4" height="16" rx="1"/>
+          </svg>
+          <svg class="play-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        </button>
+        <button id="back-to-edit-btn" class="icon-btn" type="button" title="Edit tasks" aria-label="Edit tasks">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+          </svg>
+        </button>
+      </div>
+      <div id="expired-actions" class="expired-actions hidden">
+        <button id="overtime-btn" class="expired-btn" type="button">Overtime</button>
+        <button id="extend-btn" class="expired-btn" type="button">Extend</button>
+      </div>
+      <div id="extend-panel" class="extend-panel hidden">
+        <span class="extend-label">How long?</span>
+        <input id="extend-input" type="text" class="extend-input" value="5m" autocomplete="off" />
+        <button id="extend-confirm-btn" class="expired-btn expired-btn-accent" type="button">Add</button>
+        <button id="extend-cancel-btn" class="expired-btn" type="button">Cancel</button>
+      </div>
+      <button id="complete-btn" class="icon-btn icon-complete" type="button" title="Complete task" aria-label="Complete task">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 6 9 17l-5-5"/>
+        </svg>
+      </button>
+    </div>
+    </div>
+  </div>
+
+  <!-- All Done -->
+  <div id="done-view" class="view hidden">
+    <div class="done-content">
+      <div class="done-icon">✓</div>
+      <h2>All done</h2>
+      <p id="done-summary" class="done-summary"></p>
+      <p class="done-time" id="done-time"></p>
+      <button id="reset-btn" class="btn btn-primary btn-full">Edit Tasks</button>
+    </div>
+  </div>
+
+  <div id="task-context-menu" class="task-context-menu hidden" role="menu">
+    <button type="button" id="task-context-delete" class="task-context-menu-item" role="menuitem">Delete</button>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

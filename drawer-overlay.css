@@ -1,0 +1,71 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.session-drawer {
+  width: 100%;
+  height: 100%;
+  padding: 8px 10px;
+  background: #161616;
+  border-radius: 8px;
+  text-align: left;
+  overflow: hidden;
+  opacity: 0;
+  box-sizing: border-box;
+  transform: translateY(12px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.session-drawer.is-open {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.session-drawer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.session-drawer-task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'N27', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 3px 0;
+}
+
+.session-drawer-task-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-drawer-task-time {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: #9a9a9a;
+}
+
+.session-drawer-task--done .session-drawer-task-name {
+  color: #9a9a9a;
+  text-decoration: line-through;
+}
+
+.session-drawer-task--current .session-drawer-task-name,
+.session-drawer-task--current .session-drawer-task-time {
+  color: #ff5500;
+}
+
+.session-drawer-task--pending .session-drawer-task-name {
+  color: #f9f9f9;
+}

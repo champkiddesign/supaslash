@@ -1,0 +1,20 @@
+{
+  "name": "slash-it",
+  "version": "1.0.0",
+  "description": "A simple floating to-do timer for macOS",
+  "main": "main.js",
+  "scripts": {
+    "start": "env -u ELECTRON_RUN_AS_NODE electron .",
+    "dev": "env -u ELECTRON_RUN_AS_NODE electron ."
+  },
+  "keywords": [
+    "todo",
+    "timer",
+    "productivity"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.3.3"
+  }
+}
