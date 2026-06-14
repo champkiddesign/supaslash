@@ -183,9 +183,6 @@ async function openSessionDrawer() {
   clearTimeout(drawerCloseTimer);
   drawerOpen = true;
   const payload = getDrawerPayload();
-  // #region agent log
-  fetch('http://127.0.0.1:7877/ingest/3abece19-aac2-46de-a349-4e226444dbd9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b401ad'},body:JSON.stringify({sessionId:'b401ad',location:'renderer.js:openSessionDrawer',message:'opening drawer overlay',data:{payload,mainHeight:FOCUS_BAR_HEIGHT},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-  // #endregion
   await window.slashIt.showSessionDrawer(payload);
 }
 
@@ -194,9 +191,6 @@ function closeSessionDrawer({ immediate = false } = {}) {
 
   clearTimeout(drawerCloseTimer);
   drawerOpen = false;
-  // #region agent log
-  fetch('http://127.0.0.1:7877/ingest/3abece19-aac2-46de-a349-4e226444dbd9',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b401ad'},body:JSON.stringify({sessionId:'b401ad',location:'renderer.js:closeSessionDrawer',message:'closing drawer overlay',data:{immediate},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-  // #endregion
 
   if (immediate) {
     void window.slashIt.hideSessionDrawer();

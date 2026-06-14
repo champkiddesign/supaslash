@@ -1,20 +1,30 @@
 {
   "name": "slash-it",
+  "productName": "Slash It",
   "version": "1.0.0",
   "description": "A simple floating to-do timer for macOS",
   "main": "main.js",
   "scripts": {
-    "start": "env -u ELECTRON_RUN_AS_NODE electron .",
-    "dev": "env -u ELECTRON_RUN_AS_NODE electron ."
+    "start": "env -u ELECTRON_RUN_AS_NODE electron-forge start",
+    "dev": "env -u ELECTRON_RUN_AS_NODE electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "build-icon": "bash scripts/build-icon.sh"
   },
   "keywords": [
     "todo",
     "timer",
     "productivity"
   ],
-  "author": "",
+  "author": "champkiddesign",
   "license": "MIT",
   "devDependencies": {
+    "@electron-forge/cli": "^7.8.1",
+    "@electron-forge/maker-dmg": "^7.8.1",
+    "@electron-forge/maker-zip": "^7.8.1",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.8.1",
+    "@electron-forge/plugin-fuses": "^7.8.1",
+    "@electron/fuses": "^1.8.0",
     "electron": "^28.3.3"
   }
 }

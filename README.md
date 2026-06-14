@@ -42,12 +42,31 @@ The app opens as a small floating window. Drag it anywhere on screen — it stay
 - **Enter** in the add-task field to quickly add tasks
 - **Double-click** a task to rename it
 
-## Building a Standalone App (optional)
+## App Icon
 
-To package as a native `.app` you can launch from the Dock:
+Replace the app icon with your own artwork:
+
+1. Save a **square PNG** as `assets/icon-source.png` (1024×1024 recommended)
+2. Run `npm run build-icon` to generate `assets/icon.icns`
+3. Run `npm run make` and reinstall from the new `.dmg`
+
+For dev mode (`npm start`), the Dock icon updates from `assets/icon.icns` automatically after step 2.
+
+**Tip:** Use a background color that contrasts with the macOS Dock (not pure black), so the icon stays visible in dark mode.
+
+## Building a Standalone App
+
+Package as a native `.app` and `.dmg` installer:
 
 ```bash
-npm install --save-dev @electron-forge/cli
-npx electron-forge import
+npm install
 npm run make
 ```
+
+The build outputs to `out/make/`:
+- **`Slash It.dmg`** — drag to Applications to install
+- **`Slash It-darwin-arm64-1.0.0.zip`** — zip of the `.app` bundle
+
+On first launch, macOS may warn that the app is from an unidentified developer. Right-click the app → **Open** to allow it.
+
+To rebuild after changes, run `npm run make` again.

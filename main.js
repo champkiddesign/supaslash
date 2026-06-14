@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -7,21 +7,16 @@ let overlayWindow;
 let drawerOverlayWindow;
 let currentWindowMode = 'edit';
 
-const DEBUG_LOG = path.join(__dirname, '.cursor/debug-b401ad.log');
-
-function debugLog(location, message, data, hypothesisId) {
-  try {
-    fs.appendFileSync(DEBUG_LOG, `${JSON.stringify({ sessionId: 'b401ad', location, message, data, hypothesisId, timestamp: Date.now() })}\n`);
-  } catch {
-    // ignore
-  }
-}
-
 const FOCUS_WIDTH_MARGIN = 40;
 const FOCUS_BAR_HEIGHT = 56;
 const FOCUS_DRAWER_SLOT = 180 + 16 + 6 + 8;
 const FOCUS_SHELL_HEIGHT = FOCUS_BAR_HEIGHT + FOCUS_DRAWER_SLOT;
 const FOCUS_DRAWER_ANIM_MS = 350;
+
+const VISIBLE_ON_ALL_WORKSPACES_OPTS = {
+  visibleOnFullScreen: true,
+  skipTransformProcessType: true,
+};
 
 const WINDOW_SIZES = {
   edit: { width: 649, height: 768, minWidth: 510, minHeight: 425, resizable: true },
@@ -82,7 +77,7 @@ function createOverlayWindow() {
   });
 
   overlayWindow.setIgnoreMouseEvents(true, { forward: true });
-  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  overlayWindow.setVisibleOnAllWorkspaces(true, VISIBLE_ON_ALL_WORKSPACES_OPTS);
   overlayWindow.setAlwaysOnTop(true, 'screen-saver');
 
   overlayWindow.loadFile('overlay.html');
@@ -160,7 +155,7 @@ function createDrawerOverlayWindow() {
     },
   });
 
-  drawerOverlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  drawerOverlayWindow.setVisibleOnAllWorkspaces(true, VISIBLE_ON_ALL_WORKSPACES_OPTS);
   drawerOverlayWindow.setAlwaysOnTop(true, 'floating', 2);
   drawerOverlayWindow.loadFile('drawer-overlay.html');
 
@@ -189,14 +184,6 @@ function showSessionDrawerOverlay({ drawerWidth, drawerHeight, tasks }) {
   const overlay = createDrawerOverlayWindow();
   const x = bar.x + Math.round((bar.width - drawerWidth) / 2);
   const y = bar.y - drawerHeight - 6;
-
-  // #region agent log
-  debugLog('main.js:showSessionDrawerOverlay', 'drawer overlay positioned', {
-    mainBounds: mainWindow.getBounds(),
-    barBounds: bar,
-    overlayBounds: { x, y, width: drawerWidth, height: drawerHeight },
-  }, 'H5');
-  // #endregion
 
   const present = () => {
     if (overlay.isDestroyed()) return;
@@ -276,14 +263,6 @@ function resizeFocusWindow({ width: contentWidth } = {}) {
   const width = Math.max(size.minWidth, Math.min(Math.ceil(contentWidth), maxWidth));
   const height = FOCUS_BAR_HEIGHT;
   const boundsBefore = mainWindow.getBounds();
-  // #region agent log
-  debugLog('main.js:resizeFocusWindow', 'main window resize', {
-    boundsBefore,
-    requestedWidth: contentWidth,
-    appliedWidth: width,
-    appliedHeight: height,
-  }, 'H1');
-  // #endregion
   mainWindow.setMinimumSize(size.minWidth, size.minHeight);
   mainWindow.setMaximumSize(maxWidth, size.maxHeight);
   mainWindow.setResizable(size.resizable);
@@ -291,11 +270,6 @@ function resizeFocusWindow({ width: contentWidth } = {}) {
   const bottom = boundsBefore.y + boundsBefore.height;
   const x = Math.round(boundsBefore.x + (boundsBefore.width - width) / 2);
   mainWindow.setBounds({ x, y: bottom - height, width, height }, false);
-  // #region agent log
-  debugLog('main.js:resizeFocusWindow', 'main window resized', {
-    boundsAfter: mainWindow.getBounds(),
-  }, 'H1');
-  // #endregion
 }
 
 function applyWindowSize(mode) {
@@ -330,6 +304,20 @@ function applyWindowSize(mode) {
   }
 }
 
+function setDockIcon() {
+  if (process.platform !== 'darwin' || !app.dock) return;
+
+  app.setActivationPolicy('regular');
+
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'electron.icns')
+    : path.join(__dirname, 'assets', 'icon.icns');
+
+  if (!fs.existsSync(iconPath)) return;
+  app.dock.setIcon(nativeImage.createFromPath(iconPath));
+  app.dock.show();
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: WINDOW_SIZES.edit.width,
@@ -352,13 +340,20 @@ function createWindow() {
     mainWindow.setWindowButtonVisibility(false);
   }
 
-  mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  mainWindow.setVisibleOnAllWorkspaces(true, VISIBLE_ON_ALL_WORKSPACES_OPTS);
   mainWindow.setAlwaysOnTop(true, 'floating');
+
+  mainWindow.on('focus', () => {
+    if (process.platform === 'darwin') {
+      app.focus({ steal: true });
+    }
+  });
 
   mainWindow.loadFile('index.html');
 
   mainWindow.webContents.once('did-finish-load', () => {
     applyWindowSize(getInitialWindowMode());
+    setDockIcon();
   });
 
   mainWindow.on('closed', () => {
@@ -369,6 +364,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  setDockIcon();
   createWindow();
 
   app.on('activate', () => {
