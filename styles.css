@@ -81,6 +81,7 @@ body.mode-edit {
 }
 
 body.mode-edit .drag-region {
+  left: 78px;
   height: calc(36px * var(--edit-scale));
 }
 

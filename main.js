@@ -119,7 +119,7 @@ function hideScreenOverlay({ restoreMainWindow = true } = {}) {
   if (isLiveWindow(overlayWindow)) {
     overlayWindow.hide();
   }
-  if (restoreMainWindow && isLiveWindow(mainWindow)) {
+  if (restoreMainWindow && isLiveWindow(mainWindow) && isFloatingMode(currentWindowMode)) {
     mainWindow.setAlwaysOnTop(true, 'floating');
   }
 }
@@ -256,6 +256,23 @@ function getFocusMaxWidth() {
   return Math.max(WINDOW_SIZES.focus.minWidth, areaWidth - FOCUS_WIDTH_MARGIN);
 }
 
+function isFloatingMode(mode) {
+  return mode === 'focus' || mode === 'done';
+}
+
+function applyWindowPresentation(mode) {
+  if (!isLiveWindow(mainWindow)) return;
+  const floating = isFloatingMode(mode);
+
+  mainWindow.setVisibleOnAllWorkspaces(floating, floating ? VISIBLE_ON_ALL_WORKSPACES_OPTS : undefined);
+  mainWindow.setAlwaysOnTop(floating, floating ? 'floating' : 'normal');
+
+  if (process.platform === 'darwin') {
+    mainWindow.setWindowButtonVisibility(!floating);
+  }
+  mainWindow.setMaximizable(false);
+}
+
 function resizeFocusWindow({ width: contentWidth } = {}) {
   if (!isLiveWindow(mainWindow) || currentWindowMode !== 'focus') return;
   const size = WINDOW_SIZES.focus;
@@ -298,6 +315,8 @@ function applyWindowSize(mode) {
     mainWindow.setBounds({ x, y, width, height }, false);
   }
 
+  applyWindowPresentation(mode);
+
   if (mode !== 'focus') {
     hideScreenOverlay();
     hideSessionDrawerOverlay();
@@ -324,24 +343,22 @@ function createWindow() {
     height: WINDOW_SIZES.edit.height,
     minWidth: WINDOW_SIZES.edit.minWidth,
     minHeight: WINDOW_SIZES.edit.minHeight,
-    alwaysOnTop: true,
+    alwaysOnTop: false,
     frame: false,
     transparent: false,
     resizable: true,
+    maximizable: false,
     backgroundColor: '#0a0a0a',
+    ...(process.platform === 'darwin' ? {
+      titleBarStyle: 'hiddenInset',
+      trafficLightPosition: { x: 12, y: 14 },
+    } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
-
-  if (process.platform === 'darwin') {
-    mainWindow.setWindowButtonVisibility(false);
-  }
-
-  mainWindow.setVisibleOnAllWorkspaces(true, VISIBLE_ON_ALL_WORKSPACES_OPTS);
-  mainWindow.setAlwaysOnTop(true, 'floating');
 
   mainWindow.on('focus', () => {
     if (process.platform === 'darwin') {
