@@ -175,8 +175,191 @@ body.mode-edit #edit-view.view {
   -webkit-app-region: no-drag;
 }
 
-.task-section--braindump {
+.task-section--planned {
   padding-right: calc(16px * var(--edit-scale));
+}
+
+.planned-sessions-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.planned-sessions-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.planned-sessions-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.planned-sessions-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+.planned-session {
+  margin-bottom: calc(8px * var(--edit-scale));
+}
+
+.planned-session--collapsed .planned-session-body {
+  display: none;
+}
+
+.planned-session-header {
+  display: flex;
+  align-items: center;
+  gap: calc(8px * var(--edit-scale));
+  margin-bottom: calc(12px * var(--edit-scale));
+  flex-shrink: 0;
+}
+
+.planned-session--collapsed .planned-session-header {
+  margin-bottom: calc(4px * var(--edit-scale));
+}
+
+.planned-session-toggle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(20px * var(--edit-scale));
+  height: calc(20px * var(--edit-scale));
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--edit-muted);
+  transition: color 0.15s;
+  -webkit-app-region: no-drag;
+}
+
+.planned-session-toggle:hover {
+  color: var(--text);
+}
+
+.planned-session-toggle-icon {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.15s;
+}
+
+.planned-session--collapsed .planned-session-toggle-icon {
+  transform: rotate(-45deg);
+}
+
+.planned-session-name {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: calc(26px * var(--edit-scale));
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--edit-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.planned-session--expanded .planned-session-name {
+  color: var(--edit-muted);
+}
+
+.planned-session-name-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: calc(26px * var(--edit-scale));
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--edit-task-text);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--accent);
+  outline: none;
+  padding: 0 0 2px;
+  user-select: text;
+}
+
+.planned-session-body .task-list {
+  flex: none;
+  max-height: none;
+  overflow: visible;
+}
+
+.planned-session-header-actions {
+  display: flex;
+  align-items: center;
+  gap: calc(8px * var(--edit-scale));
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.planned-session-delete-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(20px * var(--edit-scale));
+  height: calc(20px * var(--edit-scale));
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 16px;
+  line-height: 1;
+  color: var(--edit-muted);
+  transition: color 0.15s;
+  -webkit-app-region: no-drag;
+}
+
+.planned-session-delete-btn:hover {
+  color: var(--danger);
+}
+
+.delete-session-message {
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: calc(21px * var(--edit-scale));
+  color: var(--edit-muted);
+  text-align: center;
+  margin-bottom: calc(24px * var(--edit-scale));
+}
+
+.plan-session-btn {
+  flex-shrink: 0;
+  margin-top: calc(8px * var(--edit-scale));
+  background: none;
+  border: none;
+  padding: calc(8px * var(--edit-scale)) 0;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--edit-muted);
+  text-align: left;
+  transition: color 0.15s;
+  -webkit-app-region: no-drag;
+}
+
+.plan-session-btn:hover {
+  color: var(--accent);
 }
 
 .task-section--session {
@@ -415,7 +598,8 @@ body.mode-edit #edit-view.view {
   -webkit-app-region: no-drag;
 }
 
-.task-item--braindump {
+.task-item--braindump,
+.task-item--planned {
   background-color: #000000;
   background-image: var(--grain-image);
   background-repeat: repeat;

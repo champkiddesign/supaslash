@@ -37,7 +37,15 @@ function loadData() {
   } catch {
     // ignore corrupt data
   }
-  return { tasks: [], currentIndex: 0, elapsedMs: 0, isRunning: false, mode: 'edit' };
+  return {
+    tasks: [],
+    plannedSessions: [],
+    expandedSessionId: 'braindump',
+    currentIndex: 0,
+    elapsedMs: 0,
+    isRunning: false,
+    mode: 'edit',
+  };
 }
 
 function saveData(data) {

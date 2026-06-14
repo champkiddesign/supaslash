@@ -36,18 +36,17 @@
     <div class="edit-columns">
       <div class="column-divider" aria-hidden="true"></div>
 
-      <section class="task-section task-section--braindump">
-        <div class="section-header">
-          <h2 class="section-label">Braindump</h2>
-          <button id="add-all-to-session-btn" class="section-action-btn" type="button" disabled>Add all to session</button>
+      <section class="task-section task-section--planned">
+        <div id="planned-sessions-column" class="planned-sessions-column">
+          <div id="planned-sessions-list" class="planned-sessions-list"></div>
+          <button id="plan-session-btn" class="plan-session-btn" type="button">+ Plan a Session</button>
         </div>
-        <ul id="braindump-list" class="task-list" data-list="braindump"></ul>
       </section>
 
       <section class="task-section task-section--session">
         <div class="section-header">
           <h2 class="section-label section-label--bright">Next Session:</h2>
-          <button id="clear-session-btn" class="section-action-btn" type="button" disabled>Clear tasks in this session</button>
+          <button id="clear-session-btn" class="section-action-btn" type="button" disabled>Clear all tasks</button>
         </div>
         <ul id="session-list" class="task-list" data-list="session"></ul>
       </section>
@@ -64,6 +63,17 @@
           <button id="clear-session-all-btn" class="clear-session-modal-btn" type="button">Clear all tasks</button>
           <button id="clear-session-completed-btn" class="clear-session-modal-btn" type="button">Clear only completed tasks</button>
           <button id="clear-session-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="delete-session-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="delete-session-title">
+      <div class="clear-session-modal-card">
+        <h3 id="delete-session-title" class="clear-session-modal-title">Delete session</h3>
+        <p id="delete-session-message" class="delete-session-message"></p>
+        <div class="clear-session-modal-actions">
+          <button id="delete-session-confirm-btn" class="clear-session-modal-btn" type="button">Delete session</button>
+          <button id="delete-session-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
         </div>
       </div>
     </div>

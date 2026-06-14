@@ -1,6 +1,10 @@
+const BRAINDUMP_SESSION_ID = 'braindump';
+
 const state = {
   sessionTasks: [],
-  braindumpTasks: [],
+  plannedSessions: [],
+  expandedSessionId: BRAINDUMP_SESSION_ID,
+  renamingSessionId: null,
   currentIndex: 0,
   elapsedMs: 0,
   isRunning: false,
@@ -17,18 +21,22 @@ const state = {
 const editView = document.getElementById('edit-view');
 const focusView = document.getElementById('focus-view');
 const doneView = document.getElementById('done-view');
-const braindumpList = document.getElementById('braindump-list');
+const plannedSessionsList = document.getElementById('planned-sessions-list');
+const planSessionBtn = document.getElementById('plan-session-btn');
 const sessionList = document.getElementById('session-list');
 const addBraindumpForm = document.getElementById('add-braindump-form');
 const newBraindumpInput = document.getElementById('new-braindump-input');
 const newBraindumpLimit = document.getElementById('new-braindump-limit');
 const startBtn = document.getElementById('start-btn');
-const addAllToSessionBtn = document.getElementById('add-all-to-session-btn');
 const clearSessionBtn = document.getElementById('clear-session-btn');
 const clearSessionModal = document.getElementById('clear-session-modal');
 const clearSessionAllBtn = document.getElementById('clear-session-all-btn');
 const clearSessionCompletedBtn = document.getElementById('clear-session-completed-btn');
 const clearSessionCancelBtn = document.getElementById('clear-session-cancel-btn');
+const deleteSessionModal = document.getElementById('delete-session-modal');
+const deleteSessionMessage = document.getElementById('delete-session-message');
+const deleteSessionConfirmBtn = document.getElementById('delete-session-confirm-btn');
+const deleteSessionCancelBtn = document.getElementById('delete-session-cancel-btn');
 const backToEditBtn = document.getElementById('back-to-edit-btn');
 const pauseBtn = document.getElementById('pause-btn');
 const timerDisplay = document.getElementById('timer-display');
@@ -52,6 +60,7 @@ const taskContextMenu = document.getElementById('task-context-menu');
 const taskContextDeleteBtn = document.getElementById('task-context-delete');
 
 let taskContextMenuTarget = null;
+let pendingDeleteSessionId = null;
 let focusDimensionsRaf = null;
 let drawerOpen = false;
 let drawerCloseTimer = null;
@@ -307,8 +316,148 @@ function normalizeBraindumpTask(task) {
   return { text: task.text || '', limitMs: task.limitMs ?? null };
 }
 
+function normalizePlannedSession(session) {
+  return {
+    id: session.id || BRAINDUMP_SESSION_ID,
+    name: session.name || 'Session',
+    tasks: (session.tasks || []).map(normalizeBraindumpTask),
+  };
+}
+
+function isPlannedList(listId) {
+  return typeof listId === 'string' && listId.startsWith('planned:');
+}
+
+function isValidListId(listId) {
+  return listId === 'session' || isPlannedList(listId);
+}
+
+function listIdForSession(sessionId) {
+  return `planned:${sessionId}`;
+}
+
+function getPlannedSessionIdFromListId(listId) {
+  return listId.slice('planned:'.length);
+}
+
+function getPlannedSession(sessionId) {
+  return state.plannedSessions.find((session) => session.id === sessionId) || null;
+}
+
+function getBraindumpSession() {
+  return getPlannedSession(BRAINDUMP_SESSION_ID);
+}
+
+function getExpandedSession() {
+  return getPlannedSession(state.expandedSessionId) || getBraindumpSession();
+}
+
+function getExpandedPlannedListId() {
+  const session = getExpandedSession();
+  return session ? listIdForSession(session.id) : listIdForSession(BRAINDUMP_SESSION_ID);
+}
+
+function getAllPlannedListIds() {
+  return state.plannedSessions.map((session) => listIdForSession(session.id));
+}
+
+function ensureBraindumpSession() {
+  if (!getBraindumpSession()) {
+    state.plannedSessions.unshift({
+      id: BRAINDUMP_SESSION_ID,
+      name: 'Braindump',
+      tasks: [],
+    });
+  }
+}
+
+function expandSession(sessionId) {
+  if (!getPlannedSession(sessionId)) return;
+  state.expandedSessionId = sessionId;
+  persist();
+  renderEditView();
+}
+
+function createPlannedSession() {
+  const id = crypto.randomUUID();
+  state.plannedSessions.push({
+    id,
+    name: 'New Session',
+    tasks: [],
+  });
+  state.expandedSessionId = id;
+  state.renamingSessionId = id;
+  persist();
+  renderEditView();
+}
+
+function savePlannedSessionName(sessionId, name) {
+  const session = getPlannedSession(sessionId);
+  if (!session || sessionId === BRAINDUMP_SESSION_ID) return;
+  const trimmed = name.trim();
+  if (trimmed) session.name = trimmed;
+  state.renamingSessionId = null;
+  persist();
+  renderEditView();
+}
+
+function deletePlannedSession(sessionId) {
+  if (sessionId === BRAINDUMP_SESSION_ID) return;
+
+  const sessionIndex = state.plannedSessions.findIndex((session) => session.id === sessionId);
+  if (sessionIndex === -1) return;
+
+  const session = state.plannedSessions[sessionIndex];
+  session.tasks.forEach((task) => state.selectedTasks.delete(task));
+
+  state.plannedSessions.splice(sessionIndex, 1);
+
+  if (state.expandedSessionId === sessionId) {
+    state.expandedSessionId = BRAINDUMP_SESSION_ID;
+  }
+  if (state.renamingSessionId === sessionId) {
+    state.renamingSessionId = null;
+  }
+
+  persist();
+  renderEditView();
+  closeDeleteSessionModal();
+}
+
+function openDeleteSessionModal(sessionId) {
+  if (sessionId === BRAINDUMP_SESSION_ID) return;
+
+  const session = getPlannedSession(sessionId);
+  if (!session) return;
+
+  pendingDeleteSessionId = sessionId;
+  const taskCount = session.tasks.length;
+  const taskLabel = taskCount === 1 ? 'task' : 'tasks';
+
+  deleteSessionMessage.textContent = taskCount === 0
+    ? `Delete ${session.name}? This cannot be undone.`
+    : `Delete ${session.name} and its ${taskCount} ${taskLabel}? This cannot be undone.`;
+
+  deleteSessionModal.classList.remove('hidden');
+}
+
+function closeDeleteSessionModal() {
+  pendingDeleteSessionId = null;
+  deleteSessionModal.classList.add('hidden');
+}
+
+function confirmDeletePlannedSession() {
+  if (!pendingDeleteSessionId) return;
+  deletePlannedSession(pendingDeleteSessionId);
+}
+
 function getTasksForList(listId) {
-  return listId === 'braindump' ? state.braindumpTasks : state.sessionTasks;
+  if (listId === 'session') return state.sessionTasks;
+  if (isPlannedList(listId)) {
+    const session = getPlannedSession(getPlannedSessionIdFromListId(listId));
+    return session ? session.tasks : [];
+  }
+  return [];
 }
 
 function clearSelection() {
@@ -347,8 +496,10 @@ function getDragItems(listId, taskIndex) {
   const task = getTasksForList(listId)[taskIndex];
   if (state.selectedTasks.size > 1 && state.selectedTasks.has(task)) {
     const items = [];
-    state.braindumpTasks.forEach((t, index) => {
-      if (state.selectedTasks.has(t)) items.push({ list: 'braindump', index });
+    getAllPlannedListIds().forEach((plannedListId) => {
+      getTasksForList(plannedListId).forEach((t, index) => {
+        if (state.selectedTasks.has(t)) items.push({ list: plannedListId, index });
+      });
     });
     state.sessionTasks.forEach((t, index) => {
       if (state.selectedTasks.has(t)) items.push({ list: 'session', index });
@@ -365,17 +516,27 @@ function encodeDragPayload(items) {
   return JSON.stringify({ items });
 }
 
+function normalizeListId(listId) {
+  if (listId === 'braindump') return listIdForSession(BRAINDUMP_SESSION_ID);
+  return listId;
+}
+
 function decodeDragPayload(raw) {
   try {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed.items) && parsed.items.length > 0) {
-      const valid = parsed.items.every(
-        (item) => (item.list === 'braindump' || item.list === 'session') && Number.isInteger(item.index),
+      const items = parsed.items.map((item) => ({
+        list: normalizeListId(item.list),
+        index: item.index,
+      }));
+      const valid = items.every(
+        (item) => isValidListId(item.list) && Number.isInteger(item.index),
       );
-      if (valid) return { items: parsed.items };
+      if (valid) return { items };
     }
-    if ((parsed.list === 'braindump' || parsed.list === 'session') && Number.isInteger(parsed.index)) {
-      return { items: [{ list: parsed.list, index: parsed.index }] };
+    const listId = normalizeListId(parsed.list);
+    if (isValidListId(listId) && Number.isInteger(parsed.index)) {
+      return { items: [{ list: listId, index: parsed.index }] };
     }
   } catch {
     // ignore
@@ -386,7 +547,8 @@ function decodeDragPayload(raw) {
 function persist() {
   window.slashIt.saveData({
     sessionTasks: state.sessionTasks,
-    braindumpTasks: state.braindumpTasks,
+    plannedSessions: state.plannedSessions,
+    expandedSessionId: state.expandedSessionId,
     currentIndex: state.currentIndex,
     elapsedMs: state.elapsedMs,
     isRunning: state.isRunning,
@@ -523,6 +685,13 @@ function toBraindumpTaskFromSession(task) {
   return { text: task.text, limitMs: task.limitMs ?? null };
 }
 
+function convertTaskForMove(task, fromList, toList) {
+  if (fromList === toList) return task;
+  if (toList === 'session') return toSessionTaskFromBraindump(task);
+  if (fromList === 'session') return toBraindumpTaskFromSession(task);
+  return task;
+}
+
 function moveTasks(items, toList, toIndex) {
   const resolved = items
     .map(({ list, index }) => ({
@@ -534,12 +703,7 @@ function moveTasks(items, toList, toIndex) {
 
   if (resolved.length === 0) return;
 
-  const moved = resolved.map(({ fromList, task }) => {
-    if (fromList === toList) return task;
-    return fromList === 'braindump'
-      ? toSessionTaskFromBraindump(task)
-      : toBraindumpTaskFromSession(task);
-  });
+  const moved = resolved.map(({ fromList, task }) => convertTaskForMove(task, fromList, toList));
 
   const targetBefore = getTasksForList(toList);
   let insertAt = Math.max(0, Math.min(toIndex, targetBefore.length));
@@ -548,12 +712,13 @@ function moveTasks(items, toList, toIndex) {
   ).length;
   insertAt = Math.max(0, insertAt - removedBeforeInsert);
 
-  const indicesByList = { braindump: [], session: [] };
+  const indicesByList = {};
   resolved.forEach(({ fromList, fromIndex }) => {
+    if (!indicesByList[fromList]) indicesByList[fromList] = [];
     indicesByList[fromList].push(fromIndex);
   });
 
-  ['braindump', 'session'].forEach((listId) => {
+  Object.keys(indicesByList).forEach((listId) => {
     const uniqueIndices = [...new Set(indicesByList[listId])].sort((a, b) => b - a);
     const source = getTasksForList(listId);
     uniqueIndices.forEach((index) => {
@@ -627,16 +792,17 @@ function showTaskContextMenu(e, listId, taskIndex) {
   taskContextMenu.style.top = `${Math.max(padding, y)}px`;
 }
 
-function addAllToSession() {
-  if (state.braindumpTasks.length === 0) return;
+function addAllFromExpandedSession() {
+  const session = getExpandedSession();
+  if (!session || session.tasks.length === 0) return;
 
   const insertAt = getSessionActiveInsertIndex();
   state.sessionTasks.splice(
     insertAt,
     0,
-    ...state.braindumpTasks.map(toSessionTaskFromBraindump),
+    ...session.tasks.map(toSessionTaskFromBraindump),
   );
-  state.braindumpTasks = [];
+  session.tasks = [];
   persist();
   renderEditView();
 }
@@ -644,6 +810,7 @@ function addAllToSession() {
 function renderTaskList(listEl, listId) {
   listEl.innerHTML = '';
   const isSession = listId === 'session';
+  const isPlanned = isPlannedList(listId);
   const tasks = getTasksForList(listId);
   const indices = isSession
     ? getSessionEditIndices()
@@ -654,7 +821,7 @@ function renderTaskList(listEl, listId) {
     const task = tasks[taskIndex];
     const isCompleted = isSession && task.completed;
     const li = document.createElement('li');
-    li.className = `task-item task-item--${listId}`;
+    li.className = `task-item task-item--${isSession ? 'session' : 'planned'}`;
     if (isCompleted) li.classList.add('task-item--completed');
     if (isCompleted && displayIndex === incompleteCount && incompleteCount > 0) {
       li.classList.add('task-item--completed-first');
@@ -676,7 +843,7 @@ function renderTaskList(listEl, listId) {
           ? `<span class="task-limit-badge">${limitFieldValue}</span>`
           : `<input class="task-limit-input" type="text" value="" title="Time limit" />`))
       : '';
-    const limitBadgeHtml = !isSession && task.limitMs
+    const limitBadgeHtml = isPlanned && task.limitMs
       ? `<span class="task-limit-badge">${formatLimitField(task.limitMs)}</span>`
       : '';
     const moveToSessionHtml = isSession
@@ -685,7 +852,7 @@ function renderTaskList(listEl, listId) {
           <span class="task-arrow"></span>
         </button>`;
     const leadControlHtml = isSession
-      ? `<button class="task-move-to-braindump" type="button" title="Move to braindump" aria-label="Move to braindump">
+      ? `<button class="task-move-to-braindump" type="button" title="Move to planned session" aria-label="Move to planned session">
           <span class="task-arrow task-arrow--back"></span>
         </button>`
       : '';
@@ -713,12 +880,12 @@ function renderTaskList(listEl, listId) {
       }
     });
 
-    if (!isSession) {
+    if (isPlanned) {
       const moveBtn = li.querySelector('.task-move-to-session');
       moveBtn.addEventListener('mousedown', (e) => e.stopPropagation());
       moveBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        moveTask('braindump', taskIndex, 'session', getSessionActiveInsertIndex());
+        moveTask(listId, taskIndex, 'session', getSessionActiveInsertIndex());
       });
     }
 
@@ -727,7 +894,8 @@ function renderTaskList(listEl, listId) {
       moveBackBtn.addEventListener('mousedown', (e) => e.stopPropagation());
       moveBackBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        moveTask('session', taskIndex, 'braindump', state.braindumpTasks.length);
+        const targetListId = getExpandedPlannedListId();
+        moveTask('session', taskIndex, targetListId, getTasksForList(targetListId).length);
       });
 
       const limitEl = li.querySelector('.task-limit-input, .task-limit-badge');
@@ -800,12 +968,123 @@ function renderTaskList(listEl, listId) {
   });
 }
 
+function renderPlannedSessionName(session, isExpanded) {
+  const isRenaming = state.renamingSessionId === session.id && session.id !== BRAINDUMP_SESSION_ID;
+  if (isRenaming) {
+    return `<input
+      class="planned-session-name-input"
+      type="text"
+      value="${escapeHtml(session.name)}"
+      data-session-id="${escapeHtml(session.id)}"
+      aria-label="Session name"
+    />`;
+  }
+  return `<span class="planned-session-name">${escapeHtml(session.name)}</span>`;
+}
+
+function renderPlannedSessionDeleteButton(session) {
+  if (session.id === BRAINDUMP_SESSION_ID) return '';
+  return `<button class="planned-session-delete-btn" type="button" aria-label="Delete session" title="Delete session">×</button>`;
+}
+
+function renderPlannedSessions() {
+  plannedSessionsList.innerHTML = '';
+
+  state.plannedSessions.forEach((session) => {
+    const isExpanded = session.id === state.expandedSessionId;
+    const listId = listIdForSession(session.id);
+    const block = document.createElement('div');
+    block.className = `planned-session ${isExpanded ? 'planned-session--expanded' : 'planned-session--collapsed'}`;
+    block.dataset.sessionId = session.id;
+
+    block.innerHTML = `
+      <div class="planned-session-header">
+        <button class="planned-session-toggle" type="button" aria-expanded="${isExpanded}" aria-label="${isExpanded ? 'Collapse' : 'Expand'} ${escapeHtml(session.name)}">
+          <span class="planned-session-toggle-icon" aria-hidden="true"></span>
+        </button>
+        ${renderPlannedSessionName(session, isExpanded)}
+        <div class="planned-session-header-actions">
+          ${renderPlannedSessionDeleteButton(session)}
+          ${isExpanded ? `<button class="section-action-btn planned-add-all-btn" type="button" ${session.tasks.length === 0 ? 'disabled' : ''}>Add all to session</button>` : ''}
+        </div>
+      </div>
+      <div class="planned-session-body">
+        <ul class="task-list" data-list="${escapeHtml(listId)}"></ul>
+      </div>
+    `;
+
+    const toggleBtn = block.querySelector('.planned-session-toggle');
+    toggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!isExpanded) expandSession(session.id);
+    });
+
+    const header = block.querySelector('.planned-session-header');
+    header.addEventListener('click', (e) => {
+      if (e.target.closest('.planned-add-all-btn, .planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn')) return;
+      if (!isExpanded) expandSession(session.id);
+    });
+
+    const deleteBtn = block.querySelector('.planned-session-delete-btn');
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openDeleteSessionModal(session.id);
+      });
+    }
+
+    if (isExpanded) {
+      const addAllBtn = block.querySelector('.planned-add-all-btn');
+      addAllBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        addAllFromExpandedSession();
+      });
+    }
+
+    const nameInput = block.querySelector('.planned-session-name-input');
+    if (nameInput) {
+      const saveName = () => savePlannedSessionName(session.id, nameInput.value);
+      nameInput.addEventListener('blur', saveName);
+      nameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          nameInput.blur();
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          state.renamingSessionId = null;
+          renderEditView();
+        }
+      });
+      requestAnimationFrame(() => {
+        nameInput.focus();
+        nameInput.select();
+      });
+    } else if (session.id !== BRAINDUMP_SESSION_ID) {
+      const nameEl = block.querySelector('.planned-session-name');
+      nameEl.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        state.renamingSessionId = session.id;
+        renderEditView();
+      });
+    }
+
+    const listEl = block.querySelector('.task-list');
+    if (isExpanded) {
+      renderTaskList(listEl, listId);
+      setupListDropZone(listEl, listId);
+      setupListSelectionClear(listEl);
+    }
+
+    plannedSessionsList.appendChild(block);
+  });
+}
+
 function renderEditView() {
   hideTaskContextMenu();
-  renderTaskList(braindumpList, 'braindump');
+  renderPlannedSessions();
   renderTaskList(sessionList, 'session');
   startBtn.disabled = getSessionIncompleteIndices().length === 0;
-  addAllToSessionBtn.disabled = state.braindumpTasks.length === 0;
   clearSessionBtn.disabled = state.sessionTasks.length === 0;
   clearSessionCompletedBtn.disabled = getCompletedCount() === 0;
 }
@@ -826,7 +1105,9 @@ function closeClearSessionModal() {
 }
 
 function clearAllSessionTasks() {
-  state.braindumpTasks.push(
+  ensureBraindumpSession();
+  const braindump = getBraindumpSession();
+  braindump.tasks.push(
     ...state.sessionTasks
       .filter((task) => !task.completed)
       .map(toBraindumpTaskFromSession),
@@ -908,7 +1189,9 @@ function startEditingTask(li, listId, index) {
 function submitBraindumpForm() {
   const parsed = parseTaskInput(newBraindumpInput.value, newBraindumpLimit.value);
   if (!parsed.text) return;
-  state.braindumpTasks.push({ text: parsed.text, limitMs: parsed.limitMs });
+  const session = getExpandedSession();
+  if (!session) return;
+  session.tasks.push({ text: parsed.text, limitMs: parsed.limitMs });
   persist();
   renderEditView();
   newBraindumpInput.value = '';
@@ -940,7 +1223,12 @@ function isAddFormFocused() {
 function isTaskInputFocused() {
   if (isAddFormFocused()) return true;
   const active = document.activeElement;
-  return !!active?.matches('.task-text-input, .task-limit-input');
+  return !!active?.matches('.task-text-input, .task-limit-input, .planned-session-name-input');
+}
+
+function isInlineTaskInputFocused() {
+  const active = document.activeElement;
+  return !!active?.matches('.task-text-input, .task-limit-input, .planned-session-name-input');
 }
 
 function handleBraindumpEnter(e) {
@@ -953,7 +1241,7 @@ function handleBraindumpEnter(e) {
   e.stopPropagation();
 
   if (meta && shift) {
-    addAllToSession();
+    addAllFromExpandedSession();
     return;
   }
 
@@ -979,19 +1267,26 @@ function removeTask(listId, index) {
 function removeSelectedTasks() {
   if (state.selectedTasks.size === 0) return;
 
-  const indicesByList = { braindump: [], session: [] };
-  state.braindumpTasks.forEach((task, index) => {
-    if (state.selectedTasks.has(task)) indicesByList.braindump.push(index);
+  const indicesByList = {};
+  getAllPlannedListIds().forEach((listId) => {
+    getTasksForList(listId).forEach((task, index) => {
+      if (state.selectedTasks.has(task)) {
+        if (!indicesByList[listId]) indicesByList[listId] = [];
+        indicesByList[listId].push(index);
+      }
+    });
   });
   state.sessionTasks.forEach((task, index) => {
-    if (state.selectedTasks.has(task)) indicesByList.session.push(index);
+    if (state.selectedTasks.has(task)) {
+      if (!indicesByList.session) indicesByList.session = [];
+      indicesByList.session.push(index);
+    }
   });
 
-  indicesByList.braindump.sort((a, b) => b - a).forEach((index) => {
-    state.braindumpTasks.splice(index, 1);
-  });
-  indicesByList.session.sort((a, b) => b - a).forEach((index) => {
-    state.sessionTasks.splice(index, 1);
+  Object.keys(indicesByList).forEach((listId) => {
+    indicesByList[listId].sort((a, b) => b - a).forEach((index) => {
+      getTasksForList(listId).splice(index, 1);
+    });
   });
 
   if (state.currentIndex >= state.sessionTasks.length) {
@@ -1141,13 +1436,34 @@ addBraindumpForm.addEventListener('submit', (e) => {
 addBraindumpForm.addEventListener('keydown', handleBraindumpEnter, true);
 
 startBtn.addEventListener('click', startSlashing);
-addAllToSessionBtn.addEventListener('click', addAllToSession);
+
+document.addEventListener('keydown', (e) => {
+  if (state.mode !== 'edit') return;
+  if (e.key !== 'Enter' && e.code !== 'NumpadEnter') return;
+  if (!e.shiftKey || e.metaKey || e.ctrlKey) return;
+  if (startBtn.disabled) return;
+  if (isInlineTaskInputFocused()) return;
+  if (!clearSessionModal.classList.contains('hidden')) return;
+  if (!deleteSessionModal.classList.contains('hidden')) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+  startSlashing();
+}, true);
+
+planSessionBtn.addEventListener('click', createPlannedSession);
 clearSessionBtn.addEventListener('click', openClearSessionModal);
 clearSessionAllBtn.addEventListener('click', clearAllSessionTasks);
 clearSessionCompletedBtn.addEventListener('click', clearCompletedSessionTasks);
 clearSessionCancelBtn.addEventListener('click', closeClearSessionModal);
 clearSessionModal.addEventListener('click', (e) => {
   if (e.target === clearSessionModal) closeClearSessionModal();
+});
+
+deleteSessionConfirmBtn.addEventListener('click', confirmDeletePlannedSession);
+deleteSessionCancelBtn.addEventListener('click', closeDeleteSessionModal);
+deleteSessionModal.addEventListener('click', (e) => {
+  if (e.target === deleteSessionModal) closeDeleteSessionModal();
 });
 
 taskContextDeleteBtn.addEventListener('click', () => {
@@ -1173,6 +1489,10 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     hideTaskContextMenu();
+    if (!deleteSessionModal.classList.contains('hidden')) {
+      closeDeleteSessionModal();
+      return;
+    }
     if (!clearSessionModal.classList.contains('hidden')) {
       closeClearSessionModal();
     }
@@ -1225,15 +1545,32 @@ resetBtn.addEventListener('click', () => {
   focusAddTaskInput();
 });
 
-setupListDropZone(braindumpList, 'braindump');
 setupListDropZone(sessionList, 'session');
-setupListSelectionClear(braindumpList);
 setupListSelectionClear(sessionList);
+
+function loadPlannedSessionsFromSaved(saved) {
+  if (Array.isArray(saved.plannedSessions) && saved.plannedSessions.length > 0) {
+    state.plannedSessions = saved.plannedSessions.map(normalizePlannedSession);
+    ensureBraindumpSession();
+    const expandedId = saved.expandedSessionId;
+    state.expandedSessionId = getPlannedSession(expandedId)
+      ? expandedId
+      : BRAINDUMP_SESSION_ID;
+    return;
+  }
+
+  state.plannedSessions = [{
+    id: BRAINDUMP_SESSION_ID,
+    name: 'Braindump',
+    tasks: (saved.braindumpTasks || []).map(normalizeBraindumpTask),
+  }];
+  state.expandedSessionId = BRAINDUMP_SESSION_ID;
+}
 
 async function init() {
   const saved = await window.slashIt.loadData();
   state.sessionTasks = (saved.sessionTasks || saved.tasks || []).map(normalizeSessionTask);
-  state.braindumpTasks = (saved.braindumpTasks || []).map(normalizeBraindumpTask);
+  loadPlannedSessionsFromSaved(saved);
   state.currentIndex = saved.currentIndex || 0;
   state.elapsedMs = saved.elapsedMs || 0;
   state.isRunning = false;
