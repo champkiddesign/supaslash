@@ -6,6 +6,7 @@ const state = {
   expandedSessionId: BRAINDUMP_SESSION_ID,
   renamingSessionId: null,
   currentIndex: 0,
+  focusTaskIndex: 0,
   elapsedMs: 0,
   isRunning: false,
   mode: 'edit',
@@ -46,6 +47,7 @@ const sessionDrawerList = document.getElementById('session-drawer-list');
 const timerBar = document.getElementById('timer-bar');
 const currentTaskEl = document.getElementById('current-task');
 const completeBtn = document.getElementById('complete-btn');
+const skipBtn = document.getElementById('skip-btn');
 const expiredActions = document.getElementById('expired-actions');
 const overtimeBtn = document.getElementById('overtime-btn');
 const extendBtn = document.getElementById('extend-btn');
@@ -114,31 +116,29 @@ function cancelFocusDimensionsUpdate() {
 }
 
 function getDrawerPayload() {
-  const firstIncomplete = getFirstIncompleteIndex();
+  const focusIndex = getFocusTaskIndex();
   const barWidth = measureTimerBarWidth();
   const drawerWidth = Math.round(barWidth * 0.85);
   const drawerHeight = getDrawerContentHeight();
 
   const tasks = state.sessionTasks.map((task, index) => {
-    let status = 'pending';
+    let status = getDrawerTaskStatus(task, index, focusIndex);
     let durationText = '';
 
     if (task.completed) {
-      status = 'done';
       if (task.durationMs != null) durationText = formatTime(task.durationMs);
-    } else if (index === firstIncomplete) {
-      status = 'current';
+    } else if (index === focusIndex) {
       durationText = formatTime(state.elapsedMs);
     }
 
-    return { text: task.text, status, durationText };
+    return { text: task.text, status, durationText, index };
   });
 
   return { drawerWidth, drawerHeight, tasks };
 }
 
 function getDrawerContentHeight() {
-  const firstIncomplete = getFirstIncompleteIndex();
+  const focusIndex = getFocusTaskIndex();
   const tempList = document.createElement('ul');
   tempList.className = 'session-drawer-list';
   tempList.style.position = 'absolute';
@@ -149,7 +149,7 @@ function getDrawerContentHeight() {
     li.className = 'session-drawer-task';
     li.textContent = task.text;
     tempList.appendChild(li);
-    if (index === firstIncomplete) li.textContent += ' 0:00';
+    if (index === focusIndex) li.textContent += ' 0:00';
   });
   document.body.appendChild(tempList);
   const listHeight = tempList.scrollHeight;
@@ -157,33 +157,48 @@ function getDrawerContentHeight() {
   return Math.min(180, listHeight) + 16;
 }
 
-function getFirstIncompleteIndex() {
-  return state.sessionTasks.findIndex((task) => !task.completed);
+function getDrawerTaskStatus(task, index, focusIndex) {
+  if (task.completed) return 'done';
+  if (index === focusIndex) return 'current';
+  if (task.skipped) return 'skipped';
+  return 'pending';
 }
 
 function renderSessionDrawer() {
-  const firstIncomplete = getFirstIncompleteIndex();
+  const focusIndex = getFocusTaskIndex();
 
   sessionDrawerList.innerHTML = '';
   state.sessionTasks.forEach((task, index) => {
-    let statusClass = 'session-drawer-task--pending';
+    const status = getDrawerTaskStatus(task, index, focusIndex);
+    const statusClass = `session-drawer-task--${status}`;
     let durationText = '';
 
     if (task.completed) {
-      statusClass = 'session-drawer-task--done';
       if (task.durationMs != null) durationText = formatTime(task.durationMs);
-    } else if (index === firstIncomplete) {
-      statusClass = 'session-drawer-task--current';
+    } else if (index === focusIndex) {
       durationText = formatTime(state.elapsedMs);
     }
 
     const li = document.createElement('li');
     li.className = `session-drawer-task ${statusClass}`;
+    li.dataset.taskIndex = String(index);
+    if (!task.completed) {
+      li.classList.add('session-drawer-task--clickable');
+    }
     li.innerHTML = `
       <span class="session-drawer-task-name">${escapeHtml(task.text)}</span>
       <span class="session-drawer-task-time">${durationText}</span>
     `;
     sessionDrawerList.appendChild(li);
+  });
+}
+
+if (sessionDrawerList) {
+  sessionDrawerList.addEventListener('click', (e) => {
+    const li = e.target.closest('.session-drawer-task--clickable');
+    if (!li) return;
+    const index = parseInt(li.dataset.taskIndex, 10);
+    if (Number.isInteger(index)) switchToTask(index);
   });
 }
 
@@ -309,6 +324,7 @@ function normalizeSessionTask(task) {
     completed: !!task.completed,
     limitMs: task.limitMs ?? null,
     durationMs: task.durationMs ?? null,
+    skipped: !!task.skipped,
   };
 }
 
@@ -550,6 +566,7 @@ function persist() {
     plannedSessions: state.plannedSessions,
     expandedSessionId: state.expandedSessionId,
     currentIndex: state.currentIndex,
+    focusTaskIndex: state.focusTaskIndex,
     elapsedMs: state.elapsedMs,
     isRunning: state.isRunning,
     mode: state.mode,
@@ -604,8 +621,44 @@ function getCompletedCount() {
   return state.sessionTasks.filter((t) => t.completed).length;
 }
 
+function getIncompleteCount() {
+  return state.sessionTasks.filter((t) => !t.completed).length;
+}
+
+function clearAllSkippedFlags() {
+  state.sessionTasks.forEach((task) => {
+    task.skipped = false;
+  });
+}
+
+function getNextFocusTaskIndex({ excludeIndex = -1 } = {}) {
+  for (let i = 0; i < state.sessionTasks.length; i++) {
+    const task = state.sessionTasks[i];
+    if (!task.completed && !task.skipped && i !== excludeIndex) return i;
+  }
+  for (let i = 0; i < state.sessionTasks.length; i++) {
+    const task = state.sessionTasks[i];
+    if (!task.completed && task.skipped && i !== excludeIndex) return i;
+  }
+  return -1;
+}
+
+function getFocusTaskIndex() {
+  const task = state.sessionTasks[state.focusTaskIndex];
+  if (task && !task.completed) return state.focusTaskIndex;
+  const next = getNextFocusTaskIndex();
+  if (next >= 0) state.focusTaskIndex = next;
+  return next;
+}
+
 function getCurrentTask() {
-  return getIncompleteTasks()[0] || null;
+  const index = getFocusTaskIndex();
+  return index >= 0 ? state.sessionTasks[index] : null;
+}
+
+function updateSkipButtonState() {
+  if (!skipBtn) return;
+  skipBtn.disabled = getIncompleteCount() <= 1;
 }
 
 function getDisplayMs(task) {
@@ -628,6 +681,7 @@ function updateTimerDisplay() {
   pauseBtn.classList.toggle('is-paused', !state.isRunning);
   pauseBtn.title = state.isRunning ? 'Pause' : 'Resume';
   pauseBtn.setAttribute('aria-label', state.isRunning ? 'Pause' : 'Resume');
+  updateSkipButtonState();
   if (drawerOpen) {
     void window.slashIt.updateSessionDrawer(getDrawerPayload());
   }
@@ -678,7 +732,13 @@ function escapeHtml(text) {
 }
 
 function toSessionTaskFromBraindump(task) {
-  return { text: task.text, completed: false, limitMs: task.limitMs ?? null, durationMs: null };
+  return {
+    text: task.text,
+    completed: false,
+    limitMs: task.limitMs ?? null,
+    durationMs: null,
+    skipped: false,
+  };
 }
 
 function toBraindumpTaskFromSession(task) {
@@ -1309,6 +1369,7 @@ function renderFocusView() {
 
   currentTaskEl.textContent = current.text.toUpperCase();
   updateTimerDisplay();
+  updateSkipButtonState();
   scheduleFocusDimensionsUpdate();
 }
 
@@ -1358,23 +1419,51 @@ function toggleTimer() {
 }
 
 function completeCurrentTask() {
-  const incomplete = getIncompleteTasks();
-  if (incomplete.length === 0) return;
+  const taskIndex = getFocusTaskIndex();
+  if (taskIndex < 0) return;
 
-  const current = incomplete[0];
-  const taskIndex = state.sessionTasks.findIndex((t) => t === current);
   state.sessionTasks[taskIndex].completed = true;
   state.sessionTasks[taskIndex].durationMs = state.elapsedMs;
+  state.sessionTasks[taskIndex].skipped = false;
 
   stopTimer();
   state.totalSessionMs += state.elapsedMs;
   resetTaskTimerState();
 
+  state.focusTaskIndex = getNextFocusTaskIndex();
   persist();
   renderFocusView();
 
-  const remaining = getIncompleteTasks();
-  if (remaining.length > 0) startTimer();
+  if (getCurrentTask()) startTimer();
+}
+
+function skipCurrentTask() {
+  const taskIndex = getFocusTaskIndex();
+  if (taskIndex < 0 || getIncompleteCount() <= 1) return;
+
+  state.sessionTasks[taskIndex].skipped = true;
+  stopTimer();
+  resetTaskTimerState();
+  state.focusTaskIndex = getNextFocusTaskIndex({ excludeIndex: taskIndex });
+  persist();
+  renderFocusView();
+
+  if (getCurrentTask()) startTimer();
+}
+
+function switchToTask(index) {
+  if (state.mode !== 'focus') return;
+  const task = state.sessionTasks[index];
+  if (!task || task.completed) return;
+  if (index === getFocusTaskIndex()) return;
+
+  task.skipped = false;
+  stopTimer();
+  resetTaskTimerState();
+  state.focusTaskIndex = index;
+  persist();
+  renderFocusView();
+  startTimer();
 }
 
 function startOvertime() {
@@ -1396,7 +1485,7 @@ function confirmExtend() {
   const current = getCurrentTask();
   if (!current) return;
 
-  const taskIndex = state.sessionTasks.findIndex((t) => t === current);
+  const taskIndex = getFocusTaskIndex();
   state.sessionTasks[taskIndex].limitMs = (state.sessionTasks[taskIndex].limitMs || 0) + extraMs;
   state.overtimeMode = false;
   state.limitExpired = false;
@@ -1409,9 +1498,11 @@ function confirmExtend() {
 function startSlashing() {
   if (getIncompleteTasks().length === 0) return;
 
+  clearAllSkippedFlags();
   resetTaskTimerState();
   state.totalSessionMs = 0;
   state.isRunning = false;
+  state.focusTaskIndex = getNextFocusTaskIndex();
 
   showView('focus');
   renderFocusView();
@@ -1424,6 +1515,7 @@ function backToEdit() {
   state.limitExpired = false;
   state.overtimeMode = false;
   setExpiredUI(false);
+  clearAllSkippedFlags();
   showView('edit');
   renderEditView();
   focusAddTaskInput();
@@ -1526,7 +1618,9 @@ window.slashIt.onDrawerPointerEnter(() => {
 window.slashIt.onDrawerPointerLeave(() => {
   scheduleCloseSessionDrawer();
 });
+window.slashIt.onDrawerSelectTask((index) => switchToTask(index));
 completeBtn.addEventListener('click', completeCurrentTask);
+skipBtn.addEventListener('click', skipCurrentTask);
 overtimeBtn.addEventListener('click', startOvertime);
 extendBtn.addEventListener('click', extendTime);
 extendConfirmBtn.addEventListener('click', confirmExtend);
@@ -1572,8 +1666,14 @@ async function init() {
   state.sessionTasks = (saved.sessionTasks || saved.tasks || []).map(normalizeSessionTask);
   loadPlannedSessionsFromSaved(saved);
   state.currentIndex = saved.currentIndex || 0;
+  state.focusTaskIndex = Number.isInteger(saved.focusTaskIndex) ? saved.focusTaskIndex : 0;
   state.elapsedMs = saved.elapsedMs || 0;
   state.isRunning = false;
+
+  const focusTask = state.sessionTasks[state.focusTaskIndex];
+  if (!focusTask || focusTask.completed) {
+    state.focusTaskIndex = Math.max(0, getNextFocusTaskIndex());
+  }
 
   if (saved.mode === 'focus' && getIncompleteTasks().length > 0) {
     showView('focus');

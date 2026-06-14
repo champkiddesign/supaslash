@@ -11,5 +11,6 @@ contextBridge.exposeInMainWorld('slashIt', {
   updateSessionDrawer: (payload) => ipcRenderer.invoke('update-session-drawer', payload),
   onDrawerPointerEnter: (callback) => ipcRenderer.on('drawer-pointer-enter', callback),
   onDrawerPointerLeave: (callback) => ipcRenderer.on('drawer-pointer-leave', callback),
+  onDrawerSelectTask: (callback) => ipcRenderer.on('drawer-select-task', (_event, index) => callback(index)),
   setScreenOverlay: (visible) => ipcRenderer.invoke('set-screen-overlay', visible),
 });

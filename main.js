@@ -42,6 +42,7 @@ function loadData() {
     plannedSessions: [],
     expandedSessionId: 'braindump',
     currentIndex: 0,
+    focusTaskIndex: 0,
     elapsedMs: 0,
     isRunning: false,
     mode: 'edit',
@@ -439,6 +440,10 @@ ipcMain.on('drawer-pointer-enter', () => {
 
 ipcMain.on('drawer-pointer-leave', () => {
   if (isLiveWindow(mainWindow)) mainWindow.webContents.send('drawer-pointer-leave');
+});
+
+ipcMain.on('drawer-select-task', (_event, index) => {
+  if (isLiveWindow(mainWindow)) mainWindow.webContents.send('drawer-select-task', index);
 });
 
 ipcMain.handle('set-screen-overlay', (_event, visible) => {

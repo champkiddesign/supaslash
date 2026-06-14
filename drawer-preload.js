@@ -12,4 +12,5 @@ contextBridge.exposeInMainWorld('drawerOverlay', {
   },
   notifyPointerEnter: () => ipcRenderer.send('drawer-pointer-enter'),
   notifyPointerLeave: () => ipcRenderer.send('drawer-pointer-leave'),
+  selectTask: (index) => ipcRenderer.send('drawer-select-task', index),
 });

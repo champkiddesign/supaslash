@@ -69,3 +69,19 @@ html, body {
 .session-drawer-task--pending .session-drawer-task-name {
   color: #f9f9f9;
 }
+
+.session-drawer-task--skipped .session-drawer-task-name {
+  color: #7a7a7a;
+}
+
+.session-drawer-task--clickable {
+  cursor: pointer;
+  border-radius: 4px;
+  margin: 0 -4px;
+  padding: 3px 4px;
+  transition: background 0.15s;
+}
+
+.session-drawer-task--clickable:hover {
+  background: rgba(255, 85, 0, 0.12);
+}

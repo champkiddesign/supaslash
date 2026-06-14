@@ -1046,6 +1046,23 @@ body.mode-edit #edit-view.view {
   color: #f9f9f9;
 }
 
+.session-drawer-task--skipped .session-drawer-task-name {
+  color: var(--text-secondary);
+  opacity: 0.75;
+}
+
+.session-drawer-task--clickable {
+  cursor: pointer;
+  border-radius: 4px;
+  margin: 0 -4px;
+  padding: 3px 4px;
+  transition: background 0.15s;
+}
+
+.session-drawer-task--clickable:hover {
+  background: rgba(255, 85, 0, 0.12);
+}
+
 .timer-bar {
   position: relative;
   z-index: 2;
@@ -1174,12 +1191,22 @@ body.mode-edit #edit-view.view {
   transition: opacity 0.15s;
 }
 
-.icon-btn:hover {
+.icon-btn:hover:not(:disabled) {
   opacity: 0.75;
+}
+
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .icon-btn.hidden {
   display: none;
+}
+
+.icon-skip {
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
 }
 
 .icon-complete {
