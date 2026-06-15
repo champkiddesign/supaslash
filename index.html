@@ -13,12 +13,23 @@
   <!-- Edit Mode -->
   <div id="edit-view" class="view">
     <header class="edit-header">
-      <h1 class="edit-title">Today:</h1>
+      <div class="edit-header-row">
+        <h1 id="edit-title" class="edit-title"></h1>
+        <div class="edit-header-actions">
+          <button id="move-to-next-btn" class="section-action-btn" type="button" disabled>Send to Queue</button>
+          <button id="settings-btn" class="settings-btn icon-btn" type="button" aria-label="Settings" aria-haspopup="true" aria-expanded="false">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
+          </svg>
+          </button>
+        </div>
+      </div>
       <form id="add-braindump-form" class="braindump-add-form braindump-add-form--header">
         <input
           id="new-braindump-input"
           type="text"
-          placeholder="Add a Task:"
+          placeholder="Add a task to Braindump"
           autocomplete="off"
           spellcheck="true"
         />
@@ -39,13 +50,13 @@
       <section class="task-section task-section--planned">
         <div id="planned-sessions-column" class="planned-sessions-column">
           <div id="planned-sessions-list" class="planned-sessions-list"></div>
-          <button id="plan-session-btn" class="plan-session-btn" type="button">+ Plan a Session</button>
+          <button id="plan-session-btn" class="plan-session-btn" type="button">+ Create New Session</button>
         </div>
       </section>
 
       <section class="task-section task-section--session">
         <div class="section-header">
-          <h2 class="section-label section-label--bright">Next Session:</h2>
+          <h2 class="section-label section-label--bright">Queue:</h2>
           <button id="clear-session-btn" class="section-action-btn" type="button" disabled>Clear all tasks</button>
         </div>
         <ul id="session-list" class="task-list" data-list="session"></ul>
@@ -77,6 +88,61 @@
         </div>
       </div>
     </div>
+
+    <div id="settings-menu" class="settings-menu hidden" role="menu" aria-label="Settings">
+      <button type="button" id="settings-shortcuts-btn" class="settings-menu-item" role="menuitem">Keyboard shortcuts</button>
+      <div class="settings-menu-item settings-menu-item--disabled" role="menuitem" aria-disabled="true">
+        <span>Power Features</span>
+        <span class="settings-menu-item-note">Coming Soon</span>
+      </div>
+    </div>
+
+    <div id="shortcuts-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-title">
+      <div class="clear-session-modal-card shortcuts-modal-card">
+        <h3 id="shortcuts-modal-title" class="clear-session-modal-title">Keyboard shortcuts</h3>
+        <dl class="shortcuts-list">
+          <div class="shortcuts-row">
+            <dt>Add task to expanded session</dt>
+            <dd><kbd class="shortcut-key">Enter</kbd></dd>
+          </div>
+          <div class="shortcuts-row">
+            <dt>Add task to Queue</dt>
+            <dd><kbd class="shortcut-key">⌘ Enter</kbd></dd>
+          </div>
+          <div class="shortcuts-row">
+            <dt>Add all from expanded session to Queue</dt>
+            <dd><kbd class="shortcut-key">⌘ ⇧ Enter</kbd></dd>
+          </div>
+          <div class="shortcuts-row">
+            <dt>Start Session</dt>
+            <dd><kbd class="shortcut-key">⇧ Enter</kbd></dd>
+          </div>
+          <div class="shortcuts-row">
+            <dt>Toggle task selection</dt>
+            <dd><kbd class="shortcut-key">⌘ Click</kbd></dd>
+          </div>
+          <div class="shortcuts-row">
+            <dt>Delete selected tasks</dt>
+            <dd><kbd class="shortcut-key">Delete</kbd></dd>
+          </div>
+          <div class="shortcuts-row">
+            <dt>Rename task</dt>
+            <dd><kbd class="shortcut-key">Double-click</kbd></dd>
+          </div>
+          <div class="shortcuts-row">
+            <dt>Close menus and dialogs</dt>
+            <dd><kbd class="shortcut-key">Escape</kbd></dd>
+          </div>
+          <div class="shortcuts-row">
+            <dt>Reorder tasks</dt>
+            <dd><kbd class="shortcut-key">Drag</kbd></dd>
+          </div>
+        </dl>
+        <div class="shortcuts-modal-actions">
+          <button id="shortcuts-close-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Close</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Focus Mode -->
@@ -98,10 +164,8 @@
             <path d="M8 5v14l11-7z"/>
           </svg>
         </button>
-        <button id="back-to-edit-btn" class="icon-btn" type="button" title="Edit tasks" aria-label="Edit tasks">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
-          </svg>
+        <button id="back-to-edit-btn" class="icon-btn icon-edit" type="button" title="Edit tasks" aria-label="Edit tasks">
+          <img src="edit-tasks.png" width="14" height="14" alt="" aria-hidden="true" class="edit-icon" />
         </button>
       </div>
       <div id="expired-actions" class="expired-actions hidden">
@@ -115,10 +179,7 @@
         <button id="extend-cancel-btn" class="expired-btn" type="button">Cancel</button>
       </div>
       <button id="skip-btn" class="icon-btn icon-skip" type="button" title="Skip task" aria-label="Skip task">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M5 5v14l11-7z"/>
-          <path d="M19 5v14"/>
-        </svg>
+        <img src="skip-next.png" width="14" height="14" alt="" aria-hidden="true" class="skip-icon" />
       </button>
       <button id="complete-btn" class="icon-btn icon-complete" type="button" title="Complete task" aria-label="Complete task">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
@@ -136,7 +197,10 @@
       <h2>All done</h2>
       <p id="done-summary" class="done-summary"></p>
       <p class="done-time" id="done-time"></p>
-      <button id="reset-btn" class="btn btn-primary btn-full">Edit Tasks</button>
+      <div class="done-actions">
+        <button id="celebrate-btn" class="btn btn-celebrate btn-full" type="button">Celebrate</button>
+        <button id="reset-btn" class="btn btn-primary btn-full">Go to Session Dashboard</button>
+      </div>
     </div>
   </div>
 

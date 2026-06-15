@@ -1,4 +1,5 @@
 const sessionDrawer = document.getElementById('session-drawer');
+const sessionDrawerTitle = document.getElementById('session-drawer-title');
 const sessionDrawerList = document.getElementById('session-drawer-list');
 
 function escapeHtml(text) {
@@ -41,6 +42,7 @@ function updateTaskElement(li, task) {
 
 function renderDrawer(data) {
   const tasks = data.tasks || [];
+  sessionDrawerTitle.textContent = data.sessionTitle || 'Braindump';
 
   if (needsFullRebuild(tasks)) {
     sessionDrawerList.innerHTML = '';

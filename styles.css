@@ -24,6 +24,7 @@
   --accent-hover: #ff6a20;
   --danger: #ff453a;
   --radius: 8px;
+  --window-radius: 14px;
   --mono: 'N27', -apple-system, BlinkMacSystemFont, sans-serif;
   --sans: 'N27', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-xs: 12px;
@@ -38,7 +39,7 @@
   --edit-input-muted: #868686;
   --edit-task-text: #fcfcfc;
   --edit-scale: 0.85;
-  --edit-card-radius: calc(20px * var(--edit-scale));
+  --edit-card-radius: var(--window-radius);
   --grain-image: url('noise.png');
   --grain-size: 128px 128px;
 }
@@ -56,9 +57,18 @@ html, body {
   font-family: var(--mono);
   font-size: var(--font-base);
   color: var(--text);
-  background: var(--bg);
   -webkit-font-smoothing: antialiased;
   user-select: none;
+}
+
+html {
+  background: var(--bg);
+}
+
+html:has(body.mode-edit),
+html:has(body.mode-focus),
+html:has(body.mode-done) {
+  background: transparent;
 }
 
 .drag-region {
@@ -76,7 +86,17 @@ body.mode-focus .drag-region {
 }
 
 body.mode-edit {
-  background: var(--bg);
+  background: transparent;
+  overflow: hidden;
+}
+
+body.mode-focus {
+  background: transparent;
+  overflow: hidden;
+}
+
+body.mode-done {
+  background: transparent;
   overflow: hidden;
 }
 
@@ -93,8 +113,32 @@ body.mode-edit .drag-region {
   padding: 32px 16px 16px;
 }
 
+body.mode-edit .view {
+  padding: 0;
+}
+
 body.mode-focus .view {
   padding: 0;
+  overflow: visible;
+}
+
+body.mode-done .view {
+  padding: 0;
+}
+
+body.mode-done #done-view {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  padding: 32px 28px;
+  background-color: var(--bg);
+  background-image: var(--grain-image);
+  background-repeat: repeat;
+  background-size: var(--grain-size);
+  border-radius: var(--window-radius);
   overflow: visible;
 }
 
@@ -114,7 +158,7 @@ body.mode-edit #edit-view.view {
   background-image: var(--grain-image);
   background-repeat: repeat;
   background-size: var(--grain-size);
-  border-radius: calc(50px * var(--edit-scale));
+  border-radius: var(--window-radius);
   overflow: hidden;
 }
 
@@ -131,6 +175,14 @@ body.mode-edit #edit-view.view {
   margin-bottom: calc(56px * var(--edit-scale));
 }
 
+.edit-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: calc(12px * var(--edit-scale));
+  margin-bottom: calc(16px * var(--edit-scale));
+}
+
 .edit-title {
   font-family: var(--mono);
   font-size: 20px;
@@ -139,7 +191,143 @@ body.mode-edit #edit-view.view {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: #ffffff;
-  margin-bottom: calc(16px * var(--edit-scale));
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-btn {
+  flex-shrink: 0;
+  width: calc(28px * var(--edit-scale));
+  height: calc(28px * var(--edit-scale));
+  color: var(--edit-muted);
+  -webkit-app-region: no-drag;
+}
+
+.edit-header-actions {
+  display: flex;
+  align-items: center;
+  gap: calc(12px * var(--edit-scale));
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.edit-header-actions .section-action-btn {
+  line-height: calc(28px * var(--edit-scale));
+}
+
+.settings-btn:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.settings-btn[aria-expanded="true"] {
+  color: var(--text);
+}
+
+.settings-menu {
+  position: fixed;
+  z-index: 200;
+  min-width: 220px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  -webkit-app-region: no-drag;
+}
+
+.settings-menu.hidden {
+  display: none;
+}
+
+.settings-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+  background: none;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: var(--font-sm);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--text);
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-menu-item:hover:not(.settings-menu-item--disabled) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.settings-menu-item--disabled {
+  cursor: default;
+  color: var(--edit-muted);
+}
+
+.settings-menu-item-note {
+  font-size: var(--font-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--edit-input-muted);
+}
+
+.shortcuts-modal-card {
+  width: min(420px, calc(100% - 48px));
+}
+
+.shortcuts-list {
+  display: flex;
+  flex-direction: column;
+  gap: calc(10px * var(--edit-scale));
+  margin-bottom: calc(24px * var(--edit-scale));
+}
+
+.shortcuts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(12px * var(--edit-scale));
+}
+
+.shortcuts-row dt {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: calc(20px * var(--edit-scale));
+  color: var(--edit-task-text);
+}
+
+.shortcuts-row dd {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.shortcut-key {
+  display: inline-block;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: var(--font-xs);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.shortcuts-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: calc(12px * var(--edit-scale));
 }
 
 .edit-columns {
@@ -974,6 +1162,19 @@ body.mode-edit #edit-view.view {
   width: 100%;
 }
 
+.btn-celebrate {
+  background: linear-gradient(135deg, #9333ea, #ec4899);
+  color: #ffffff;
+}
+
+.btn-celebrate:hover:not(:disabled) {
+  background: linear-gradient(135deg, #a855f7, #f472b6);
+}
+
+.btn-celebrate:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
 /* ── Compact timer bar (focus mode) ── */
 
 #focus-view {
@@ -1075,6 +1276,7 @@ body.mode-edit #edit-view.view {
   flex-shrink: 0;
   padding: 0 12px;
   background-color: var(--bg);
+  border-radius: var(--window-radius);
   -webkit-app-region: drag;
 }
 
@@ -1209,6 +1411,20 @@ body.mode-edit #edit-view.view {
   -webkit-app-region: no-drag;
 }
 
+.icon-skip .skip-icon,
+.icon-edit .edit-icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
+
+.icon-edit {
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
 .icon-complete {
   color: var(--accent);
   flex-shrink: 0;
@@ -1306,6 +1522,7 @@ body.mode-edit #edit-view.view {
 }
 
 .done-content {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -1313,18 +1530,33 @@ body.mode-edit #edit-view.view {
   justify-content: center;
   text-align: center;
   gap: 8px;
+  width: 100%;
+  max-width: 360px;
+  padding: 8px 0;
   -webkit-app-region: no-drag;
+  animation: done-enter 0.3s ease-out;
+}
+
+@keyframes done-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .done-icon {
-  font-size: var(--font-display);
+  font-size: 60px;
   color: var(--accent);
-  margin-bottom: 4px;
+  margin-bottom: 8px;
   font-weight: 700;
 }
 
 .done-content h2 {
-  font-size: var(--font-md);
+  font-size: var(--font-2xl);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1332,16 +1564,24 @@ body.mode-edit #edit-view.view {
 
 .done-summary {
   color: var(--text-secondary);
-  font-size: var(--font-sm);
+  font-size: var(--font-base);
   letter-spacing: 0.02em;
 }
 
 .done-time {
   font-family: var(--mono);
-  font-size: var(--font-2xl);
+  font-size: 48px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   margin: 8px 0 20px;
   letter-spacing: -0.03em;
   color: var(--text);
+}
+
+.done-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  flex-shrink: 0;
 }

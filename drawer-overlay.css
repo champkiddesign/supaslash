@@ -10,7 +10,7 @@ html, body {
   height: 100%;
   padding: 8px 10px;
   background: #161616;
-  border-radius: 8px;
+  border-radius: 14px;
   text-align: left;
   overflow: hidden;
   opacity: 0;
@@ -22,6 +22,20 @@ html, body {
 .session-drawer.is-open {
   opacity: 1;
   transform: translateY(0);
+}
+
+.session-drawer-title {
+  font-family: 'N27', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #a2a2a2;
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .session-drawer-list {

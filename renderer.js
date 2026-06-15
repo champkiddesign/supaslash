@@ -5,6 +5,7 @@ const state = {
   plannedSessions: [],
   expandedSessionId: BRAINDUMP_SESSION_ID,
   renamingSessionId: null,
+  activeSessionName: null,
   currentIndex: 0,
   focusTaskIndex: 0,
   elapsedMs: 0,
@@ -20,10 +21,17 @@ const state = {
 };
 
 const editView = document.getElementById('edit-view');
+const editTitle = document.getElementById('edit-title');
+const settingsBtn = document.getElementById('settings-btn');
+const settingsMenu = document.getElementById('settings-menu');
+const settingsShortcutsBtn = document.getElementById('settings-shortcuts-btn');
+const shortcutsModal = document.getElementById('shortcuts-modal');
+const shortcutsCloseBtn = document.getElementById('shortcuts-close-btn');
 const focusView = document.getElementById('focus-view');
 const doneView = document.getElementById('done-view');
 const plannedSessionsList = document.getElementById('planned-sessions-list');
 const planSessionBtn = document.getElementById('plan-session-btn');
+const moveToNextBtn = document.getElementById('move-to-next-btn');
 const sessionList = document.getElementById('session-list');
 const addBraindumpForm = document.getElementById('add-braindump-form');
 const newBraindumpInput = document.getElementById('new-braindump-input');
@@ -57,6 +65,7 @@ const extendConfirmBtn = document.getElementById('extend-confirm-btn');
 const extendCancelBtn = document.getElementById('extend-cancel-btn');
 const doneSummary = document.getElementById('done-summary');
 const doneTime = document.getElementById('done-time');
+const celebrateBtn = document.getElementById('celebrate-btn');
 const resetBtn = document.getElementById('reset-btn');
 const taskContextMenu = document.getElementById('task-context-menu');
 const taskContextDeleteBtn = document.getElementById('task-context-delete');
@@ -69,6 +78,113 @@ let drawerCloseTimer = null;
 
 const FOCUS_BAR_HEIGHT = 56;
 const FOCUS_DRAWER_GAP = 6;
+
+const FUN_SESSION_NAMES = [
+  'Research Flying Wombats',
+  'Design a Tricycle',
+  'Create a Language',
+  'Invent Underwater Wi-Fi',
+  'Train Secret Squirrels',
+  'Build a Cloud Castle',
+  'Study Moon Cheese',
+  'Plan a Dragon Parade',
+  'Draft Robot Poetry',
+  'Organize Penguin Elections',
+  'Develop Invisible Ink Recipes',
+  'Map the Sock Dimension',
+  'Negotiate with Houseplants',
+  'Reverse Engineer Rainbows',
+  'Assemble a Time Machine',
+  'Catalog Mythical Traffic Laws',
+  'Prototype a Hover Toaster',
+  'Translate Whale Songs',
+  'Choreograph Cloud Formations',
+  'Invent Silent Fireworks',
+  'Research Left-Handed Scissors',
+  'Design Intergalactic Postcards',
+  'Create a Spaghetti Algorithm',
+  'Build a Haunted Spreadsheet',
+  'Study Ancient Meme Archaeology',
+  'Plan a Submarine Picnic',
+  'Draft Laws for Fictional Towns',
+  'Organize a Library of Smells',
+  'Develop Self-Folding Laundry',
+  'Map Emotion Color Codes',
+  'Negotiate Nap Time Policies',
+  'Reverse Engineer Dreams',
+  'Assemble a Peanut Butter Engine',
+  'Catalog Impossible Inventions',
+  'Prototype Emotion-Powered Cars',
+  'Translate Cat Disapproval',
+  'Choreograph Ant Parades',
+  'Invent Gravity-Optional Shoes',
+  'Research Why Tuesdays Feel Long',
+  'Design Furniture for Ghosts',
+  'Create a Diplomatic Fruit Treaty',
+  'Build a Museum of Lost Keys',
+  'Study the Physics of Hugs',
+  'Plan a Zero-Gravity Bake Sale',
+  'Draft a Manifesto for Pigeons',
+  'Organize a Tournament of Yawns',
+  'Develop Edible Music Notes',
+  'Map the Underground Tea Network',
+  'Negotiate with Door Handles',
+  'Reverse Engineer Laughter',
+  'Assemble a Perpetual Snack Machine',
+  'Catalog Rare Cloud Species',
+  'Prototype a Mood-Reactive Hat',
+  'Translate Dolphin Sarcasm',
+  'Choreograph Falling Leaves',
+  'Invent a Portable Sunrise',
+  'Research Competitive Napping',
+  'Design a Submarine Skyscraper',
+  'Create Alphabet Soup Fonts',
+  'Build a Secret Treehouse Embassy',
+  'Study the History of Bubbles',
+  'Plan a Mars Grocery Run',
+  'Draft Rules for Polite Robots',
+  'Organize a Socks Reunion',
+  'Develop Self-Watering Books',
+  'Map the Kingdom of Lost Buttons',
+  'Negotiate with Alarm Clocks',
+  'Reverse Engineer Déjà Vu',
+  'Assemble a Sandwich Compass',
+  'Catalog Imaginary Sports',
+  'Prototype a Weather Machine',
+  'Translate Owl Philosophy',
+  'Choreograph Thunder Applause',
+  'Invent Edible Bubble Wrap',
+  'Research Invisible Paint',
+  'Design a Roller Coaster for Turtles',
+  'Create a Code of Hammock Ethics',
+  'Build a Lighthouse on Mars',
+  'Study the Aerodynamics of Paper Planes',
+  'Plan a Festival of Unused Ideas',
+  'Draft a Treaty with Robots',
+  'Organize a Parade of Hats',
+  'Develop Glow-in-the-Dark Soup',
+  'Map Uncharted Fridge Territories',
+  'Negotiate Lunch Break Extensions',
+  'Reverse Engineer Magic Tricks',
+  'Assemble a Robot Orchestra',
+  'Catalog Forgotten Superpowers',
+  'Prototype a Thinking Cap 2.0',
+  'Translate Snowflake Opinions',
+  'Choreograph Synchronized Blinking',
+  'Invent Portable Night Mode for the Sun',
+  'Research Competitive Whistling',
+  'Design a Staircase to Nowhere',
+  'Create a Museum of Almost Ideas',
+  'Build a Submarine Bicycle',
+  'Study the Lifecycle of Excuses',
+  'Plan a Zero-Spam Email Utopia',
+  'Draft a Constitution for Chairs',
+  'Organize a Convention of Shadows',
+];
+
+function getRandomFunSessionName() {
+  return FUN_SESSION_NAMES[Math.floor(Math.random() * FUN_SESSION_NAMES.length)];
+}
 const FOCUS_DRAWER_SLOT = 180 + 16 + 6 + 8;
 const FOCUS_SHELL_HEIGHT = FOCUS_BAR_HEIGHT + FOCUS_DRAWER_SLOT;
 const FOCUS_DRAWER_ANIM_MS = 350;
@@ -134,11 +250,28 @@ function getDrawerPayload() {
     return { text: task.text, status, durationText, index };
   });
 
-  return { drawerWidth, drawerHeight, tasks };
+  return { drawerWidth, drawerHeight, sessionTitle: state.activeSessionName || 'Braindump', tasks };
 }
 
 function getDrawerContentHeight() {
   const focusIndex = getFocusTaskIndex();
+
+  const tempTitle = document.createElement('div');
+  tempTitle.className = 'session-drawer-title';
+  tempTitle.style.position = 'absolute';
+  tempTitle.style.visibility = 'hidden';
+  tempTitle.style.left = '-10000px';
+  tempTitle.style.width = '240px';
+  tempTitle.style.fontFamily = "'N27', -apple-system, BlinkMacSystemFont, sans-serif";
+  tempTitle.style.fontSize = '12px';
+  tempTitle.style.lineHeight = '1.4';
+  tempTitle.style.letterSpacing = '0.05em';
+  tempTitle.style.textTransform = 'uppercase';
+  tempTitle.textContent = state.activeSessionName || 'Braindump';
+  document.body.appendChild(tempTitle);
+  const titleHeight = tempTitle.offsetHeight + 8;
+  document.body.removeChild(tempTitle);
+
   const tempList = document.createElement('ul');
   tempList.className = 'session-drawer-list';
   tempList.style.position = 'absolute';
@@ -154,7 +287,7 @@ function getDrawerContentHeight() {
   document.body.appendChild(tempList);
   const listHeight = tempList.scrollHeight;
   document.body.removeChild(tempList);
-  return Math.min(180, listHeight) + 16;
+  return Math.min(180, listHeight) + titleHeight + 16;
 }
 
 function getDrawerTaskStatus(task, index, focusIndex) {
@@ -398,7 +531,7 @@ function createPlannedSession() {
   const id = crypto.randomUUID();
   state.plannedSessions.push({
     id,
-    name: 'New Session',
+    name: getRandomFunSessionName(),
     tasks: [],
   });
   state.expandedSessionId = id;
@@ -565,6 +698,7 @@ function persist() {
     sessionTasks: state.sessionTasks,
     plannedSessions: state.plannedSessions,
     expandedSessionId: state.expandedSessionId,
+    activeSessionName: state.activeSessionName,
     currentIndex: state.currentIndex,
     focusTaskIndex: state.focusTaskIndex,
     elapsedMs: state.elapsedMs,
@@ -577,6 +711,7 @@ function showView(mode) {
   state.mode = mode;
   document.body.classList.toggle('mode-focus', mode === 'focus');
   document.body.classList.toggle('mode-edit', mode === 'edit');
+  document.body.classList.toggle('mode-done', mode === 'done');
   editView.classList.toggle('hidden', mode !== 'edit');
   focusView.classList.toggle('hidden', mode !== 'focus');
   doneView.classList.toggle('hidden', mode !== 'done');
@@ -908,7 +1043,7 @@ function renderTaskList(listEl, listId) {
       : '';
     const moveToSessionHtml = isSession
       ? ''
-      : `<button class="task-move-to-session" type="button" title="Move to session" aria-label="Move to session">
+      : `<button class="task-move-to-session" type="button" title="Move to queue" aria-label="Move to queue">
           <span class="task-arrow"></span>
         </button>`;
     const leadControlHtml = isSession
@@ -1065,7 +1200,6 @@ function renderPlannedSessions() {
         ${renderPlannedSessionName(session, isExpanded)}
         <div class="planned-session-header-actions">
           ${renderPlannedSessionDeleteButton(session)}
-          ${isExpanded ? `<button class="section-action-btn planned-add-all-btn" type="button" ${session.tasks.length === 0 ? 'disabled' : ''}>Add all to session</button>` : ''}
         </div>
       </div>
       <div class="planned-session-body">
@@ -1081,7 +1215,7 @@ function renderPlannedSessions() {
 
     const header = block.querySelector('.planned-session-header');
     header.addEventListener('click', (e) => {
-      if (e.target.closest('.planned-add-all-btn, .planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn')) return;
+      if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn')) return;
       if (!isExpanded) expandSession(session.id);
     });
 
@@ -1090,14 +1224,6 @@ function renderPlannedSessions() {
       deleteBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         openDeleteSessionModal(session.id);
-      });
-    }
-
-    if (isExpanded) {
-      const addAllBtn = block.querySelector('.planned-add-all-btn');
-      addAllBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        addAllFromExpandedSession();
       });
     }
 
@@ -1140,8 +1266,84 @@ function renderPlannedSessions() {
   });
 }
 
+function updateEditTitle() {
+  const session = getExpandedSession();
+  const sessionName = session?.name || 'Braindump';
+  editTitle.textContent = sessionName;
+  newBraindumpInput.placeholder = `Add a task to ${sessionName}`;
+}
+
+function updateMoveToNextBtn() {
+  const session = getExpandedSession();
+  const hasTasks = !!session && session.tasks.length > 0;
+  moveToNextBtn.disabled = !hasTasks;
+  if (session) {
+    const label = `Send all tasks from ${session.name} to Queue`;
+    moveToNextBtn.title = label;
+    moveToNextBtn.setAttribute('aria-label', label);
+  } else {
+    moveToNextBtn.removeAttribute('title');
+    moveToNextBtn.setAttribute('aria-label', 'Send to Queue');
+  }
+}
+
+function isSettingsUiOpen() {
+  return !settingsMenu.classList.contains('hidden')
+    || !shortcutsModal.classList.contains('hidden');
+}
+
+function positionSettingsMenu() {
+  const btnRect = settingsBtn.getBoundingClientRect();
+  const menuRect = settingsMenu.getBoundingClientRect();
+  const padding = 8;
+  let left = btnRect.right - menuRect.width;
+  let top = btnRect.bottom + 6;
+
+  if (left < padding) left = padding;
+  if (left + menuRect.width > window.innerWidth - padding) {
+    left = window.innerWidth - menuRect.width - padding;
+  }
+  if (top + menuRect.height > window.innerHeight - padding) {
+    top = btnRect.top - menuRect.height - 6;
+  }
+
+  settingsMenu.style.left = `${left}px`;
+  settingsMenu.style.top = `${top}px`;
+}
+
+function showSettingsMenu() {
+  settingsMenu.classList.remove('hidden');
+  settingsBtn.setAttribute('aria-expanded', 'true');
+  positionSettingsMenu();
+}
+
+function hideSettingsMenu() {
+  settingsMenu.classList.add('hidden');
+  settingsBtn.setAttribute('aria-expanded', 'false');
+}
+
+function toggleSettingsMenu() {
+  if (settingsMenu.classList.contains('hidden')) {
+    hideTaskContextMenu();
+    showSettingsMenu();
+  } else {
+    hideSettingsMenu();
+  }
+}
+
+function openShortcutsModal() {
+  hideSettingsMenu();
+  shortcutsModal.classList.remove('hidden');
+}
+
+function closeShortcutsModal() {
+  shortcutsModal.classList.add('hidden');
+}
+
 function renderEditView() {
   hideTaskContextMenu();
+  updateEditTitle();
+  updateMoveToNextBtn();
   renderPlannedSessions();
   renderTaskList(sessionList, 'session');
   startBtn.disabled = getSessionIncompleteIndices().length === 0;
@@ -1379,6 +1581,10 @@ function showDoneView() {
   showView('done');
 }
 
+function launchCelebration() {
+  window.slashIt.triggerCelebration();
+}
+
 function handleLimitExpired() {
   if (state.limitExpired) return;
   state.limitExpired = true;
@@ -1498,6 +1704,8 @@ function confirmExtend() {
 function startSlashing() {
   if (getIncompleteTasks().length === 0) return;
 
+  const session = getExpandedSession();
+  state.activeSessionName = session?.name || 'Braindump';
   clearAllSkippedFlags();
   resetTaskTimerState();
   state.totalSessionMs = 0;
@@ -1537,6 +1745,7 @@ document.addEventListener('keydown', (e) => {
   if (isInlineTaskInputFocused()) return;
   if (!clearSessionModal.classList.contains('hidden')) return;
   if (!deleteSessionModal.classList.contains('hidden')) return;
+  if (isSettingsUiOpen()) return;
 
   e.preventDefault();
   e.stopPropagation();
@@ -1544,6 +1753,16 @@ document.addEventListener('keydown', (e) => {
 }, true);
 
 planSessionBtn.addEventListener('click', createPlannedSession);
+moveToNextBtn.addEventListener('click', addAllFromExpandedSession);
+settingsBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleSettingsMenu();
+});
+settingsShortcutsBtn.addEventListener('click', openShortcutsModal);
+shortcutsCloseBtn.addEventListener('click', closeShortcutsModal);
+shortcutsModal.addEventListener('click', (e) => {
+  if (e.target === shortcutsModal) closeShortcutsModal();
+});
 clearSessionBtn.addEventListener('click', openClearSessionModal);
 clearSessionAllBtn.addEventListener('click', clearAllSessionTasks);
 clearSessionCompletedBtn.addEventListener('click', clearCompletedSessionTasks);
@@ -1570,6 +1789,11 @@ document.addEventListener('click', (e) => {
     && !taskContextMenu.contains(e.target)) {
     hideTaskContextMenu();
   }
+  if (!settingsMenu.classList.contains('hidden')
+    && !settingsMenu.contains(e.target)
+    && !settingsBtn.contains(e.target)) {
+    hideSettingsMenu();
+  }
   if (state.mode === 'edit'
     && !e.target.closest('.task-item')
     && !e.target.closest('#task-context-menu')
@@ -1581,6 +1805,14 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     hideTaskContextMenu();
+    if (!shortcutsModal.classList.contains('hidden')) {
+      closeShortcutsModal();
+      return;
+    }
+    if (!settingsMenu.classList.contains('hidden')) {
+      hideSettingsMenu();
+      return;
+    }
     if (!deleteSessionModal.classList.contains('hidden')) {
       closeDeleteSessionModal();
       return;
@@ -1629,7 +1861,9 @@ extendInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') confirmExtend();
   if (e.key === 'Escape') hideExtendPanel();
 });
+celebrateBtn.addEventListener('click', launchCelebration);
 resetBtn.addEventListener('click', () => {
+  window.slashIt.stopCelebration();
   state.sessionTasks = state.sessionTasks.filter((t) => !t.completed);
   state.elapsedMs = 0;
   state.totalSessionMs = 0;
@@ -1665,6 +1899,7 @@ async function init() {
   const saved = await window.slashIt.loadData();
   state.sessionTasks = (saved.sessionTasks || saved.tasks || []).map(normalizeSessionTask);
   loadPlannedSessionsFromSaved(saved);
+  state.activeSessionName = saved.activeSessionName || null;
   state.currentIndex = saved.currentIndex || 0;
   state.focusTaskIndex = Number.isInteger(saved.focusTaskIndex) ? saved.focusTaskIndex : 0;
   state.elapsedMs = saved.elapsedMs || 0;

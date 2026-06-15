@@ -5,7 +5,10 @@ const fs = require('fs');
 let mainWindow;
 let overlayWindow;
 let drawerOverlayWindow;
-let currentWindowMode = 'edit';
+let overlayMode = 'none';
+let celebrationHideTimer = null;
+
+const CELEBRATION_DURATION_MS = 3500;
 
 const FOCUS_WIDTH_MARGIN = 40;
 const FOCUS_BAR_HEIGHT = 56;
@@ -21,7 +24,7 @@ const VISIBLE_ON_ALL_WORKSPACES_OPTS = {
 const WINDOW_SIZES = {
   edit: { width: 649, height: 768, minWidth: 510, minHeight: 425, resizable: true },
   focus: { width: 360, height: FOCUS_BAR_HEIGHT, minWidth: 200, minHeight: FOCUS_BAR_HEIGHT, maxHeight: FOCUS_BAR_HEIGHT, resizable: false },
-  done: { width: 340, height: 320, minWidth: 280, minHeight: 280, resizable: true },
+  done: { width: 500, height: 620, minWidth: 420, minHeight: 560, resizable: true },
 };
 
 function getDataFile() {
@@ -79,6 +82,7 @@ function createOverlayWindow() {
     backgroundColor: '#00000000',
     ...(process.platform === 'darwin' ? { type: 'panel' } : {}),
     webPreferences: {
+      preload: path.join(__dirname, 'overlay-preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
       backgroundThrottling: false,
@@ -98,39 +102,110 @@ function createOverlayWindow() {
   return overlayWindow;
 }
 
+function presentOverlayWindow(overlay) {
+  if (overlay.isDestroyed()) return;
+  overlay.showInactive();
+  overlay.setAlwaysOnTop(true, 'screen-saver');
+  if (isLiveWindow(mainWindow)) {
+    mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+    mainWindow.moveTop();
+  }
+}
+
+function runWhenOverlayReady(overlay, callback) {
+  if (overlay.webContents.isLoading()) {
+    overlay.webContents.once('did-finish-load', callback);
+  } else {
+    callback();
+  }
+}
+
 function showScreenOverlay() {
   const overlay = createOverlayWindow();
   const display = getMainDisplay();
   overlay.setBounds(display.bounds);
+  overlayMode = 'expired';
 
-  const present = () => {
+  runWhenOverlayReady(overlay, () => {
     if (overlay.isDestroyed()) return;
-    overlay.showInactive();
-    overlay.setAlwaysOnTop(true, 'screen-saver');
-    if (isLiveWindow(mainWindow)) {
-      mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
-      mainWindow.moveTop();
-    }
-  };
-
-  if (overlay.webContents.isLoading()) {
-    overlay.webContents.once('did-finish-load', present);
-  } else {
-    present();
-  }
-}
-
-function isLiveWindow(win) {
-  return win && !win.isDestroyed();
+    overlay.webContents.send('overlay-expired-show');
+    presentOverlayWindow(overlay);
+  });
 }
 
 function hideScreenOverlay({ restoreMainWindow = true } = {}) {
+  if (overlayMode !== 'expired') return;
+  overlayMode = 'none';
   if (isLiveWindow(overlayWindow)) {
+    overlayWindow.webContents.send('overlay-expired-hide');
     overlayWindow.hide();
   }
   if (restoreMainWindow && isLiveWindow(mainWindow) && isFloatingMode(currentWindowMode)) {
     mainWindow.setAlwaysOnTop(true, 'floating');
   }
+}
+
+function hideCelebrationOverlay({ restoreMainWindow = true } = {}) {
+  if (overlayMode !== 'celebration') return;
+  overlayMode = 'none';
+  if (celebrationHideTimer) {
+    clearTimeout(celebrationHideTimer);
+    celebrationHideTimer = null;
+  }
+  if (isLiveWindow(overlayWindow)) {
+    overlayWindow.webContents.send('celebration-stop');
+    overlayWindow.hide();
+  }
+  if (restoreMainWindow && isLiveWindow(mainWindow) && isFloatingMode(currentWindowMode)) {
+    mainWindow.setAlwaysOnTop(true, 'floating');
+  }
+}
+
+function hideAllOverlays({ restoreMainWindow = true } = {}) {
+  if (celebrationHideTimer) {
+    clearTimeout(celebrationHideTimer);
+    celebrationHideTimer = null;
+  }
+  const mode = overlayMode;
+  overlayMode = 'none';
+  if (isLiveWindow(overlayWindow)) {
+    if (mode === 'celebration') overlayWindow.webContents.send('celebration-stop');
+    if (mode === 'expired') overlayWindow.webContents.send('overlay-expired-hide');
+    overlayWindow.hide();
+  }
+  if (restoreMainWindow && isLiveWindow(mainWindow) && isFloatingMode(currentWindowMode)) {
+    mainWindow.setAlwaysOnTop(true, 'floating');
+  }
+}
+
+function showCelebrationOverlay() {
+  const overlay = createOverlayWindow();
+  const display = getMainDisplay();
+  overlay.setBounds(display.bounds);
+
+  if (celebrationHideTimer) {
+    clearTimeout(celebrationHideTimer);
+    celebrationHideTimer = null;
+  }
+
+  if (overlayMode === 'expired') {
+    overlay.webContents.send('overlay-expired-hide');
+  }
+
+  overlayMode = 'celebration';
+
+  runWhenOverlayReady(overlay, () => {
+    if (overlay.isDestroyed()) return;
+    overlay.webContents.send('celebration-start');
+    presentOverlayWindow(overlay);
+    celebrationHideTimer = setTimeout(() => {
+      hideCelebrationOverlay();
+    }, CELEBRATION_DURATION_MS);
+  });
+}
+
+function isLiveWindow(win) {
+  return win && !win.isDestroyed();
 }
 
 function destroyOverlayWindow() {
@@ -186,7 +261,7 @@ function getTimerBarBounds() {
   };
 }
 
-function showSessionDrawerOverlay({ drawerWidth, drawerHeight, tasks }) {
+function showSessionDrawerOverlay({ drawerWidth, drawerHeight, tasks, sessionTitle }) {
   const bar = getTimerBarBounds();
   if (!bar) return;
 
@@ -197,7 +272,7 @@ function showSessionDrawerOverlay({ drawerWidth, drawerHeight, tasks }) {
   const present = () => {
     if (overlay.isDestroyed()) return;
     overlay.setBounds({ x, y, width: drawerWidth, height: drawerHeight });
-    overlay.webContents.send('drawer-data', { tasks });
+    overlay.webContents.send('drawer-data', { tasks, sessionTitle });
     overlay.showInactive();
     overlay.setAlwaysOnTop(true, 'floating', 2);
     if (isLiveWindow(mainWindow)) {
@@ -292,7 +367,7 @@ function resizeFocusWindow({ width: contentWidth } = {}) {
   mainWindow.setMinimumSize(size.minWidth, size.minHeight);
   mainWindow.setMaximumSize(maxWidth, size.maxHeight);
   mainWindow.setResizable(size.resizable);
-  mainWindow.setBackgroundColor('#0a0a0a');
+  mainWindow.setBackgroundColor('#00000000');
   const bottom = boundsBefore.y + boundsBefore.height;
   const x = Math.round(boundsBefore.x + (boundsBefore.width - width) / 2);
   mainWindow.setBounds({ x, y: bottom - height, width, height }, false);
@@ -309,14 +384,14 @@ function applyWindowSize(mode) {
     mainWindow.setMinimumSize(size.minWidth, size.minHeight);
     mainWindow.setMaximumSize(getFocusMaxWidth(), size.maxHeight);
     mainWindow.setResizable(size.resizable);
-    mainWindow.setBackgroundColor('#0a0a0a');
+    mainWindow.setBackgroundColor('#00000000');
     mainWindow.setSize(size.width, size.height, false);
     positionWindow(mode);
   } else {
     mainWindow.setMaximumSize(10000, 10000);
     mainWindow.setMinimumSize(size.minWidth, size.minHeight);
     mainWindow.setResizable(size.resizable);
-    mainWindow.setBackgroundColor('#0a0a0a');
+    mainWindow.setBackgroundColor('#00000000');
     const width = size.width;
     const height = size.height;
     const x = Math.round(areaX + (areaWidth - width) / 2);
@@ -327,7 +402,7 @@ function applyWindowSize(mode) {
   applyWindowPresentation(mode);
 
   if (mode !== 'focus') {
-    hideScreenOverlay();
+    hideAllOverlays();
     hideSessionDrawerOverlay();
   }
 }
@@ -354,10 +429,10 @@ function createWindow() {
     minHeight: WINDOW_SIZES.edit.minHeight,
     alwaysOnTop: false,
     frame: false,
-    transparent: false,
+    transparent: true,
     resizable: true,
     maximizable: false,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: '#00000000',
     ...(process.platform === 'darwin' ? {
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: { x: 12, y: 14 },
@@ -429,7 +504,10 @@ ipcMain.handle('hide-session-drawer', () => {
 
 ipcMain.handle('update-session-drawer', (_event, payload) => {
   if (isLiveWindow(drawerOverlayWindow) && drawerOverlayWindow.isVisible()) {
-    drawerOverlayWindow.webContents.send('drawer-data', { tasks: payload.tasks });
+    drawerOverlayWindow.webContents.send('drawer-data', {
+      tasks: payload.tasks,
+      sessionTitle: payload.sessionTitle,
+    });
   }
   return true;
 });
@@ -449,6 +527,16 @@ ipcMain.on('drawer-select-task', (_event, index) => {
 ipcMain.handle('set-screen-overlay', (_event, visible) => {
   if (visible) showScreenOverlay();
   else hideScreenOverlay();
+  return true;
+});
+
+ipcMain.handle('trigger-celebration', () => {
+  showCelebrationOverlay();
+  return true;
+});
+
+ipcMain.handle('stop-celebration', () => {
+  hideCelebrationOverlay();
   return true;
 });
 

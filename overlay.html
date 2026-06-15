@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
   <title>Overlay</title>
   <style>
     * {
@@ -22,6 +22,11 @@
       position: fixed;
       inset: 0;
       pointer-events: none;
+      visibility: hidden;
+    }
+
+    .edge-glow.is-visible {
+      visibility: visible;
       animation: edge-pulse 2.2s ease-in-out infinite;
     }
 
@@ -99,6 +104,42 @@
       0%, 100% { opacity: 0.55; }
       50% { opacity: 1; }
     }
+
+    .celebration-layer {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 10;
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    .celebration-layer.is-active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .celebration-particle {
+      position: absolute;
+      bottom: -10%;
+      left: var(--x, 50%);
+      font-size: var(--size, 32px);
+      line-height: 1;
+      opacity: 0;
+      animation: celebrate-float var(--duration, 2.4s) var(--delay, 0s) ease-out forwards;
+    }
+
+    @keyframes celebrate-float {
+      0% {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) rotate(0deg);
+      }
+      100% {
+        opacity: 0;
+        transform: translateX(calc(-50% + var(--drift, 0px))) translateY(-120vh) rotate(var(--spin, 20deg));
+      }
+    }
   </style>
 </head>
 <body>
@@ -108,5 +149,7 @@
     <div class="edge edge-left"></div>
     <div class="edge edge-right"></div>
   </div>
+  <div id="celebration-layer" class="celebration-layer" aria-hidden="true"></div>
+  <script src="overlay.js"></script>
 </body>
 </html>

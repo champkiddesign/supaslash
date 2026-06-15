@@ -13,4 +13,6 @@ contextBridge.exposeInMainWorld('slashIt', {
   onDrawerPointerLeave: (callback) => ipcRenderer.on('drawer-pointer-leave', callback),
   onDrawerSelectTask: (callback) => ipcRenderer.on('drawer-select-task', (_event, index) => callback(index)),
   setScreenOverlay: (visible) => ipcRenderer.invoke('set-screen-overlay', visible),
+  triggerCelebration: () => ipcRenderer.invoke('trigger-celebration'),
+  stopCelebration: () => ipcRenderer.invoke('stop-celebration'),
 });
