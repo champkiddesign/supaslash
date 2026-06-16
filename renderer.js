@@ -3,7 +3,7 @@ const BRAINDUMP_SESSION_ID = 'braindump';
 const state = {
   sessionTasks: [],
   plannedSessions: [],
-  expandedSessionId: BRAINDUMP_SESSION_ID,
+  expandedSessionId: null,
   renamingSessionId: null,
   activeSessionName: null,
   currentIndex: 0,
@@ -75,9 +75,11 @@ let pendingDeleteSessionId = null;
 let focusDimensionsRaf = null;
 let drawerOpen = false;
 let drawerCloseTimer = null;
+let sessionExpandTimer = null;
 
 const FOCUS_BAR_HEIGHT = 56;
 const FOCUS_DRAWER_GAP = 6;
+const SESSION_EXPAND_DELAY_MS = 400;
 
 const FUN_SESSION_NAMES = [
   'Research Flying Wombats',
@@ -498,12 +500,17 @@ function getBraindumpSession() {
 }
 
 function getExpandedSession() {
-  return getPlannedSession(state.expandedSessionId) || getBraindumpSession();
+  if (!state.expandedSessionId) return null;
+  return getPlannedSession(state.expandedSessionId) || null;
+}
+
+function getTaskTargetSession() {
+  return getExpandedSession() || getBraindumpSession();
 }
 
 function getExpandedPlannedListId() {
-  const session = getExpandedSession();
-  return session ? listIdForSession(session.id) : listIdForSession(BRAINDUMP_SESSION_ID);
+  const session = getTaskTargetSession();
+  return listIdForSession(session.id);
 }
 
 function getAllPlannedListIds() {
@@ -523,6 +530,13 @@ function ensureBraindumpSession() {
 function expandSession(sessionId) {
   if (!getPlannedSession(sessionId)) return;
   state.expandedSessionId = sessionId;
+  persist();
+  renderEditView();
+}
+
+function toggleSession(sessionId) {
+  if (!getPlannedSession(sessionId)) return;
+  state.expandedSessionId = state.expandedSessionId === sessionId ? null : sessionId;
   persist();
   renderEditView();
 }
@@ -562,7 +576,7 @@ function deletePlannedSession(sessionId) {
   state.plannedSessions.splice(sessionIndex, 1);
 
   if (state.expandedSessionId === sessionId) {
-    state.expandedSessionId = BRAINDUMP_SESSION_ID;
+    state.expandedSessionId = null;
   }
   if (state.renamingSessionId === sessionId) {
     state.renamingSessionId = null;
@@ -961,6 +975,48 @@ function setupListSelectionClear(listEl) {
   });
 }
 
+function clearSessionExpandTimer() {
+  if (sessionExpandTimer) {
+    clearTimeout(sessionExpandTimer);
+    sessionExpandTimer = null;
+  }
+}
+
+function setupSessionHeaderDropZone(sessionBlock, listId, sessionId, isExpanded) {
+  const header = sessionBlock.querySelector('.planned-session-header');
+  if (!header) return;
+
+  header.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    header.classList.add('drag-over-session');
+    if (!isExpanded) {
+      clearSessionExpandTimer();
+      sessionExpandTimer = setTimeout(() => {
+        sessionExpandTimer = null;
+        expandSession(sessionId);
+      }, SESSION_EXPAND_DELAY_MS);
+    }
+  });
+
+  header.addEventListener('dragleave', (e) => {
+    if (!header.contains(e.relatedTarget)) {
+      header.classList.remove('drag-over-session');
+      clearSessionExpandTimer();
+    }
+  });
+
+  header.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    header.classList.remove('drag-over-session');
+    clearSessionExpandTimer();
+    const payload = decodeDragPayload(e.dataTransfer.getData('text/plain'));
+    if (!payload) return;
+    moveTasks(payload.items, listId, getTasksForList(listId).length);
+  });
+}
+
 function hideTaskContextMenu() {
   taskContextMenu.classList.add('hidden');
   taskContextMenuTarget = null;
@@ -988,7 +1044,7 @@ function showTaskContextMenu(e, listId, taskIndex) {
 }
 
 function addAllFromExpandedSession() {
-  const session = getExpandedSession();
+  const session = getTaskTargetSession();
   if (!session || session.tasks.length === 0) return;
 
   const insertAt = getSessionActiveInsertIndex();
@@ -1126,7 +1182,7 @@ function renderTaskList(listEl, listId) {
     }
 
     li.addEventListener('dragstart', (e) => {
-      if (isCompleted) {
+      if (isCompleted || e.target.closest('button, input')) {
         e.preventDefault();
         return;
       }
@@ -1140,6 +1196,10 @@ function renderTaskList(listEl, listId) {
     });
     li.addEventListener('dragend', () => {
       document.querySelectorAll('.task-item.dragging').forEach((el) => el.classList.remove('dragging'));
+      clearSessionExpandTimer();
+      document.querySelectorAll('.planned-session-header.drag-over-session').forEach((el) => {
+        el.classList.remove('drag-over-session');
+      });
     });
     li.addEventListener('dragover', (e) => {
       e.preventDefault();
@@ -1210,7 +1270,7 @@ function renderPlannedSessions() {
     const toggleBtn = block.querySelector('.planned-session-toggle');
     toggleBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (!isExpanded) expandSession(session.id);
+      toggleSession(session.id);
     });
 
     const header = block.querySelector('.planned-session-header');
@@ -1256,6 +1316,7 @@ function renderPlannedSessions() {
     }
 
     const listEl = block.querySelector('.task-list');
+    setupSessionHeaderDropZone(block, listId, session.id, isExpanded);
     if (isExpanded) {
       renderTaskList(listEl, listId);
       setupListDropZone(listEl, listId);
@@ -1267,14 +1328,14 @@ function renderPlannedSessions() {
 }
 
 function updateEditTitle() {
-  const session = getExpandedSession();
+  const session = getTaskTargetSession();
   const sessionName = session?.name || 'Braindump';
-  editTitle.textContent = sessionName;
+  editTitle.textContent = getExpandedSession() ? sessionName : 'Braindump';
   newBraindumpInput.placeholder = `Add a task to ${sessionName}`;
 }
 
 function updateMoveToNextBtn() {
-  const session = getExpandedSession();
+  const session = getTaskTargetSession();
   const hasTasks = !!session && session.tasks.length > 0;
   moveToNextBtn.disabled = !hasTasks;
   if (session) {
@@ -1451,7 +1512,7 @@ function startEditingTask(li, listId, index) {
 function submitBraindumpForm() {
   const parsed = parseTaskInput(newBraindumpInput.value, newBraindumpLimit.value);
   if (!parsed.text) return;
-  const session = getExpandedSession();
+  const session = getTaskTargetSession();
   if (!session) return;
   session.tasks.push({ text: parsed.text, limitMs: parsed.limitMs });
   persist();
@@ -1704,7 +1765,7 @@ function confirmExtend() {
 function startSlashing() {
   if (getIncompleteTasks().length === 0) return;
 
-  const session = getExpandedSession();
+  const session = getTaskTargetSession();
   state.activeSessionName = session?.name || 'Braindump';
   clearAllSkippedFlags();
   resetTaskTimerState();
@@ -1881,9 +1942,7 @@ function loadPlannedSessionsFromSaved(saved) {
     state.plannedSessions = saved.plannedSessions.map(normalizePlannedSession);
     ensureBraindumpSession();
     const expandedId = saved.expandedSessionId;
-    state.expandedSessionId = getPlannedSession(expandedId)
-      ? expandedId
-      : BRAINDUMP_SESSION_ID;
+    state.expandedSessionId = expandedId && getPlannedSession(expandedId) ? expandedId : null;
     return;
   }
 
@@ -1892,7 +1951,7 @@ function loadPlannedSessionsFromSaved(saved) {
     name: 'Braindump',
     tasks: (saved.braindumpTasks || []).map(normalizeBraindumpTask),
   }];
-  state.expandedSessionId = BRAINDUMP_SESSION_ID;
+  state.expandedSessionId = null;
 }
 
 async function init() {

@@ -43,7 +43,7 @@ function loadData() {
   return {
     tasks: [],
     plannedSessions: [],
-    expandedSessionId: 'braindump',
+    expandedSessionId: null,
     currentIndex: 0,
     focusTaskIndex: 0,
     elapsedMs: 0,
