@@ -14,8 +14,12 @@ const state = {
   timerInterval: null,
   sessionStartMs: null,
   totalSessionMs: 0,
+  activeSessionLimitMs: null,
+  timerView: 'task',
   limitExpired: false,
-  overtimeMode: false,
+  limitExpiredKind: null,
+  taskOvertimeMode: false,
+  sessionOvertimeMode: false,
   selectedTasks: new Set(),
   lastSelected: null,
 };
@@ -49,10 +53,12 @@ const deleteSessionCancelBtn = document.getElementById('delete-session-cancel-bt
 const backToEditBtn = document.getElementById('back-to-edit-btn');
 const pauseBtn = document.getElementById('pause-btn');
 const timerDisplay = document.getElementById('timer-display');
+const timerModeLabel = document.getElementById('timer-mode-label');
 const focusStack = document.getElementById('focus-stack');
 const sessionDrawer = document.getElementById('session-drawer');
 const sessionDrawerList = document.getElementById('session-drawer-list');
 const timerBar = document.getElementById('timer-bar');
+const timerTaskZone = document.getElementById('timer-task-zone');
 const currentTaskEl = document.getElementById('current-task');
 const completeBtn = document.getElementById('complete-btn');
 const skipBtn = document.getElementById('skip-btn');
@@ -78,7 +84,10 @@ let drawerCloseTimer = null;
 let sessionExpandTimer = null;
 
 const FOCUS_BAR_HEIGHT = 56;
+const FOCUS_BAR_MIN_WIDTH = 300;
+const FOCUS_BAR_MAX_WIDTH = 450;
 const FOCUS_DRAWER_GAP = 6;
+const DRAWER_CLOSE_DELAY_MS = 280;
 const SESSION_EXPAND_DELAY_MS = 400;
 
 const FUN_SESSION_NAMES = [
@@ -189,7 +198,6 @@ function getRandomFunSessionName() {
 }
 const FOCUS_DRAWER_SLOT = 180 + 16 + 6 + 8;
 const FOCUS_SHELL_HEIGHT = FOCUS_BAR_HEIGHT + FOCUS_DRAWER_SLOT;
-const FOCUS_DRAWER_ANIM_MS = 350;
 
 function measureTimerBarWidth() {
   const clone = timerBar.cloneNode(true);
@@ -205,7 +213,7 @@ function measureTimerBarWidth() {
 
   const width = Math.ceil(clone.getBoundingClientRect().width);
   document.body.removeChild(clone);
-  return width;
+  return Math.max(FOCUS_BAR_MIN_WIDTH, Math.min(FOCUS_BAR_MAX_WIDTH, width));
 }
 
 async function applyFocusWindowSize() {
@@ -246,30 +254,33 @@ function getDrawerPayload() {
     if (task.completed) {
       if (task.durationMs != null) durationText = formatTime(task.durationMs);
     } else if (index === focusIndex) {
-      durationText = formatTime(state.elapsedMs);
+      durationText = formatTime(getTaskDisplayMs(task));
+    } else if (task.elapsedMs) {
+      durationText = formatTime(getTaskDisplayMsForElapsed(task, task.elapsedMs, task.taskOvertimeMode));
     }
 
     return { text: task.text, status, durationText, index };
   });
 
-  return { drawerWidth, drawerHeight, sessionTitle: state.activeSessionName || 'Braindump', tasks };
+  return { drawerWidth, drawerHeight, sessionTitle: state.activeSessionName || 'Braindump', sessionDurationText: formatTime(getSessionDisplayMs()), tasks };
 }
 
 function getDrawerContentHeight() {
   const focusIndex = getFocusTaskIndex();
 
   const tempTitle = document.createElement('div');
-  tempTitle.className = 'session-drawer-title';
+  tempTitle.className = 'session-drawer-title-row';
   tempTitle.style.position = 'absolute';
   tempTitle.style.visibility = 'hidden';
   tempTitle.style.left = '-10000px';
   tempTitle.style.width = '240px';
-  tempTitle.style.fontFamily = "'N27', -apple-system, BlinkMacSystemFont, sans-serif";
-  tempTitle.style.fontSize = '12px';
-  tempTitle.style.lineHeight = '1.4';
-  tempTitle.style.letterSpacing = '0.05em';
-  tempTitle.style.textTransform = 'uppercase';
-  tempTitle.textContent = state.activeSessionName || 'Braindump';
+  tempTitle.style.display = 'flex';
+  tempTitle.style.alignItems = 'center';
+  tempTitle.style.gap = '8px';
+  tempTitle.innerHTML = `
+    <span class="session-drawer-title-name">${escapeHtml(state.activeSessionName || 'Braindump')}</span>
+    <span class="session-drawer-title-time">${formatTime(getSessionDisplayMs())}</span>
+  `;
   document.body.appendChild(tempTitle);
   const titleHeight = tempTitle.offsetHeight + 8;
   document.body.removeChild(tempTitle);
@@ -311,7 +322,9 @@ function renderSessionDrawer() {
     if (task.completed) {
       if (task.durationMs != null) durationText = formatTime(task.durationMs);
     } else if (index === focusIndex) {
-      durationText = formatTime(state.elapsedMs);
+      durationText = formatTime(getTaskDisplayMs(task));
+    } else if (task.elapsedMs) {
+      durationText = formatTime(getTaskDisplayMsForElapsed(task, task.elapsedMs, task.taskOvertimeMode));
     }
 
     const li = document.createElement('li');
@@ -350,22 +363,19 @@ function closeSessionDrawer({ immediate = false } = {}) {
 
   clearTimeout(drawerCloseTimer);
   drawerOpen = false;
-
-  if (immediate) {
-    void window.slashIt.hideSessionDrawer();
-    return;
-  }
-
-  drawerCloseTimer = setTimeout(() => {
-    void window.slashIt.hideSessionDrawer();
-  }, FOCUS_DRAWER_ANIM_MS);
+  void window.slashIt.hideSessionDrawer(immediate);
 }
 
 function scheduleCloseSessionDrawer() {
   clearTimeout(drawerCloseTimer);
   drawerCloseTimer = setTimeout(() => {
     closeSessionDrawer();
-  }, 80);
+  }, DRAWER_CLOSE_DELAY_MS);
+}
+
+function isLeavingTaskZoneUpward(e) {
+  const rect = timerTaskZone.getBoundingClientRect();
+  return e.clientY <= rect.top;
 }
 
 function handleFocusStackMouseEnter() {
@@ -373,11 +383,13 @@ function handleFocusStackMouseEnter() {
   openSessionDrawer();
 }
 
-function handleFocusHoverMouseLeave() {
+function handleFocusHoverMouseLeave(e) {
+  if (isLeavingTaskZoneUpward(e)) return;
   scheduleCloseSessionDrawer();
 }
 
-function handleFocusViewMouseLeave() {
+function handleFocusViewMouseLeave(e) {
+  if (isLeavingTaskZoneUpward(e)) return;
   scheduleCloseSessionDrawer();
 }
 
@@ -454,13 +466,21 @@ function parseTaskInput(text, manualLimit) {
 }
 
 function normalizeSessionTask(task) {
-  return {
+  const normalized = {
     text: task.text || '',
     completed: !!task.completed,
     limitMs: task.limitMs ?? null,
     durationMs: task.durationMs ?? null,
+    elapsedMs: task.elapsedMs ?? 0,
+    taskOvertimeMode: !!task.taskOvertimeMode,
     skipped: !!task.skipped,
   };
+  if (task.sourceSessionId) {
+    normalized.sourceSessionId = task.sourceSessionId;
+    normalized.sourceSessionName = task.sourceSessionName || 'Session';
+    normalized.sourceSessionLimitMs = task.sourceSessionLimitMs ?? null;
+  }
+  return normalized;
 }
 
 function normalizeBraindumpTask(task) {
@@ -471,6 +491,7 @@ function normalizePlannedSession(session) {
   return {
     id: session.id || BRAINDUMP_SESSION_ID,
     name: session.name || 'Session',
+    limitMs: session.limitMs ?? null,
     tasks: (session.tasks || []).map(normalizeBraindumpTask),
   };
 }
@@ -708,15 +729,23 @@ function decodeDragPayload(raw) {
 }
 
 function persist() {
+  saveCurrentTaskProgress();
   window.slashIt.saveData({
     sessionTasks: state.sessionTasks,
     plannedSessions: state.plannedSessions,
     expandedSessionId: state.expandedSessionId,
     activeSessionName: state.activeSessionName,
+    activeSessionLimitMs: state.activeSessionLimitMs,
+    totalSessionMs: state.totalSessionMs,
+    timerView: state.timerView,
+    limitExpiredKind: state.limitExpiredKind,
+    taskOvertimeMode: state.taskOvertimeMode,
+    sessionOvertimeMode: state.sessionOvertimeMode,
     currentIndex: state.currentIndex,
     focusTaskIndex: state.focusTaskIndex,
     elapsedMs: state.elapsedMs,
     isRunning: state.isRunning,
+    limitExpired: state.limitExpired,
     mode: state.mode,
   });
 }
@@ -810,22 +839,90 @@ function updateSkipButtonState() {
   skipBtn.disabled = getIncompleteCount() <= 1;
 }
 
-function getDisplayMs(task) {
+function getSessionElapsedMs() {
+  return state.totalSessionMs + state.elapsedMs;
+}
+
+function isTaskOvertimeActive() {
+  return state.taskOvertimeMode || (state.limitExpired && state.limitExpiredKind === 'task');
+}
+
+function isSessionOvertimeActive() {
+  return state.sessionOvertimeMode || (state.limitExpired && state.limitExpiredKind === 'session');
+}
+
+function getTaskDisplayMs(task) {
   if (!task) return state.elapsedMs;
-  if (task.limitMs && (state.overtimeMode || state.limitExpired)) {
-    return Math.max(0, state.elapsedMs - task.limitMs);
+  return getTaskDisplayMsForElapsed(task, state.elapsedMs, isTaskOvertimeActive());
+}
+
+function getTaskDisplayMsForElapsed(task, elapsedMs, overtimeActive) {
+  if (task.limitMs && overtimeActive) {
+    return Math.max(0, elapsedMs - task.limitMs);
   }
   if (task.limitMs) {
-    return Math.max(0, task.limitMs - state.elapsedMs);
+    return Math.max(0, task.limitMs - elapsedMs);
   }
-  return state.elapsedMs;
+  return elapsedMs;
+}
+
+function saveCurrentTaskProgress() {
+  if (state.mode !== 'focus') return;
+  const taskIndex = getFocusTaskIndex();
+  if (taskIndex < 0) return;
+  const task = state.sessionTasks[taskIndex];
+  if (!task || task.completed) return;
+  task.elapsedMs = state.elapsedMs;
+  task.taskOvertimeMode = state.taskOvertimeMode;
+}
+
+function restoreTaskTimerFromTask(task) {
+  state.elapsedMs = task.elapsedMs || 0;
+  state.taskOvertimeMode = !!task.taskOvertimeMode;
+
+  const sessionExpired = state.limitExpired && state.limitExpiredKind === 'session';
+  const taskAtLimit = task.limitMs && !state.taskOvertimeMode && state.elapsedMs >= task.limitMs;
+
+  if (sessionExpired) return;
+
+  if (taskAtLimit) {
+    state.limitExpired = true;
+    state.limitExpiredKind = 'task';
+    setExpiredUI(true);
+  } else if (state.limitExpiredKind === 'task') {
+    state.limitExpired = false;
+    state.limitExpiredKind = null;
+    setExpiredUI(false);
+  }
+}
+
+function getSessionDisplayMs() {
+  const elapsed = getSessionElapsedMs();
+  if (state.activeSessionLimitMs && isSessionOvertimeActive()) {
+    return Math.max(0, elapsed - state.activeSessionLimitMs);
+  }
+  if (state.activeSessionLimitMs) {
+    return Math.max(0, state.activeSessionLimitMs - elapsed);
+  }
+  return elapsed;
+}
+
+function isTimerDisplayExpired() {
+  return state.limitExpired && state.limitExpiredKind === state.timerView;
 }
 
 function updateTimerDisplay() {
   const current = getCurrentTask();
-  timerDisplay.textContent = formatTime(getDisplayMs(current));
+  if (timerModeLabel) {
+    timerModeLabel.textContent = state.timerView === 'task' ? 'TASK' : 'SESSION';
+    timerModeLabel.classList.toggle('timer-mode-label--session', state.timerView === 'session');
+  }
+  const displayMs = state.timerView === 'session'
+    ? getSessionDisplayMs()
+    : getTaskDisplayMs(current);
+  timerDisplay.textContent = formatTime(displayMs);
   timerDisplay.classList.toggle('paused', !state.isRunning && !state.limitExpired);
-  timerDisplay.classList.toggle('expired', state.limitExpired);
+  timerDisplay.classList.toggle('expired', isTimerDisplayExpired());
   timerBar.classList.toggle('is-running', state.isRunning);
   pauseBtn.classList.toggle('is-paused', !state.isRunning);
   pauseBtn.title = state.isRunning ? 'Pause' : 'Resume';
@@ -869,9 +966,20 @@ function hideExtendPanel() {
 
 function resetTaskTimerState() {
   state.elapsedMs = 0;
-  state.limitExpired = false;
-  state.overtimeMode = false;
-  setExpiredUI(false);
+  state.taskOvertimeMode = false;
+  if (state.limitExpiredKind === 'task') {
+    state.limitExpired = false;
+    state.limitExpiredKind = null;
+    setExpiredUI(false);
+  }
+}
+
+function savePlannedSessionLimit(sessionId, value) {
+  const session = getPlannedSession(sessionId);
+  if (!session) return;
+  session.limitMs = parseManualLimit(value);
+  persist();
+  renderEditView();
 }
 
 function escapeHtml(text) {
@@ -880,14 +988,36 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-function toSessionTaskFromBraindump(task) {
+function getSourceMetaFromSession(session) {
+  if (!session) return null;
   return {
+    sourceSessionId: session.id,
+    sourceSessionName: session.name,
+    sourceSessionLimitMs: session.limitMs ?? null,
+  };
+}
+
+function getSourceMetaFromListId(listId) {
+  if (!isPlannedList(listId)) return null;
+  return getSourceMetaFromSession(getPlannedSession(getPlannedSessionIdFromListId(listId)));
+}
+
+function toSessionTaskFromBraindump(task, sourceMeta = null) {
+  const sessionTask = {
     text: task.text,
     completed: false,
     limitMs: task.limitMs ?? null,
     durationMs: null,
+    elapsedMs: 0,
+    taskOvertimeMode: false,
     skipped: false,
   };
+  if (sourceMeta) {
+    sessionTask.sourceSessionId = sourceMeta.sourceSessionId;
+    sessionTask.sourceSessionName = sourceMeta.sourceSessionName;
+    sessionTask.sourceSessionLimitMs = sourceMeta.sourceSessionLimitMs ?? null;
+  }
+  return sessionTask;
 }
 
 function toBraindumpTaskFromSession(task) {
@@ -896,7 +1026,10 @@ function toBraindumpTaskFromSession(task) {
 
 function convertTaskForMove(task, fromList, toList) {
   if (fromList === toList) return task;
-  if (toList === 'session') return toSessionTaskFromBraindump(task);
+  if (toList === 'session') {
+    const sourceMeta = isPlannedList(fromList) ? getSourceMetaFromListId(fromList) : null;
+    return toSessionTaskFromBraindump(task, sourceMeta);
+  }
   if (fromList === 'session') return toBraindumpTaskFromSession(task);
   return task;
 }
@@ -1047,15 +1180,29 @@ function addAllFromExpandedSession() {
   const session = getTaskTargetSession();
   if (!session || session.tasks.length === 0) return;
 
+  const sourceMeta = getSourceMetaFromSession(session);
   const insertAt = getSessionActiveInsertIndex();
   state.sessionTasks.splice(
     insertAt,
     0,
-    ...session.tasks.map(toSessionTaskFromBraindump),
+    ...session.tasks.map((task) => toSessionTaskFromBraindump(task, sourceMeta)),
   );
   session.tasks = [];
   persist();
   renderEditView();
+}
+
+function appendQueueGroupHeader(listEl, task) {
+  const li = document.createElement('li');
+  li.className = 'queue-session-group-header';
+  const limitHtml = task.sourceSessionLimitMs
+    ? `<span class="queue-session-group-limit">${escapeHtml(formatLimitField(task.sourceSessionLimitMs))}</span>`
+    : '';
+  li.innerHTML = `
+    <span class="queue-session-group-name">${escapeHtml(task.sourceSessionName || 'Session')}</span>
+    ${limitHtml}
+  `;
+  listEl.appendChild(li);
 }
 
 function renderTaskList(listEl, listId) {
@@ -1067,9 +1214,17 @@ function renderTaskList(listEl, listId) {
     ? getSessionEditIndices()
     : tasks.map((_, index) => index);
   const incompleteCount = isSession ? getSessionIncompleteIndices().length : 0;
+  let previousSourceSessionId;
 
   indices.forEach((taskIndex, displayIndex) => {
     const task = tasks[taskIndex];
+    if (isSession && task.sourceSessionId && task.sourceSessionId !== previousSourceSessionId) {
+      appendQueueGroupHeader(listEl, task);
+      previousSourceSessionId = task.sourceSessionId;
+    } else if (isSession && task.sourceSessionId) {
+      previousSourceSessionId = task.sourceSessionId;
+    }
+
     const isCompleted = isSession && task.completed;
     const li = document.createElement('li');
     li.className = `task-item task-item--${isSession ? 'session' : 'planned'}`;
@@ -1242,6 +1397,25 @@ function renderPlannedSessionDeleteButton(session) {
   return `<button class="planned-session-delete-btn" type="button" aria-label="Delete session" title="Delete session">×</button>`;
 }
 
+function renderPlannedSessionLimitControl(session, isExpanded) {
+  const value = formatLimitField(session.limitMs);
+  if (isExpanded) {
+    return `<input
+      class="planned-session-limit-input"
+      type="text"
+      value="${escapeHtml(value)}"
+      placeholder="20m"
+      title="Session time limit"
+      autocomplete="off"
+      data-session-id="${escapeHtml(session.id)}"
+    />`;
+  }
+  if (session.limitMs) {
+    return `<span class="planned-session-limit-badge">${escapeHtml(value)}</span>`;
+  }
+  return '';
+}
+
 function renderPlannedSessions() {
   plannedSessionsList.innerHTML = '';
 
@@ -1259,6 +1433,7 @@ function renderPlannedSessions() {
         </button>
         ${renderPlannedSessionName(session, isExpanded)}
         <div class="planned-session-header-actions">
+          ${renderPlannedSessionLimitControl(session, isExpanded)}
           ${renderPlannedSessionDeleteButton(session)}
         </div>
       </div>
@@ -1275,9 +1450,21 @@ function renderPlannedSessions() {
 
     const header = block.querySelector('.planned-session-header');
     header.addEventListener('click', (e) => {
-      if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn')) return;
+      if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn, .planned-session-limit-input, .planned-session-limit-badge')) return;
       if (!isExpanded) expandSession(session.id);
     });
+
+    const limitInput = block.querySelector('.planned-session-limit-input');
+    if (limitInput) {
+      const saveLimit = () => savePlannedSessionLimit(session.id, limitInput.value);
+      limitInput.addEventListener('mousedown', (e) => e.stopPropagation());
+      limitInput.addEventListener('click', (e) => e.stopPropagation());
+      limitInput.addEventListener('change', saveLimit);
+      limitInput.addEventListener('blur', saveLimit);
+      limitInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') limitInput.blur();
+      });
+    }
 
     const deleteBtn = block.querySelector('.planned-session-delete-btn');
     if (deleteBtn) {
@@ -1525,11 +1712,12 @@ function submitBraindumpForm() {
 function submitToSessionForm() {
   const parsed = parseTaskInput(newBraindumpInput.value, newBraindumpLimit.value);
   if (!parsed.text) return;
+  const sourceMeta = getSourceMetaFromSession(getTaskTargetSession());
   const insertAt = getSessionActiveInsertIndex();
   state.sessionTasks.splice(
     insertAt,
     0,
-    toSessionTaskFromBraindump({ text: parsed.text, limitMs: parsed.limitMs }),
+    toSessionTaskFromBraindump({ text: parsed.text, limitMs: parsed.limitMs }, sourceMeta),
   );
   persist();
   renderEditView();
@@ -1646,12 +1834,23 @@ function launchCelebration() {
   window.slashIt.triggerCelebration();
 }
 
-function handleLimitExpired() {
+function handleLimitExpired(kind) {
   if (state.limitExpired) return;
   state.limitExpired = true;
-  state.overtimeMode = true;
+  state.limitExpiredKind = kind;
   setExpiredUI(true);
   persist();
+}
+
+function checkLimitExpiry() {
+  const current = getCurrentTask();
+  if (current?.limitMs && !isTaskOvertimeActive() && state.elapsedMs >= current.limitMs) {
+    handleLimitExpired('task');
+    return;
+  }
+  if (state.activeSessionLimitMs && !isSessionOvertimeActive() && getSessionElapsedMs() >= state.activeSessionLimitMs) {
+    handleLimitExpired('session');
+  }
 }
 
 function startTimer() {
@@ -1660,10 +1859,7 @@ function startTimer() {
   state.sessionStartMs = Date.now() - state.elapsedMs;
   state.timerInterval = setInterval(() => {
     state.elapsedMs = Date.now() - state.sessionStartMs;
-    const current = getCurrentTask();
-    if (current?.limitMs && !state.overtimeMode && state.elapsedMs >= current.limitMs) {
-      handleLimitExpired();
-    }
+    checkLimitExpiry();
     updateTimerDisplay();
   }, 250);
   updateTimerDisplay();
@@ -1680,6 +1876,12 @@ function stopTimer() {
   persist();
 }
 
+function toggleTimerView() {
+  state.timerView = state.timerView === 'task' ? 'session' : 'task';
+  updateTimerDisplay();
+  persist();
+}
+
 function toggleTimer() {
   if (state.isRunning) stopTimer();
   else startTimer();
@@ -1691,31 +1893,39 @@ function completeCurrentTask() {
 
   state.sessionTasks[taskIndex].completed = true;
   state.sessionTasks[taskIndex].durationMs = state.elapsedMs;
+  state.sessionTasks[taskIndex].elapsedMs = 0;
+  state.sessionTasks[taskIndex].taskOvertimeMode = false;
   state.sessionTasks[taskIndex].skipped = false;
 
   stopTimer();
   state.totalSessionMs += state.elapsedMs;
-  resetTaskTimerState();
 
   state.focusTaskIndex = getNextFocusTaskIndex();
+  const next = getCurrentTask();
+  if (next) restoreTaskTimerFromTask(next);
+  else resetTaskTimerState();
+
   persist();
   renderFocusView();
 
-  if (getCurrentTask()) startTimer();
+  if (next) startTimer();
 }
 
 function skipCurrentTask() {
   const taskIndex = getFocusTaskIndex();
   if (taskIndex < 0 || getIncompleteCount() <= 1) return;
 
+  saveCurrentTaskProgress();
   state.sessionTasks[taskIndex].skipped = true;
   stopTimer();
-  resetTaskTimerState();
   state.focusTaskIndex = getNextFocusTaskIndex({ excludeIndex: taskIndex });
+  const next = getCurrentTask();
+  if (next) restoreTaskTimerFromTask(next);
+  else resetTaskTimerState();
   persist();
   renderFocusView();
 
-  if (getCurrentTask()) startTimer();
+  if (next) startTimer();
 }
 
 function switchToTask(index) {
@@ -1724,10 +1934,12 @@ function switchToTask(index) {
   if (!task || task.completed) return;
   if (index === getFocusTaskIndex()) return;
 
-  task.skipped = false;
+  saveCurrentTaskProgress();
   stopTimer();
-  resetTaskTimerState();
+
+  task.skipped = false;
   state.focusTaskIndex = index;
+  restoreTaskTimerFromTask(task);
   persist();
   renderFocusView();
   startTimer();
@@ -1735,6 +1947,13 @@ function switchToTask(index) {
 
 function startOvertime() {
   window.slashIt.setScreenOverlay(false);
+  if (state.limitExpiredKind === 'session') {
+    state.sessionOvertimeMode = true;
+  } else if (state.limitExpiredKind === 'task') {
+    state.taskOvertimeMode = true;
+    const taskIndex = getFocusTaskIndex();
+    if (taskIndex >= 0) state.sessionTasks[taskIndex].taskOvertimeMode = true;
+  }
   if (!state.isRunning) startTimer();
 }
 
@@ -1749,13 +1968,20 @@ function confirmExtend() {
     return;
   }
 
-  const current = getCurrentTask();
-  if (!current) return;
+  if (state.limitExpiredKind === 'session') {
+    state.activeSessionLimitMs = (state.activeSessionLimitMs || 0) + extraMs;
+    state.sessionOvertimeMode = false;
+  } else {
+    const current = getCurrentTask();
+    if (!current) return;
+    const taskIndex = getFocusTaskIndex();
+    state.sessionTasks[taskIndex].limitMs = (state.sessionTasks[taskIndex].limitMs || 0) + extraMs;
+    state.taskOvertimeMode = false;
+    state.sessionTasks[taskIndex].taskOvertimeMode = false;
+  }
 
-  const taskIndex = getFocusTaskIndex();
-  state.sessionTasks[taskIndex].limitMs = (state.sessionTasks[taskIndex].limitMs || 0) + extraMs;
-  state.overtimeMode = false;
   state.limitExpired = false;
+  state.limitExpiredKind = null;
   hideExtendPanel();
   setExpiredUI(false);
   startTimer();
@@ -1765,11 +1991,24 @@ function confirmExtend() {
 function startSlashing() {
   if (getIncompleteTasks().length === 0) return;
 
-  const session = getTaskTargetSession();
-  state.activeSessionName = session?.name || 'Braindump';
+  const first = getIncompleteTasks()[0];
+  state.activeSessionName = first?.sourceSessionName || 'Braindump';
+  state.activeSessionLimitMs = first?.sourceSessionLimitMs ?? null;
+  state.timerView = 'task';
+  state.limitExpiredKind = null;
+  state.taskOvertimeMode = false;
+  state.sessionOvertimeMode = false;
   clearAllSkippedFlags();
+  state.sessionTasks.forEach((task) => {
+    if (!task.completed) {
+      task.elapsedMs = 0;
+      task.taskOvertimeMode = false;
+    }
+  });
   resetTaskTimerState();
   state.totalSessionMs = 0;
+  state.limitExpired = false;
+  setExpiredUI(false);
   state.isRunning = false;
   state.focusTaskIndex = getNextFocusTaskIndex();
 
@@ -1782,7 +2021,11 @@ function backToEdit() {
   closeSessionDrawer({ immediate: true });
   stopTimer();
   state.limitExpired = false;
-  state.overtimeMode = false;
+  state.limitExpiredKind = null;
+  state.taskOvertimeMode = false;
+  state.sessionOvertimeMode = false;
+  state.activeSessionLimitMs = null;
+  state.timerView = 'task';
   setExpiredUI(false);
   clearAllSkippedFlags();
   showView('edit');
@@ -1901,9 +2144,9 @@ document.addEventListener('contextmenu', (e) => {
 
 backToEditBtn.addEventListener('click', backToEdit);
 pauseBtn.addEventListener('click', toggleTimer);
-timerDisplay.addEventListener('click', toggleTimer);
-timerBar.addEventListener('mouseenter', handleFocusStackMouseEnter);
-timerBar.addEventListener('mouseleave', handleFocusHoverMouseLeave);
+timerDisplay.addEventListener('click', toggleTimerView);
+timerTaskZone.addEventListener('mouseenter', handleFocusStackMouseEnter);
+timerTaskZone.addEventListener('mouseleave', handleFocusHoverMouseLeave);
 focusView.addEventListener('mouseleave', handleFocusViewMouseLeave);
 window.slashIt.onDrawerPointerEnter(() => {
   clearTimeout(drawerCloseTimer);
@@ -1959,19 +2202,34 @@ async function init() {
   state.sessionTasks = (saved.sessionTasks || saved.tasks || []).map(normalizeSessionTask);
   loadPlannedSessionsFromSaved(saved);
   state.activeSessionName = saved.activeSessionName || null;
+  state.activeSessionLimitMs = saved.activeSessionLimitMs ?? null;
+  state.totalSessionMs = saved.totalSessionMs || 0;
+  state.timerView = saved.timerView === 'session' ? 'session' : 'task';
+  state.limitExpired = !!saved.limitExpired;
+  state.limitExpiredKind = saved.limitExpiredKind === 'session' ? 'session' : saved.limitExpiredKind === 'task' ? 'task' : null;
+  state.taskOvertimeMode = !!saved.taskOvertimeMode;
+  state.sessionOvertimeMode = !!saved.sessionOvertimeMode;
   state.currentIndex = saved.currentIndex || 0;
   state.focusTaskIndex = Number.isInteger(saved.focusTaskIndex) ? saved.focusTaskIndex : 0;
   state.elapsedMs = saved.elapsedMs || 0;
   state.isRunning = false;
 
-  const focusTask = state.sessionTasks[state.focusTaskIndex];
-  if (!focusTask || focusTask.completed) {
+  if (!state.sessionTasks[state.focusTaskIndex] || state.sessionTasks[state.focusTaskIndex].completed) {
     state.focusTaskIndex = Math.max(0, getNextFocusTaskIndex());
   }
 
   if (saved.mode === 'focus' && getIncompleteTasks().length > 0) {
+    const current = getCurrentTask();
+    if (current) {
+      state.elapsedMs = current.elapsedMs || saved.elapsedMs || 0;
+      current.elapsedMs = state.elapsedMs;
+      state.taskOvertimeMode = current.taskOvertimeMode || state.taskOvertimeMode;
+      current.taskOvertimeMode = state.taskOvertimeMode;
+    }
     showView('focus');
     renderFocusView();
+    if (current) restoreTaskTimerFromTask(current);
+    else if (state.limitExpired) setExpiredUI(true);
     if (saved.isRunning) startTimer();
   } else if (saved.mode === 'done' && getIncompleteTasks().length === 0 && state.sessionTasks.length > 0) {
     showDoneView();

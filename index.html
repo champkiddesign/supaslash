@@ -152,21 +152,34 @@
         <ul id="session-drawer-list" class="session-drawer-list"></ul>
       </div>
       <div class="timer-bar" id="timer-bar">
-        <button id="timer-display" class="timer-display" type="button" title="Click to pause/resume">0:00</button>
-      <span id="current-task" class="current-task"></span>
-      <div id="timer-actions" class="timer-actions">
-        <button id="pause-btn" class="pause-btn" type="button" title="Pause" aria-label="Pause">
-          <svg class="pause-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <rect x="6" y="4" width="4" height="16" rx="1"/>
-            <rect x="14" y="4" width="4" height="16" rx="1"/>
-          </svg>
-          <svg class="play-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M8 5v14l11-7z"/>
-          </svg>
-        </button>
-        <button id="back-to-edit-btn" class="icon-btn icon-edit" type="button" title="Edit tasks" aria-label="Edit tasks">
-          <img src="edit-tasks.png" width="14" height="14" alt="" aria-hidden="true" class="edit-icon" />
-        </button>
+        <div class="timer-stack">
+          <span id="timer-mode-label" class="timer-mode-label">TASK</span>
+          <button id="timer-display" class="timer-display" type="button" title="Switch between task and session timer">0:00</button>
+        </div>
+      <div class="timer-task-zone" id="timer-task-zone">
+        <span id="current-task" class="current-task"></span>
+        <div id="timer-actions" class="timer-actions">
+          <button id="back-to-edit-btn" class="icon-btn icon-edit" type="button" title="Edit tasks" aria-label="Edit tasks">
+            <img src="edit-tasks.png" width="14" height="14" alt="" aria-hidden="true" class="edit-icon" />
+          </button>
+          <button id="pause-btn" class="pause-btn" type="button" title="Pause" aria-label="Pause">
+            <svg class="pause-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <rect x="6" y="4" width="4" height="16" rx="1"/>
+              <rect x="14" y="4" width="4" height="16" rx="1"/>
+            </svg>
+            <svg class="play-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+          </button>
+          <button id="skip-btn" class="icon-btn icon-skip" type="button" title="Skip task" aria-label="Skip task">
+            <img src="skip-next.png" width="14" height="14" alt="" aria-hidden="true" class="skip-icon" />
+          </button>
+          <button id="complete-btn" class="icon-btn icon-complete" type="button" title="Complete task" aria-label="Complete task">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 6 9 17l-5-5"/>
+            </svg>
+          </button>
+        </div>
       </div>
       <div id="expired-actions" class="expired-actions hidden">
         <button id="overtime-btn" class="expired-btn" type="button">Overtime</button>
@@ -178,14 +191,6 @@
         <button id="extend-confirm-btn" class="expired-btn expired-btn-accent" type="button">Add</button>
         <button id="extend-cancel-btn" class="expired-btn" type="button">Cancel</button>
       </div>
-      <button id="skip-btn" class="icon-btn icon-skip" type="button" title="Skip task" aria-label="Skip task">
-        <img src="skip-next.png" width="14" height="14" alt="" aria-hidden="true" class="skip-icon" />
-      </button>
-      <button id="complete-btn" class="icon-btn icon-complete" type="button" title="Complete task" aria-label="Complete task">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M20 6 9 17l-5-5"/>
-        </svg>
-      </button>
     </div>
     </div>
   </div>

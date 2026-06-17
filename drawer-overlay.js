@@ -1,5 +1,6 @@
 const sessionDrawer = document.getElementById('session-drawer');
-const sessionDrawerTitle = document.getElementById('session-drawer-title');
+const sessionDrawerTitleName = document.getElementById('session-drawer-title-name');
+const sessionDrawerTitleTime = document.getElementById('session-drawer-title-time');
 const sessionDrawerList = document.getElementById('session-drawer-list');
 
 function escapeHtml(text) {
@@ -42,7 +43,8 @@ function updateTaskElement(li, task) {
 
 function renderDrawer(data) {
   const tasks = data.tasks || [];
-  sessionDrawerTitle.textContent = data.sessionTitle || 'Braindump';
+  sessionDrawerTitleName.textContent = data.sessionTitle || 'Braindump';
+  sessionDrawerTitleTime.textContent = data.sessionDurationText || '';
 
   if (needsFullRebuild(tasks)) {
     sessionDrawerList.innerHTML = '';
@@ -84,6 +86,9 @@ document.body.addEventListener('mouseenter', () => {
   window.drawerOverlay.notifyPointerEnter();
 });
 
-document.body.addEventListener('mouseleave', () => {
+document.body.addEventListener('mouseleave', (e) => {
+  const rect = document.body.getBoundingClientRect();
+  // Leaving downward toward the timer bar — keep the drawer open.
+  if (e.clientY >= rect.bottom - 2) return;
   window.drawerOverlay.notifyPointerLeave();
 });

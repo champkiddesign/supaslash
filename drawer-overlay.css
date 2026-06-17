@@ -3,11 +3,17 @@ html, body {
   padding: 0;
   background: transparent;
   overflow: hidden;
+  height: 100%;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
 }
 
 .session-drawer {
+  flex: 0 0 auto;
   width: 100%;
-  height: 100%;
   padding: 8px 10px;
   background: #161616;
   border-radius: 14px;
@@ -15,27 +21,28 @@ html, body {
   overflow: hidden;
   opacity: 0;
   box-sizing: border-box;
-  transform: translateY(12px);
-  transition: opacity 0.35s ease, transform 0.35s ease;
+  transform: translateY(8px);
+  transition: opacity 0.16s ease-in, transform 0.16s ease-in;
+}
+
+.drawer-hover-bridge {
+  flex: 1 0 auto;
+  min-height: 14px;
 }
 
 .session-drawer.is-open {
   opacity: 1;
   transform: translateY(0);
+  transition: opacity 0.22s ease-out, transform 0.22s ease-out;
 }
 
-.session-drawer-title {
-  font-family: 'N27', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 1.4;
+.session-drawer-title-row {
+  margin-bottom: 8px;
+}
+
+.session-drawer-title-name {
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #a2a2a2;
-  margin-bottom: 8px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .session-drawer-list {

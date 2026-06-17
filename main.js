@@ -12,9 +12,12 @@ const CELEBRATION_DURATION_MS = 3500;
 
 const FOCUS_WIDTH_MARGIN = 40;
 const FOCUS_BAR_HEIGHT = 56;
+const FOCUS_DRAWER_GAP = 6;
+const FOCUS_DRAWER_BRIDGE = 14;
 const FOCUS_DRAWER_SLOT = 180 + 16 + 6 + 8;
 const FOCUS_SHELL_HEIGHT = FOCUS_BAR_HEIGHT + FOCUS_DRAWER_SLOT;
-const FOCUS_DRAWER_ANIM_MS = 350;
+const FOCUS_DRAWER_OPEN_ANIM_MS = 220;
+const FOCUS_DRAWER_CLOSE_ANIM_MS = 160;
 
 const VISIBLE_ON_ALL_WORKSPACES_OPTS = {
   visibleOnFullScreen: true,
@@ -23,7 +26,7 @@ const VISIBLE_ON_ALL_WORKSPACES_OPTS = {
 
 const WINDOW_SIZES = {
   edit: { width: 649, height: 768, minWidth: 510, minHeight: 425, resizable: true },
-  focus: { width: 360, height: FOCUS_BAR_HEIGHT, minWidth: 200, minHeight: FOCUS_BAR_HEIGHT, maxHeight: FOCUS_BAR_HEIGHT, resizable: false },
+  focus: { width: 360, height: FOCUS_BAR_HEIGHT, minWidth: 300, minHeight: FOCUS_BAR_HEIGHT, maxHeight: FOCUS_BAR_HEIGHT, resizable: false },
   done: { width: 500, height: 620, minWidth: 420, minHeight: 560, resizable: true },
 };
 
@@ -261,18 +264,19 @@ function getTimerBarBounds() {
   };
 }
 
-function showSessionDrawerOverlay({ drawerWidth, drawerHeight, tasks, sessionTitle }) {
+function showSessionDrawerOverlay({ drawerWidth, drawerHeight, tasks, sessionTitle, sessionDurationText }) {
   const bar = getTimerBarBounds();
   if (!bar) return;
 
   const overlay = createDrawerOverlayWindow();
   const x = bar.x + Math.round((bar.width - drawerWidth) / 2);
-  const y = bar.y - drawerHeight - 6;
+  const y = bar.y - drawerHeight - FOCUS_DRAWER_GAP - FOCUS_DRAWER_BRIDGE;
+  const height = drawerHeight + FOCUS_DRAWER_BRIDGE;
 
   const present = () => {
     if (overlay.isDestroyed()) return;
-    overlay.setBounds({ x, y, width: drawerWidth, height: drawerHeight });
-    overlay.webContents.send('drawer-data', { tasks, sessionTitle });
+    overlay.setBounds({ x, y, width: drawerWidth, height });
+    overlay.webContents.send('drawer-data', { tasks, sessionTitle, sessionDurationText });
     overlay.showInactive();
     overlay.setAlwaysOnTop(true, 'floating', 2);
     if (isLiveWindow(mainWindow)) {
@@ -291,13 +295,17 @@ function showSessionDrawerOverlay({ drawerWidth, drawerHeight, tasks, sessionTit
   }
 }
 
-function hideSessionDrawerOverlay() {
+function hideSessionDrawerOverlay({ immediate = false } = {}) {
   const overlay = drawerOverlayWindow;
   if (!isLiveWindow(overlay) || !overlay.isVisible()) return;
   overlay.webContents.send('drawer-close');
+  if (immediate) {
+    overlay.hide();
+    return;
+  }
   setTimeout(() => {
     if (isLiveWindow(overlay)) overlay.hide();
-  }, FOCUS_DRAWER_ANIM_MS);
+  }, FOCUS_DRAWER_CLOSE_ANIM_MS);
 }
 
 function destroyDrawerOverlayWindow() {
@@ -497,8 +505,8 @@ ipcMain.handle('show-session-drawer', (_event, payload) => {
   return true;
 });
 
-ipcMain.handle('hide-session-drawer', () => {
-  hideSessionDrawerOverlay();
+ipcMain.handle('hide-session-drawer', (_event, immediate = false) => {
+  hideSessionDrawerOverlay({ immediate: !!immediate });
   return true;
 });
 
@@ -507,6 +515,7 @@ ipcMain.handle('update-session-drawer', (_event, payload) => {
     drawerOverlayWindow.webContents.send('drawer-data', {
       tasks: payload.tasks,
       sessionTitle: payload.sessionTitle,
+      sessionDurationText: payload.sessionDurationText,
     });
   }
   return true;

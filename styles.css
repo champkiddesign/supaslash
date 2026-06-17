@@ -552,6 +552,38 @@ body.mode-edit #edit-view.view {
   color: var(--danger);
 }
 
+.planned-session-limit-input {
+  width: calc(44px * var(--edit-scale));
+  flex-shrink: 0;
+  padding: 0 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--edit-input-muted);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  outline: none;
+  text-align: right;
+  user-select: text;
+  -webkit-app-region: no-drag;
+}
+
+.planned-session-limit-input:focus {
+  color: var(--edit-task-text);
+  border-bottom: 1px solid var(--accent);
+}
+
+.planned-session-limit-badge {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--edit-input-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: calc(24px * var(--edit-scale));
+  text-align: right;
+}
+
 .delete-session-message {
   font-family: var(--sans);
   font-size: 13px;
@@ -723,6 +755,48 @@ body.mode-edit #edit-view.view {
 
 .task-section--session .section-header .section-label--bright {
   text-align: left;
+}
+
+.queue-session-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(8px * var(--edit-scale));
+  margin-top: calc(8px * var(--edit-scale));
+  margin-bottom: calc(4px * var(--edit-scale));
+  padding: 0 calc(4px * var(--edit-scale));
+  list-style: none;
+  flex-shrink: 0;
+}
+
+.queue-session-group-header:first-child {
+  margin-top: 0;
+}
+
+.queue-session-group-name {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: calc(26px * var(--edit-scale));
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--edit-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-session-group-limit {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--edit-input-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: calc(24px * var(--edit-scale));
+  text-align: right;
 }
 
 .braindump-add-form {
@@ -1234,7 +1308,8 @@ body.mode-edit #edit-view.view {
   left: 50%;
   transform: translateX(-50%);
   width: max-content;
-  max-width: 100%;
+  min-width: 300px;
+  max-width: 450px;
   height: 56px;
   flex-shrink: 0;
   -webkit-app-region: no-drag;
@@ -1314,7 +1389,8 @@ body.mode-edit #edit-view.view {
   align-items: center;
   gap: 10px;
   width: max-content;
-  max-width: 100%;
+  min-width: 300px;
+  max-width: 450px;
   height: 56px;
   flex-shrink: 0;
   padding: 0 12px;
@@ -1327,6 +1403,30 @@ body.mode-edit #edit-view.view {
   background-image: var(--grain-image);
   background-repeat: repeat;
   background-size: var(--grain-size);
+}
+
+.timer-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.timer-mode-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.timer-mode-label--session {
+  color: #ffd60a;
 }
 
 .timer-display {
@@ -1355,10 +1455,25 @@ body.mode-edit #edit-view.view {
   color: var(--danger);
 }
 
-.current-task {
-  flex: 0 1 auto;
+.timer-task-zone {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  align-self: stretch;
   min-width: 0;
-  margin-right: 14px;
+  margin-left: 12px;
+  -webkit-app-region: no-drag;
+}
+
+.current-task {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  padding-right: 8px;
+  box-sizing: border-box;
   font-family: var(--mono);
   font-size: var(--font-sm);
   font-weight: 500;
@@ -1368,15 +1483,57 @@ body.mode-edit #edit-view.view {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  -webkit-app-region: drag;
 }
 
 .timer-actions {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-evenly;
+  width: 168px;
   flex-shrink: 0;
+  transform: translateX(100%);
+  opacity: 0;
+  pointer-events: none;
   -webkit-app-region: no-drag;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.timer-actions::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-color: var(--bg);
+  background-image: linear-gradient(to left, var(--bg) 55%, transparent 100%);
+  pointer-events: none;
+}
+
+.timer-bar.is-running .timer-actions::before {
+  background-image: var(--grain-image), linear-gradient(to left, var(--bg) 55%, transparent 100%);
+  background-repeat: repeat, no-repeat;
+  background-size: var(--grain-size), 100% 100%;
+}
+
+.timer-task-zone:hover .timer-actions,
+.timer-task-zone:focus-within .timer-actions {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.timer-actions button {
+  position: relative;
+  z-index: 1;
+  cursor: pointer;
+}
+
+.timer-actions button:hover:not(:disabled) {
+  background: rgba(255, 85, 0, 0.12);
 }
 
 .timer-actions.hidden {
@@ -1390,23 +1547,20 @@ body.mode-edit #edit-view.view {
   width: 28px;
   height: 28px;
   border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: none;
+  background: transparent;
   color: var(--text);
   padding: 0;
-  cursor: pointer;
   line-height: 0;
   flex-shrink: 0;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
 
-.pause-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+.pause-btn:hover:not(:disabled) {
+  color: var(--text);
 }
 
 .pause-btn.is-paused {
-  border-color: var(--accent);
   color: var(--accent);
   background: rgba(255, 85, 0, 0.12);
 }
@@ -1421,6 +1575,19 @@ body.mode-edit #edit-view.view {
 
 .pause-btn.is-paused .play-icon {
   display: block;
+}
+
+.timer-actions .icon-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  padding: 0;
+  transition: background 0.15s;
+}
+
+.timer-actions .icon-btn:hover:not(:disabled) {
+  opacity: 1;
 }
 
 .icon-btn {

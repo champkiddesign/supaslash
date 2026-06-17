@@ -7,7 +7,7 @@ contextBridge.exposeInMainWorld('slashIt', {
   setFocusWidth: (contentWidth) => ipcRenderer.invoke('set-focus-width', contentWidth),
   setFocusDimensions: (dimensions) => ipcRenderer.invoke('set-focus-dimensions', dimensions),
   showSessionDrawer: (payload) => ipcRenderer.invoke('show-session-drawer', payload),
-  hideSessionDrawer: () => ipcRenderer.invoke('hide-session-drawer'),
+  hideSessionDrawer: (immediate = false) => ipcRenderer.invoke('hide-session-drawer', immediate),
   updateSessionDrawer: (payload) => ipcRenderer.invoke('update-session-drawer', payload),
   onDrawerPointerEnter: (callback) => ipcRenderer.on('drawer-pointer-enter', callback),
   onDrawerPointerLeave: (callback) => ipcRenderer.on('drawer-pointer-leave', callback),
