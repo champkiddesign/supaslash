@@ -42,6 +42,7 @@ const newBraindumpInput = document.getElementById('new-braindump-input');
 const newBraindumpLimit = document.getElementById('new-braindump-limit');
 const startBtn = document.getElementById('start-btn');
 const clearSessionBtn = document.getElementById('clear-session-btn');
+const moveBackToListBtn = document.getElementById('move-back-to-list-btn');
 const clearSessionModal = document.getElementById('clear-session-modal');
 const clearSessionAllBtn = document.getElementById('clear-session-all-btn');
 const clearSessionCompletedBtn = document.getElementById('clear-session-completed-btn');
@@ -876,26 +877,6 @@ function saveCurrentTaskProgress() {
   task.taskOvertimeMode = state.taskOvertimeMode;
 }
 
-function restoreTaskTimerFromTask(task) {
-  state.elapsedMs = task.elapsedMs || 0;
-  state.taskOvertimeMode = !!task.taskOvertimeMode;
-
-  const sessionExpired = state.limitExpired && state.limitExpiredKind === 'session';
-  const taskAtLimit = task.limitMs && !state.taskOvertimeMode && state.elapsedMs >= task.limitMs;
-
-  if (sessionExpired) return;
-
-  if (taskAtLimit) {
-    state.limitExpired = true;
-    state.limitExpiredKind = 'task';
-    setExpiredUI(true);
-  } else if (state.limitExpiredKind === 'task') {
-    state.limitExpired = false;
-    state.limitExpiredKind = null;
-    setExpiredUI(false);
-  }
-}
-
 function getSessionDisplayMs() {
   const elapsed = getSessionElapsedMs();
   if (state.activeSessionLimitMs && isSessionOvertimeActive()) {
@@ -967,10 +948,40 @@ function hideExtendPanel() {
 function resetTaskTimerState() {
   state.elapsedMs = 0;
   state.taskOvertimeMode = false;
-  if (state.limitExpiredKind === 'task') {
-    state.limitExpired = false;
-    state.limitExpiredKind = null;
-    setExpiredUI(false);
+  clearTaskAlertAndOvertimeState();
+}
+
+function clearTaskAlertAndOvertimeState() {
+  state.taskOvertimeMode = false;
+  if (state.limitExpiredKind !== 'task') return;
+  state.limitExpired = false;
+  state.limitExpiredKind = null;
+  setExpiredUI(false);
+}
+
+function startNextTaskFresh(task) {
+  task.elapsedMs = 0;
+  task.taskOvertimeMode = false;
+  task.skipped = false;
+  state.elapsedMs = 0;
+  clearTaskAlertAndOvertimeState();
+}
+
+function restoreTaskTimerFromTask(task) {
+  state.elapsedMs = task.elapsedMs || 0;
+  state.taskOvertimeMode = !!task.taskOvertimeMode;
+
+  const sessionExpired = state.limitExpired && state.limitExpiredKind === 'session';
+  const taskAtLimit = task.limitMs && !state.taskOvertimeMode && state.elapsedMs >= task.limitMs;
+
+  if (sessionExpired) return;
+
+  if (taskAtLimit) {
+    state.limitExpired = true;
+    state.limitExpiredKind = 'task';
+    setExpiredUI(true);
+  } else {
+    clearTaskAlertAndOvertimeState();
   }
 }
 
@@ -1079,24 +1090,174 @@ function moveTask(fromList, fromIndex, toList, toIndex) {
   moveTasks([{ list: fromList, index: fromIndex }], toList, toIndex);
 }
 
+const DROP_LINE_GAP_PX = 5;
+const DROP_LINE_HEIGHT_PX = 1;
+const DROP_LINE_SLOT_PX = DROP_LINE_GAP_PX * 2 + DROP_LINE_HEIGHT_PX;
+const DROP_HYSTERESIS_PX = 12;
+
+let dropIndicatorState = null;
+
+function clearDropIndicators() {
+  document.querySelectorAll('.task-drop-indicator').forEach((el) => el.remove());
+  dropIndicatorState = null;
+}
+
+function getInsertAtForTaskPosition(listId, taskIndex, task, insertBefore) {
+  const isSession = listId === 'session';
+  const isCompleted = isSession && task.completed;
+  if (isSession && isCompleted) {
+    if (insertBefore) return getSessionActiveInsertIndex();
+    return taskIndex + 1;
+  }
+  return insertBefore ? taskIndex : taskIndex + 1;
+}
+
+function showDropIndicatorAbsolute(listEl, top, insertAt) {
+  let indicator = listEl.querySelector('.task-drop-indicator');
+  if (!indicator) {
+    indicator = document.createElement('li');
+    indicator.className = 'task-drop-indicator';
+    indicator.setAttribute('aria-hidden', 'true');
+    listEl.appendChild(indicator);
+  }
+  const topPx = `${top}px`;
+  if (indicator.dataset.insertAt === String(insertAt) && indicator.style.top === topPx) return;
+  indicator.dataset.insertAt = String(insertAt);
+  indicator.style.top = topPx;
+}
+
+function getInsertIndexFromIndicator(listEl, listId) {
+  const indicator = listEl.querySelector('.task-drop-indicator');
+  if (indicator?.dataset.insertAt != null) {
+    return Number(indicator.dataset.insertAt);
+  }
+  return getListEndInsertIndex(listEl, listId);
+}
+
+function makeDropGap(insertAt, gapStart, gapEnd, centerY) {
+  const gapSize = Math.max(0, gapEnd - gapStart);
+  const top = gapStart + (gapSize - DROP_LINE_SLOT_PX) / 2;
+  return { insertAt, centerY, top };
+}
+
+function buildDropGaps(listEl, listId) {
+  const taskItems = [...listEl.querySelectorAll(':scope > .task-item')];
+  if (taskItems.length === 0) {
+    const listRect = listEl.getBoundingClientRect();
+    return [{ insertAt: 0, centerY: listRect.top, top: 0 }];
+  }
+
+  const gaps = [];
+  const first = taskItems[0];
+  const firstIndex = Number(first.dataset.taskIndex);
+  const firstTask = getTasksForList(listId)[firstIndex];
+  const firstRect = first.getBoundingClientRect();
+  const beforeFirstEnd = first.offsetTop;
+  const beforeFirstStart = Math.max(0, beforeFirstEnd - DROP_LINE_SLOT_PX);
+  gaps.push(makeDropGap(
+    getInsertAtForTaskPosition(listId, firstIndex, firstTask, true),
+    beforeFirstStart,
+    beforeFirstEnd,
+    firstRect.top - DROP_LINE_SLOT_PX / 2,
+  ));
+
+  for (let i = 0; i < taskItems.length - 1; i += 1) {
+    const curr = taskItems[i];
+    const next = taskItems[i + 1];
+    const nextIndex = Number(next.dataset.taskIndex);
+    const nextTask = getTasksForList(listId)[nextIndex];
+    const currRect = curr.getBoundingClientRect();
+    const nextRect = next.getBoundingClientRect();
+    const gapStart = curr.offsetTop + curr.offsetHeight;
+    const gapEnd = next.offsetTop;
+    gaps.push(makeDropGap(
+      getInsertAtForTaskPosition(listId, nextIndex, nextTask, true),
+      gapStart,
+      gapEnd,
+      (currRect.bottom + nextRect.top) / 2,
+    ));
+  }
+
+  const last = taskItems[taskItems.length - 1];
+  const lastRect = last.getBoundingClientRect();
+  const afterLastStart = last.offsetTop + last.offsetHeight;
+  const afterLastEnd = afterLastStart + DROP_LINE_SLOT_PX;
+  gaps.push(makeDropGap(
+    getListEndInsertIndex(listEl, listId),
+    afterLastStart,
+    afterLastEnd,
+    lastRect.bottom + DROP_LINE_SLOT_PX / 2,
+  ));
+
+  return gaps;
+}
+
+function pickDropGap(gaps, clientY, listEl) {
+  let closest = gaps[0];
+  let closestDist = Math.abs(clientY - closest.centerY);
+  for (let i = 1; i < gaps.length; i += 1) {
+    const dist = Math.abs(clientY - gaps[i].centerY);
+    if (dist < closestDist) {
+      closest = gaps[i];
+      closestDist = dist;
+    }
+  }
+
+  if (dropIndicatorState?.listEl === listEl) {
+    const currentDist = Math.abs(clientY - dropIndicatorState.centerY);
+    if (closest.insertAt !== dropIndicatorState.insertAt
+      && closestDist + DROP_HYSTERESIS_PX >= currentDist) {
+      return dropIndicatorState;
+    }
+  }
+
+  return closest;
+}
+
+function updateListDropIndicator(listEl, listId, clientY) {
+  const chosen = pickDropGap(buildDropGaps(listEl, listId), clientY, listEl);
+  dropIndicatorState = {
+    listEl,
+    insertAt: chosen.insertAt,
+    top: chosen.top,
+    centerY: chosen.centerY,
+  };
+  showDropIndicatorAbsolute(listEl, chosen.top, chosen.insertAt);
+}
+
+function getListEndInsertIndex(listEl, listId) {
+  if (listId !== 'session') return getTasksForList(listId).length;
+  const taskItems = [...listEl.querySelectorAll(':scope > .task-item')];
+  const lastItem = taskItems[taskItems.length - 1];
+  if (lastItem?.classList.contains('task-item--completed')) {
+    return getTasksForList(listId).length;
+  }
+  return getSessionActiveInsertIndex();
+}
+
+function getInsertIndexFromListDrop(listEl, listId) {
+  return getInsertIndexFromIndicator(listEl, listId);
+}
+
 function setupListDropZone(listEl, listId) {
   listEl.addEventListener('dragover', (e) => {
     e.preventDefault();
-    listEl.classList.add('drag-over-list');
+    updateListDropIndicator(listEl, listId, e.clientY);
   });
   listEl.addEventListener('dragleave', (e) => {
     if (!listEl.contains(e.relatedTarget)) {
-      listEl.classList.remove('drag-over-list');
+      clearDropIndicators();
     }
   });
   listEl.addEventListener('drop', (e) => {
     e.preventDefault();
-    listEl.classList.remove('drag-over-list');
     const payload = decodeDragPayload(e.dataTransfer.getData('text/plain'));
-    if (!payload) return;
-    const insertAt = listId === 'session'
-      ? getSessionActiveInsertIndex()
-      : getTasksForList(listId).length;
+    if (!payload) {
+      clearDropIndicators();
+      return;
+    }
+    const insertAt = getInsertIndexFromListDrop(listEl, listId);
+    clearDropIndicators();
     moveTasks(payload.items, listId, insertAt);
   });
 }
@@ -1352,26 +1513,10 @@ function renderTaskList(listEl, listId) {
     li.addEventListener('dragend', () => {
       document.querySelectorAll('.task-item.dragging').forEach((el) => el.classList.remove('dragging'));
       clearSessionExpandTimer();
+      clearDropIndicators();
       document.querySelectorAll('.planned-session-header.drag-over-session').forEach((el) => {
         el.classList.remove('drag-over-session');
       });
-    });
-    li.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      li.classList.add('drag-over');
-    });
-    li.addEventListener('dragleave', () => li.classList.remove('drag-over'));
-    li.addEventListener('drop', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      li.classList.remove('drag-over');
-      const payload = decodeDragPayload(e.dataTransfer.getData('text/plain'));
-      if (!payload) return;
-      const insertAt = isSession && task.completed
-        ? getSessionActiveInsertIndex()
-        : taskIndex;
-      moveTasks(payload.items, listId, insertAt);
     });
 
     listEl.appendChild(li);
@@ -1596,6 +1741,7 @@ function renderEditView() {
   renderTaskList(sessionList, 'session');
   startBtn.disabled = getSessionIncompleteIndices().length === 0;
   clearSessionBtn.disabled = state.sessionTasks.length === 0;
+  moveBackToListBtn.disabled = state.sessionTasks.length === 0;
   clearSessionCompletedBtn.disabled = getCompletedCount() === 0;
 }
 
@@ -1638,6 +1784,33 @@ function clearCompletedSessionTasks() {
   }
   clearSelection();
   closeClearSessionModal();
+  persist();
+  renderEditView();
+  refreshDrawerIfOpen();
+}
+
+function moveAllSessionTasksBackToLists() {
+  if (state.sessionTasks.length === 0) return;
+
+  ensureBraindumpSession();
+  const tasksBySessionId = new Map();
+
+  state.sessionTasks.forEach((task) => {
+    const sessionId = task.sourceSessionId || BRAINDUMP_SESSION_ID;
+    if (!tasksBySessionId.has(sessionId)) {
+      tasksBySessionId.set(sessionId, []);
+    }
+    tasksBySessionId.get(sessionId).push(toBraindumpTaskFromSession(task));
+  });
+
+  tasksBySessionId.forEach((tasks, sessionId) => {
+    const targetSession = getPlannedSession(sessionId) || getBraindumpSession();
+    targetSession.tasks.push(...tasks);
+  });
+
+  state.sessionTasks = [];
+  state.currentIndex = 0;
+  clearSelection();
   persist();
   renderEditView();
   refreshDrawerIfOpen();
@@ -1742,19 +1915,51 @@ function isInlineTaskInputFocused() {
   return !!active?.matches('.task-text-input, .task-limit-input, .planned-session-name-input');
 }
 
-function handleBraindumpEnter(e) {
+function isEditShortcutBlocked() {
+  if (!clearSessionModal.classList.contains('hidden')) return true;
+  if (!deleteSessionModal.classList.contains('hidden')) return true;
+  if (isSettingsUiOpen()) return true;
+  return false;
+}
+
+function handleEditModeEnterShortcuts(e) {
+  if (state.mode !== 'edit') return;
   if (e.key !== 'Enter' && e.code !== 'NumpadEnter') return;
 
   const meta = e.metaKey || e.ctrlKey || e.getModifierState('Meta') || e.getModifierState('Control');
   const shift = e.shiftKey || e.getModifierState('Shift');
 
-  e.preventDefault();
-  e.stopPropagation();
-
   if (meta && shift) {
+    if (isEditShortcutBlocked()) return;
+    if (isInlineTaskInputFocused()) return;
+    if (moveToNextBtn.disabled) return;
+
+    e.preventDefault();
+    e.stopPropagation();
     addAllFromExpandedSession();
     return;
   }
+
+  if (shift && !meta) {
+    if (isEditShortcutBlocked()) return;
+    if (startBtn.disabled) return;
+    if (isInlineTaskInputFocused()) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    startSlashing();
+  }
+}
+
+function handleBraindumpEnter(e) {
+  if (e.key !== 'Enter' && e.code !== 'NumpadEnter') return;
+
+  const meta = e.metaKey || e.ctrlKey || e.getModifierState('Meta') || e.getModifierState('Control');
+  const shift = e.shiftKey || e.getModifierState('Shift');
+  if (shift && meta) return;
+
+  e.preventDefault();
+  e.stopPropagation();
 
   if (meta) {
     submitToSessionForm();
@@ -1902,7 +2107,7 @@ function completeCurrentTask() {
 
   state.focusTaskIndex = getNextFocusTaskIndex();
   const next = getCurrentTask();
-  if (next) restoreTaskTimerFromTask(next);
+  if (next) startNextTaskFresh(next);
   else resetTaskTimerState();
 
   persist();
@@ -2041,20 +2246,7 @@ addBraindumpForm.addEventListener('keydown', handleBraindumpEnter, true);
 
 startBtn.addEventListener('click', startSlashing);
 
-document.addEventListener('keydown', (e) => {
-  if (state.mode !== 'edit') return;
-  if (e.key !== 'Enter' && e.code !== 'NumpadEnter') return;
-  if (!e.shiftKey || e.metaKey || e.ctrlKey) return;
-  if (startBtn.disabled) return;
-  if (isInlineTaskInputFocused()) return;
-  if (!clearSessionModal.classList.contains('hidden')) return;
-  if (!deleteSessionModal.classList.contains('hidden')) return;
-  if (isSettingsUiOpen()) return;
-
-  e.preventDefault();
-  e.stopPropagation();
-  startSlashing();
-}, true);
+document.addEventListener('keydown', handleEditModeEnterShortcuts, true);
 
 planSessionBtn.addEventListener('click', createPlannedSession);
 moveToNextBtn.addEventListener('click', addAllFromExpandedSession);
@@ -2068,6 +2260,7 @@ shortcutsModal.addEventListener('click', (e) => {
   if (e.target === shortcutsModal) closeShortcutsModal();
 });
 clearSessionBtn.addEventListener('click', openClearSessionModal);
+moveBackToListBtn.addEventListener('click', moveAllSessionTasksBackToLists);
 clearSessionAllBtn.addEventListener('click', clearAllSessionTasks);
 clearSessionCompletedBtn.addEventListener('click', clearCompletedSessionTasks);
 clearSessionCancelBtn.addEventListener('click', closeClearSessionModal);

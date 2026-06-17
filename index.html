@@ -57,7 +57,10 @@
       <section class="task-section task-section--session">
         <div class="section-header">
           <h2 class="section-label section-label--bright">Queue:</h2>
-          <button id="clear-session-btn" class="section-action-btn" type="button" disabled>Clear all tasks</button>
+          <div class="section-header-actions">
+            <button id="move-back-to-list-btn" class="section-action-btn" type="button" disabled>Move back to list</button>
+            <button id="clear-session-btn" class="section-action-btn" type="button" disabled>Clear tasks</button>
+          </div>
         </div>
         <ul id="session-list" class="task-list" data-list="session"></ul>
       </section>
