@@ -1487,20 +1487,17 @@ body.mode-edit #edit-view.view {
 
 .timer-actions {
   position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
+  inset: 0;
   z-index: 2;
   display: flex;
   align-items: center;
-  justify-content: space-evenly;
-  width: 168px;
-  flex-shrink: 0;
-  transform: translateX(100%);
+  justify-content: flex-end;
+  gap: 4px;
+  visibility: hidden;
   opacity: 0;
   pointer-events: none;
   -webkit-app-region: no-drag;
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  transition: opacity 0.35s ease, visibility 0s linear 0.35s;
 }
 
 .timer-actions::before {
@@ -1508,22 +1505,40 @@ body.mode-edit #edit-view.view {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background-color: var(--bg);
-  background-image: linear-gradient(to left, var(--bg) 55%, transparent 100%);
+  background: linear-gradient(
+    to left,
+    rgba(10, 10, 10, 0.97) 32%,
+    rgba(10, 10, 10, 0.55) 58%,
+    rgba(10, 10, 10, 0.15) 78%,
+    transparent 100%
+  );
   pointer-events: none;
 }
 
-.timer-bar.is-running .timer-actions::before {
-  background-image: var(--grain-image), linear-gradient(to left, var(--bg) 55%, transparent 100%);
-  background-repeat: repeat, no-repeat;
-  background-size: var(--grain-size), 100% 100%;
+.timer-actions::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: var(--grain-image);
+  background-repeat: repeat;
+  background-size: var(--grain-size);
+  opacity: 0.4;
+  -webkit-mask-image: linear-gradient(to left, black 0%, black 45%, transparent 100%);
+  mask-image: linear-gradient(to left, black 0%, black 45%, transparent 100%);
+  pointer-events: none;
+}
+
+.timer-bar.is-running .timer-actions::after {
+  opacity: 0.58;
 }
 
 .timer-task-zone:hover .timer-actions,
 .timer-task-zone:focus-within .timer-actions {
-  transform: translateX(0);
+  visibility: visible;
   opacity: 1;
   pointer-events: auto;
+  transition: opacity 0.35s ease, visibility 0s;
 }
 
 .timer-actions button {
@@ -1553,7 +1568,7 @@ body.mode-edit #edit-view.view {
   padding: 0;
   line-height: 0;
   flex-shrink: 0;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .pause-btn:hover:not(:disabled) {
