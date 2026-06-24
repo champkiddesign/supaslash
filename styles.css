@@ -172,28 +172,15 @@ body.mode-edit #edit-view.view {
   position: relative;
   z-index: 1;
   flex-shrink: 0;
-  margin-bottom: calc(56px * var(--edit-scale));
+  margin-bottom: calc(24px * var(--edit-scale));
 }
 
 .edit-header-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: calc(12px * var(--edit-scale));
-  margin-bottom: calc(16px * var(--edit-scale));
-}
-
-.edit-title {
-  font-family: var(--mono);
-  font-size: 20px;
-  font-weight: 400;
-  line-height: calc(42px * var(--edit-scale));
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: #ffffff;
   margin-bottom: 0;
-  flex: 1;
-  min-width: 0;
 }
 
 .settings-btn {
@@ -364,15 +351,9 @@ body.mode-edit #edit-view.view {
 }
 
 .task-section--planned {
-  padding-right: calc(16px * var(--edit-scale));
-}
-
-.planned-sessions-column {
-  display: flex;
-  flex-direction: column;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  padding-right: calc(16px * var(--edit-scale));
 }
 
 .planned-sessions-list {
@@ -393,6 +374,10 @@ body.mode-edit #edit-view.view {
 
 .planned-session {
   margin-bottom: calc(8px * var(--edit-scale));
+}
+
+.planned-session--expanded {
+  margin-bottom: calc(28px * var(--edit-scale));
 }
 
 .planned-session--collapsed .planned-session-body {
@@ -510,6 +495,117 @@ body.mode-edit #edit-view.view {
   margin-bottom: 0;
 }
 
+.planned-session-body .planned-session-footer {
+  padding-left: calc(28px * var(--edit-scale));
+}
+
+.planned-session-footer {
+  display: flex;
+  flex-direction: column;
+  padding-top: calc(4px * var(--edit-scale));
+  flex-shrink: 0;
+}
+
+.session-add-task {
+  flex-shrink: 0;
+}
+
+.session-add-task-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(8px * var(--edit-scale));
+  padding: calc(4px * var(--edit-scale)) 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: calc(21px * var(--edit-scale));
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--edit-input-muted);
+  transition: color 0.15s;
+  -webkit-app-region: no-drag;
+}
+
+.session-add-task-trigger:hover {
+  color: var(--edit-task-text);
+}
+
+.session-add-task-trigger-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.session-add-task-form {
+  display: flex;
+  align-items: flex-end;
+  gap: calc(12px * var(--edit-scale));
+  padding: calc(8px * var(--edit-scale));
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius);
+  -webkit-app-region: no-drag;
+}
+
+.session-add-task-form:focus-within {
+  border-color: rgba(255, 85, 0, 0.55);
+}
+
+.session-add-task-form .session-add-task-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: calc(21px * var(--edit-scale));
+  color: var(--edit-task-text);
+  background: transparent;
+  border: none;
+  outline: none;
+  user-select: text;
+  padding: 0;
+}
+
+.session-add-task-form .session-add-task-input::placeholder {
+  color: var(--edit-input-muted);
+}
+
+.session-add-task-form .session-add-limit-input {
+  width: calc(57px * var(--edit-scale));
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--edit-input-muted);
+  background: transparent;
+  border: none;
+  outline: none;
+  user-select: text;
+  text-align: left;
+  padding: 0;
+}
+
+.session-send-to-queue-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0;
+  line-height: 0;
+  transition: opacity 0.15s;
+  -webkit-app-region: no-drag;
+}
+
+.session-send-to-queue-btn:hover:not(:disabled) {
+  opacity: 0.7;
+}
+
+.session-send-to-queue-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
 .planned-session-header-actions {
   display: flex;
   align-items: center;
@@ -552,38 +648,6 @@ body.mode-edit #edit-view.view {
   color: var(--danger);
 }
 
-.planned-session-limit-input {
-  width: calc(44px * var(--edit-scale));
-  flex-shrink: 0;
-  padding: 0 2px;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--edit-input-muted);
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  outline: none;
-  text-align: right;
-  user-select: text;
-  -webkit-app-region: no-drag;
-}
-
-.planned-session-limit-input:focus {
-  color: var(--edit-task-text);
-  border-bottom: 1px solid var(--accent);
-}
-
-.planned-session-limit-badge {
-  flex-shrink: 0;
-  font-family: var(--mono);
-  font-size: 11px;
-  line-height: 1;
-  color: var(--edit-input-muted);
-  font-variant-numeric: tabular-nums;
-  min-width: calc(24px * var(--edit-scale));
-  text-align: right;
-}
-
 .delete-session-message {
   font-family: var(--sans);
   font-size: 13px;
@@ -595,10 +659,9 @@ body.mode-edit #edit-view.view {
 
 .plan-session-btn {
   flex-shrink: 0;
-  margin-top: calc(8px * var(--edit-scale));
   background: none;
   border: none;
-  padding: calc(8px * var(--edit-scale)) 0;
+  padding: 0;
   cursor: pointer;
   font-family: var(--mono);
   font-size: 11px;
@@ -611,7 +674,20 @@ body.mode-edit #edit-view.view {
   -webkit-app-region: no-drag;
 }
 
-.plan-session-btn:hover {
+.plan-session-btn--header {
+  flex: 1;
+  min-width: 0;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: calc(42px * var(--edit-scale));
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #ffffff;
+  text-align: left;
+}
+
+.plan-session-btn:hover,
+.plan-session-btn--header:hover {
   color: var(--accent);
 }
 
@@ -760,7 +836,8 @@ body.mode-edit #edit-view.view {
   border-color: transparent;
 }
 
-.task-section--session .section-header .section-label--bright {
+.task-section--session .section-header .section-label--bright,
+.task-section--planned .section-header .section-label--bright {
   text-align: left;
 }
 
@@ -795,17 +872,6 @@ body.mode-edit #edit-view.view {
   text-overflow: ellipsis;
 }
 
-.queue-session-group-limit {
-  flex-shrink: 0;
-  font-family: var(--mono);
-  font-size: 11px;
-  line-height: 1;
-  color: var(--edit-input-muted);
-  font-variant-numeric: tabular-nums;
-  min-width: calc(24px * var(--edit-scale));
-  text-align: right;
-}
-
 .braindump-add-form {
   display: flex;
   align-items: flex-end;
@@ -813,11 +879,6 @@ body.mode-edit #edit-view.view {
   flex-shrink: 0;
   max-width: 100%;
   -webkit-app-region: no-drag;
-}
-
-.braindump-add-form--header {
-  width: 100%;
-  margin-bottom: 0;
 }
 
 .braindump-add-form input[type='text'] {
@@ -848,10 +909,6 @@ body.mode-edit #edit-view.view {
   flex: 1;
   min-width: 0;
   font-size: 13px;
-}
-
-.braindump-add-form--header input[type='text']:not(.limit-input) {
-  font-size: 16px;
 }
 
 .braindump-add-form .limit-input {

@@ -14,9 +14,8 @@
   <div id="edit-view" class="view">
     <header class="edit-header">
       <div class="edit-header-row">
-        <h1 id="edit-title" class="edit-title"></h1>
+        <button id="plan-session-btn" class="plan-session-btn plan-session-btn--header" type="button">+ Create New Session</button>
         <div class="edit-header-actions">
-          <button id="move-to-next-btn" class="section-action-btn" type="button" disabled>Send to Queue</button>
           <button id="settings-btn" class="settings-btn icon-btn" type="button" aria-label="Settings" aria-haspopup="true" aria-expanded="false">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/>
@@ -25,33 +24,16 @@
           </button>
         </div>
       </div>
-      <form id="add-braindump-form" class="braindump-add-form braindump-add-form--header">
-        <input
-          id="new-braindump-input"
-          type="text"
-          placeholder="Add a task to Braindump"
-          autocomplete="off"
-          spellcheck="true"
-        />
-        <input
-          id="new-braindump-limit"
-          type="text"
-          class="limit-input"
-          placeholder="20m"
-          title="Optional time limit"
-          autocomplete="off"
-        />
-      </form>
     </header>
 
     <div class="edit-columns">
       <div class="column-divider" aria-hidden="true"></div>
 
       <section class="task-section task-section--planned">
-        <div id="planned-sessions-column" class="planned-sessions-column">
-          <div id="planned-sessions-list" class="planned-sessions-list"></div>
-          <button id="plan-session-btn" class="plan-session-btn" type="button">+ Create New Session</button>
+        <div class="section-header">
+          <h2 class="section-label section-label--bright">Sessions:</h2>
         </div>
+        <div id="planned-sessions-list" class="planned-sessions-list"></div>
       </section>
 
       <section class="task-section task-section--session">
@@ -105,15 +87,15 @@
         <h3 id="shortcuts-modal-title" class="clear-session-modal-title">Keyboard shortcuts</h3>
         <dl class="shortcuts-list">
           <div class="shortcuts-row">
-            <dt>Add task to expanded session (or Braindump)</dt>
+            <dt>Add task to session (from New Task input)</dt>
             <dd><kbd class="shortcut-key">Enter</kbd></dd>
           </div>
           <div class="shortcuts-row">
-            <dt>Add task to Queue</dt>
+            <dt>Add task to Queue (from New Task input)</dt>
             <dd><kbd class="shortcut-key">⌘ Enter</kbd></dd>
           </div>
           <div class="shortcuts-row">
-            <dt>Send all from expanded session (or Braindump) to Queue</dt>
+            <dt>Send all tasks from focused session to Queue</dt>
             <dd><kbd class="shortcut-key">⌘ ⇧ Enter</kbd></dd>
           </div>
           <div class="shortcuts-row">
