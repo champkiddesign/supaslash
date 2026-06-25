@@ -75,6 +75,7 @@
     </div>
 
     <div id="settings-menu" class="settings-menu hidden" role="menu" aria-label="Settings">
+      <button type="button" id="settings-history-btn" class="settings-menu-item" role="menuitem">Session history</button>
       <button type="button" id="settings-data-btn" class="settings-menu-item" role="menuitem">Data &amp; backup</button>
       <button type="button" id="settings-shortcuts-btn" class="settings-menu-item" role="menuitem">Keyboard shortcuts</button>
       <div class="settings-menu-item settings-menu-item--disabled" role="menuitem" aria-disabled="true">
@@ -234,6 +235,7 @@
       <p class="done-time" id="done-time"></p>
       <div class="done-actions">
         <button id="celebrate-btn" class="btn btn-celebrate btn-full" type="button">Celebrate</button>
+        <button id="view-history-btn" class="btn btn-secondary btn-full" type="button">View session history</button>
         <button id="reset-btn" class="btn btn-primary btn-full">Go to Session Dashboard</button>
       </div>
     </div>
@@ -241,6 +243,16 @@
 
   <div id="task-context-menu" class="task-context-menu hidden" role="menu">
     <button type="button" id="task-context-delete" class="task-context-menu-item" role="menuitem">Delete</button>
+  </div>
+
+  <div id="history-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="history-modal-title">
+    <div class="clear-session-modal-card history-modal-card">
+      <h3 id="history-modal-title" class="clear-session-modal-title">Session history</h3>
+      <div id="history-list" class="history-list"></div>
+      <div class="history-modal-actions">
+        <button id="history-close-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Close</button>
+      </div>
+    </div>
   </div>
 
   <script src="renderer.js"></script>

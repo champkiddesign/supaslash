@@ -22,7 +22,7 @@ const VISIBLE_ON_ALL_WORKSPACES_OPTS = {
 const WINDOW_SIZES = {
   edit: { width: 649, height: 768, minWidth: 510, minHeight: 425, resizable: true },
   focus: { width: 360, height: FOCUS_BAR_HEIGHT, minWidth: 300, minHeight: FOCUS_BAR_HEIGHT, maxHeight: FOCUS_BAR_HEIGHT, resizable: false },
-  done: { width: 500, height: 620, minWidth: 420, minHeight: 560, resizable: true },
+  done: { width: 500, height: 680, minWidth: 420, minHeight: 620, resizable: true },
 };
 
 let mainWindow;

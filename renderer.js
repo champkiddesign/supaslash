@@ -27,6 +27,9 @@ const state = {
   timerBarSizeBeforeHide: 'normal',
   focusPosition: null,
   focusPositionCustomized: false,
+  sessionHistory: [],
+  activeSessionRunId: null,
+  activeSessionStartedAt: null,
 };
 
 const editView = document.getElementById('edit-view');
@@ -34,6 +37,7 @@ const settingsBtn = document.getElementById('settings-btn');
 const settingsMenu = document.getElementById('settings-menu');
 const settingsShortcutsBtn = document.getElementById('settings-shortcuts-btn');
 const settingsDataBtn = document.getElementById('settings-data-btn');
+const settingsHistoryBtn = document.getElementById('settings-history-btn');
 const shortcutsModal = document.getElementById('shortcuts-modal');
 const shortcutsCloseBtn = document.getElementById('shortcuts-close-btn');
 const dataModal = document.getElementById('data-modal');
@@ -83,6 +87,10 @@ const doneSummary = document.getElementById('done-summary');
 const doneTime = document.getElementById('done-time');
 const celebrateBtn = document.getElementById('celebrate-btn');
 const resetBtn = document.getElementById('reset-btn');
+const viewHistoryBtn = document.getElementById('view-history-btn');
+const historyModal = document.getElementById('history-modal');
+const historyList = document.getElementById('history-list');
+const historyCloseBtn = document.getElementById('history-close-btn');
 const taskContextMenu = document.getElementById('task-context-menu');
 const taskContextDeleteBtn = document.getElementById('task-context-delete');
 
@@ -95,6 +103,10 @@ let sessionExpandTimer = null;
 let timerBarHideTimeout = null;
 let focusBarWidthCache = null;
 let isInitializing = true;
+let expandedHistoryEntryIds = new Set();
+let historyHighlightRunId = null;
+
+const SESSION_HISTORY_MAX = 200;
 
 const FOCUS_BAR_BASE_HEIGHT = 56;
 const FOCUS_BAR_BASE_MIN_WIDTH = 300;
@@ -263,10 +275,23 @@ function invalidateFocusBarWidthCache() {
   focusBarWidthCache = null;
 }
 
+function isTimerBarExpandedLayout() {
+  return state.limitExpired;
+}
+
 function clampBarWidth(width, scale = getTimerBarScale()) {
   const minWidth = Math.round(FOCUS_BAR_BASE_MIN_WIDTH * scale);
+  if (isTimerBarExpandedLayout()) {
+    return Math.max(minWidth, width);
+  }
   const maxWidth = Math.round(FOCUS_BAR_BASE_MAX_WIDTH * scale);
   return Math.max(minWidth, Math.min(maxWidth, width));
+}
+
+function updateTimerBarExpandedLayout() {
+  const expanded = isTimerBarExpandedLayout();
+  timerBar.classList.toggle('timer-bar--expanded', expanded);
+  if (focusStack) focusStack.classList.toggle('focus-stack--expanded', expanded);
 }
 
 function measureTimerBarWidthFromDom() {
@@ -996,6 +1021,9 @@ function persist() {
     timerBarSizeBeforeHide: state.timerBarSizeBeforeHide,
     focusPosition: state.focusPosition,
     focusPositionCustomized: state.focusPositionCustomized,
+    sessionHistory: state.sessionHistory,
+    activeSessionRunId: state.activeSessionRunId,
+    activeSessionStartedAt: state.activeSessionStartedAt,
   });
 }
 
@@ -1116,8 +1144,115 @@ function getSessionElapsedMs() {
 
 function isSessionInProgress() {
   if (getCompletedCount() > 0) return true;
-  if (state.totalSessionMs > 0) return true;
   return state.sessionTasks.some((task) => !task.completed && task.elapsedMs > 0);
+}
+
+function resetSessionProgressState() {
+  state.totalSessionMs = 0;
+  state.elapsedMs = 0;
+  state.focusTaskIndex = 0;
+  state.activeSessionName = null;
+  state.activeSessionRunId = null;
+  state.activeSessionStartedAt = null;
+}
+
+function ensureActiveSessionRun(forceNew = false) {
+  if (forceNew || !state.activeSessionRunId) {
+    state.activeSessionRunId = crypto.randomUUID();
+    state.activeSessionStartedAt = Date.now();
+  } else if (!state.activeSessionStartedAt) {
+    state.activeSessionStartedAt = Date.now();
+  }
+}
+
+function hasArchivableProgress() {
+  if (isSessionInProgress()) return true;
+  if (state.totalSessionMs > 0) return true;
+  return state.sessionTasks.some((task) => task.completed);
+}
+
+function getTaskArchiveStatus(task) {
+  if (task.completed) return 'completed';
+  if (task.skipped) return 'skipped';
+  return 'incomplete';
+}
+
+function getArchiveTotalMs() {
+  saveCurrentTaskProgress();
+  let total = state.totalSessionMs;
+  state.sessionTasks.forEach((task) => {
+    if (!task.completed && task.elapsedMs > 0) {
+      total += task.elapsedMs;
+    }
+  });
+  return total;
+}
+
+function buildHistoryTasks() {
+  saveCurrentTaskProgress();
+  return state.sessionTasks.map((task) => {
+    const entry = {
+      text: task.text,
+      status: getTaskArchiveStatus(task),
+      durationMs: task.completed
+        ? (task.durationMs ?? null)
+        : (task.elapsedMs > 0 ? task.elapsedMs : null),
+      limitMs: task.limitMs ?? null,
+    };
+    if (task.sourceSessionName) {
+      entry.sourceSessionName = task.sourceSessionName;
+    }
+    return entry;
+  });
+}
+
+function normalizeSessionHistoryEntry(entry) {
+  return {
+    id: entry.id || crypto.randomUUID(),
+    runId: entry.runId || crypto.randomUUID(),
+    name: entry.name || 'Braindump',
+    startedAt: entry.startedAt || entry.endedAt || Date.now(),
+    endedAt: entry.endedAt || Date.now(),
+    status: entry.status === 'abandoned' ? 'abandoned' : 'completed',
+    totalMs: entry.totalMs || 0,
+    completedCount: entry.completedCount ?? 0,
+    totalCount: entry.totalCount ?? (entry.tasks?.length || 0),
+    tasks: (entry.tasks || []).map((task) => ({
+      text: task.text || '',
+      status: task.status === 'skipped' || task.status === 'incomplete' ? task.status : 'completed',
+      durationMs: task.durationMs ?? null,
+      limitMs: task.limitMs ?? null,
+      ...(task.sourceSessionName ? { sourceSessionName: task.sourceSessionName } : {}),
+    })),
+  };
+}
+
+function archiveCurrentSession(status) {
+  if (!hasArchivableProgress()) return null;
+  ensureActiveSessionRun(false);
+  const runId = state.activeSessionRunId;
+  if (!runId) return null;
+  if (state.sessionHistory.some((entry) => entry.runId === runId)) return null;
+
+  const entry = {
+    id: crypto.randomUUID(),
+    runId,
+    name: state.activeSessionName || state.sessionTasks[0]?.sourceSessionName || 'Braindump',
+    startedAt: state.activeSessionStartedAt || Date.now(),
+    endedAt: Date.now(),
+    status,
+    totalMs: getArchiveTotalMs(),
+    completedCount: getCompletedCount(),
+    totalCount: state.sessionTasks.length,
+    tasks: buildHistoryTasks(),
+  };
+
+  state.sessionHistory.unshift(entry);
+  if (state.sessionHistory.length > SESSION_HISTORY_MAX) {
+    state.sessionHistory.length = SESSION_HISTORY_MAX;
+  }
+  persist();
+  return entry;
 }
 
 function getEditTaskTimeHtml(task, isCompleted) {
@@ -1200,6 +1335,8 @@ function setExpiredUI(active) {
   } else if (extendPanel.classList.contains('hidden')) {
     expiredActions.classList.remove('hidden');
   }
+  updateTimerBarExpandedLayout();
+  invalidateFocusBarWidthCache();
   updateTimerDisplay();
   scheduleFocusDimensionsUpdate();
 }
@@ -1210,6 +1347,7 @@ function showExtendPanel() {
   extendInput.value = '5m';
   extendInput.focus();
   extendInput.select();
+  invalidateFocusBarWidthCache();
   scheduleFocusDimensionsUpdate();
 }
 
@@ -1218,6 +1356,7 @@ function hideExtendPanel() {
   if (state.limitExpired) {
     expiredActions.classList.remove('hidden');
   }
+  invalidateFocusBarWidthCache();
   scheduleFocusDimensionsUpdate();
 }
 
@@ -1994,7 +2133,8 @@ function restoreSessionAddFocus() {
 function isSettingsUiOpen() {
   return !settingsMenu.classList.contains('hidden')
     || !shortcutsModal.classList.contains('hidden')
-    || !dataModal.classList.contains('hidden');
+    || !dataModal.classList.contains('hidden')
+    || !historyModal.classList.contains('hidden');
 }
 
 function formatRelativeBackupTime(timestamp) {
@@ -2098,6 +2238,131 @@ function closeShortcutsModal() {
   shortcutsModal.classList.add('hidden');
 }
 
+function getHistoryTaskStatusLabel(status) {
+  if (status === 'skipped') return 'Skipped';
+  if (status === 'incomplete') return 'Incomplete';
+  return '';
+}
+
+function renderHistoryTaskItem(task) {
+  const statusClass = task.status === 'skipped'
+    ? 'history-task-item--skipped'
+    : task.status === 'incomplete'
+      ? 'history-task-item--incomplete'
+      : '';
+  const statusLabel = getHistoryTaskStatusLabel(task.status);
+  const duration = task.durationMs != null ? formatTime(task.durationMs) : '';
+  const suffix = statusLabel ? ` (${statusLabel})` : '';
+  return `
+    <li class="history-task-item ${statusClass}">
+      <span class="history-task-label">${escapeHtml(task.text)}${suffix}</span>
+      ${duration ? `<span class="history-task-duration">${escapeHtml(duration)}</span>` : ''}
+    </li>
+  `;
+}
+
+function renderHistoryEntry(entry) {
+  const isExpanded = expandedHistoryEntryIds.has(entry.id);
+  const isHighlighted = historyHighlightRunId && entry.runId === historyHighlightRunId;
+  const statusLabel = entry.status === 'abandoned' ? 'Abandoned' : 'Completed';
+  const statusClass = entry.status === 'abandoned'
+    ? 'history-status-badge--abandoned'
+    : 'history-status-badge--completed';
+  const taskSummary = `${entry.completedCount} of ${entry.totalCount} task${entry.totalCount === 1 ? '' : 's'}`;
+
+  return `
+    <article class="history-entry${isExpanded ? ' history-entry--expanded' : ''}${isHighlighted ? ' history-entry--highlight' : ''}" data-entry-id="${escapeHtml(entry.id)}">
+      <button type="button" class="history-entry-header" aria-expanded="${isExpanded}">
+        <div class="history-entry-main">
+          <div class="history-entry-top">
+            <span class="history-entry-name">${escapeHtml(entry.name)}</span>
+            <span class="history-status-badge ${statusClass}">${statusLabel}</span>
+          </div>
+          <div class="history-entry-meta">
+            ${escapeHtml(formatRelativeBackupTime(entry.endedAt))} · ${escapeHtml(formatTime(entry.totalMs))} · ${escapeHtml(taskSummary)}
+          </div>
+        </div>
+        <span class="history-entry-chevron" aria-hidden="true">›</span>
+      </button>
+      <div class="history-entry-detail">
+        <ul class="history-task-list">
+          ${entry.tasks.map(renderHistoryTaskItem).join('')}
+        </ul>
+        <div class="history-entry-actions">
+          <button type="button" class="history-delete-btn" data-delete-id="${escapeHtml(entry.id)}">Delete</button>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderHistoryModal() {
+  if (!historyList) return;
+
+  if (state.sessionHistory.length === 0) {
+    historyList.innerHTML = '<p class="history-empty">No sessions yet. Finish or abandon a focus run to see it here.</p>';
+    return;
+  }
+
+  historyList.innerHTML = state.sessionHistory.map(renderHistoryEntry).join('');
+
+  if (historyHighlightRunId) {
+    const highlighted = historyList.querySelector('.history-entry--highlight');
+    highlighted?.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+function openHistoryModal(highlightRunId = null) {
+  hideSettingsMenu();
+  historyHighlightRunId = highlightRunId;
+  if (highlightRunId) {
+    const entry = state.sessionHistory.find((item) => item.runId === highlightRunId);
+    if (entry) expandedHistoryEntryIds.add(entry.id);
+  }
+  renderHistoryModal();
+  historyModal.classList.remove('hidden');
+}
+
+function closeHistoryModal() {
+  historyModal.classList.add('hidden');
+  historyHighlightRunId = null;
+}
+
+function deleteHistoryEntry(entryId) {
+  const entry = state.sessionHistory.find((item) => item.id === entryId);
+  if (!entry) return;
+  const label = entry.name || 'this session';
+  if (!window.confirm(`Delete "${label}" from session history?`)) return;
+
+  state.sessionHistory = state.sessionHistory.filter((item) => item.id !== entryId);
+  expandedHistoryEntryIds.delete(entryId);
+  persist();
+  renderHistoryModal();
+}
+
+function handleHistoryListClick(event) {
+  const deleteBtn = event.target.closest('.history-delete-btn');
+  if (deleteBtn) {
+    event.stopPropagation();
+    deleteHistoryEntry(deleteBtn.dataset.deleteId);
+    return;
+  }
+
+  const header = event.target.closest('.history-entry-header');
+  if (!header) return;
+
+  const entryEl = header.closest('.history-entry');
+  const entryId = entryEl?.dataset.entryId;
+  if (!entryId) return;
+
+  if (expandedHistoryEntryIds.has(entryId)) {
+    expandedHistoryEntryIds.delete(entryId);
+  } else {
+    expandedHistoryEntryIds.add(entryId);
+  }
+  renderHistoryModal();
+}
+
 function applySavedData(saved) {
   state.sessionTasks = (saved.sessionTasks || saved.tasks || []).map(normalizeSessionTask);
   loadPlannedSessionsFromSaved(saved);
@@ -2117,6 +2382,11 @@ function applySavedData(saved) {
     ? { x: saved.focusPosition.x, y: saved.focusPosition.y }
     : null;
   state.focusPositionCustomized = !!saved.focusPositionCustomized;
+  state.sessionHistory = Array.isArray(saved.sessionHistory)
+    ? saved.sessionHistory.map(normalizeSessionHistoryEntry)
+    : [];
+  state.activeSessionRunId = saved.activeSessionRunId || null;
+  state.activeSessionStartedAt = saved.activeSessionStartedAt || null;
 
   if (saved.timerBarSize === 'hidden') {
     state.timerBarSize = state.timerBarSizeBeforeHide;
@@ -2193,6 +2463,7 @@ function closeClearSessionModal() {
 }
 
 function clearAllSessionTasks() {
+  archiveCurrentSession('abandoned');
   ensureBraindumpSession();
   const braindump = getBraindumpSession();
   braindump.tasks.push(
@@ -2202,6 +2473,7 @@ function clearAllSessionTasks() {
   );
   state.sessionTasks = [];
   state.currentIndex = 0;
+  resetSessionProgressState();
   clearSelection();
   closeClearSessionModal();
   persist();
@@ -2224,6 +2496,8 @@ function clearCompletedSessionTasks() {
 function moveAllSessionTasksBackToLists() {
   if (state.sessionTasks.length === 0) return;
 
+  archiveCurrentSession('abandoned');
+
   ensureBraindumpSession();
   const tasksBySessionId = new Map();
 
@@ -2242,6 +2516,7 @@ function moveAllSessionTasksBackToLists() {
 
   state.sessionTasks = [];
   state.currentIndex = 0;
+  resetSessionProgressState();
   clearSelection();
   persist();
   renderEditView();
@@ -2454,6 +2729,7 @@ function renderFocusView() {
 }
 
 function showDoneView() {
+  archiveCurrentSession('completed');
   doneSummary.textContent = `You completed ${getCompletedCount()} task${getCompletedCount() === 1 ? '' : 's'}.`;
   doneTime.textContent = formatTime(state.totalSessionMs);
   showView('done');
@@ -2625,6 +2901,7 @@ function enterFocusMode() {
 
 function beginFreshSession() {
   const first = getIncompleteTasks()[0];
+  ensureActiveSessionRun(true);
   state.activeSessionName = first?.sourceSessionName || 'Braindump';
   state.timerView = 'task';
   state.limitExpiredKind = null;
@@ -2646,6 +2923,7 @@ function beginFreshSession() {
 }
 
 function resumeSession() {
+  ensureActiveSessionRun(false);
   clearAllSkippedFlags();
   state.isRunning = false;
 
@@ -2700,9 +2978,12 @@ settingsBtn.addEventListener('click', (e) => {
   toggleSettingsMenu();
 });
 settingsDataBtn.addEventListener('click', openDataModal);
+settingsHistoryBtn.addEventListener('click', () => openHistoryModal());
 settingsShortcutsBtn.addEventListener('click', openShortcutsModal);
 shortcutsCloseBtn.addEventListener('click', closeShortcutsModal);
 dataCloseBtn.addEventListener('click', closeDataModal);
+historyCloseBtn.addEventListener('click', closeHistoryModal);
+historyList.addEventListener('click', handleHistoryListClick);
 dataBackupNowBtn.addEventListener('click', handleBackupNow);
 dataRestoreBtn.addEventListener('click', handleRestoreFromBackup);
 dataOpenFolderBtn.addEventListener('click', handleOpenBackupFolder);
@@ -2761,6 +3042,10 @@ document.addEventListener('keydown', (e) => {
     }
     if (!dataModal.classList.contains('hidden')) {
       closeDataModal();
+      return;
+    }
+    if (!historyModal.classList.contains('hidden')) {
+      closeHistoryModal();
       return;
     }
     if (!settingsMenu.classList.contains('hidden')) {
@@ -2833,15 +3118,16 @@ extendInput.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') hideExtendPanel();
 });
 celebrateBtn.addEventListener('click', launchCelebration);
+viewHistoryBtn.addEventListener('click', () => openHistoryModal(state.activeSessionRunId));
 resetBtn.addEventListener('click', () => {
   window.slashIt.stopCelebration();
   state.sessionTasks = state.sessionTasks.filter((t) => !t.completed);
-  state.elapsedMs = 0;
-  state.totalSessionMs = 0;
+  resetSessionProgressState();
   resetTaskTimerState();
   showView('edit');
   renderEditView();
   focusSessionAddInput();
+  persist();
 });
 
 setupListDropZone(sessionList, 'session');
