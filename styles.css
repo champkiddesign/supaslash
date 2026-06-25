@@ -93,6 +93,11 @@ body.mode-edit {
 body.mode-focus {
   background: transparent;
   overflow: hidden;
+  --timer-bar-scale: 1;
+}
+
+body.mode-focus.timer-bar-size-small {
+  --timer-bar-scale: 0.75;
 }
 
 body.mode-done {
@@ -178,7 +183,7 @@ body.mode-edit #edit-view.view {
 .edit-header-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: calc(12px * var(--edit-scale));
   margin-bottom: 0;
 }
@@ -312,6 +317,33 @@ body.mode-edit #edit-view.view {
 }
 
 .shortcuts-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: calc(12px * var(--edit-scale));
+}
+
+.data-modal-card {
+  max-width: 420px;
+}
+
+.data-modal-body {
+  margin: 0 0 calc(16px * var(--edit-scale));
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: calc(21px * var(--edit-scale));
+  color: var(--text-secondary);
+}
+
+.data-modal-status {
+  margin: 0 0 calc(20px * var(--edit-scale));
+  font-family: var(--mono);
+  font-size: var(--font-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.data-modal-actions {
   display: flex;
   flex-direction: column;
   gap: calc(12px * var(--edit-scale));
@@ -675,19 +707,27 @@ body.mode-edit #edit-view.view {
 }
 
 .plan-session-btn--header {
-  flex: 1;
-  min-width: 0;
-  font-size: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: calc(28px * var(--edit-scale));
+  padding: 0 calc(12px * var(--edit-scale));
+  font-size: 11px;
   font-weight: 400;
-  line-height: calc(42px * var(--edit-scale));
+  line-height: 1;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #ffffff;
-  text-align: left;
+  color: var(--text);
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
 .plan-session-btn:hover,
 .plan-session-btn--header:hover {
+  border-color: var(--accent);
   color: var(--accent);
 }
 
@@ -1397,9 +1437,9 @@ body.mode-edit #edit-view.view {
   left: 50%;
   transform: translateX(-50%);
   width: max-content;
-  min-width: 300px;
-  max-width: 450px;
-  height: 56px;
+  min-width: calc(300px * var(--timer-bar-scale, 1));
+  max-width: calc(450px * var(--timer-bar-scale, 1));
+  height: calc(56px * var(--timer-bar-scale, 1));
   flex-shrink: 0;
   -webkit-app-region: no-drag;
 }
@@ -1447,11 +1487,11 @@ body.mode-edit #edit-view.view {
 
 .session-drawer-task--current .session-drawer-task-name,
 .session-drawer-task--current .session-drawer-task-time {
-  color: var(--accent);
+  color: var(--text);
 }
 
 .session-drawer-task--pending .session-drawer-task-name {
-  color: #f9f9f9;
+  color: var(--text-secondary);
 }
 
 .session-drawer-task--skipped .session-drawer-task-name {
@@ -1476,16 +1516,37 @@ body.mode-edit #edit-view.view {
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: calc(10px * var(--timer-bar-scale, 1));
   width: max-content;
-  min-width: 300px;
-  max-width: 450px;
-  height: 56px;
+  min-width: calc(300px * var(--timer-bar-scale, 1));
+  max-width: calc(450px * var(--timer-bar-scale, 1));
+  height: calc(56px * var(--timer-bar-scale, 1));
   flex-shrink: 0;
-  padding: 0 12px;
+  padding: 0 calc(12px * var(--timer-bar-scale, 1));
   background-color: var(--bg);
   border-radius: var(--window-radius);
+}
+
+.timer-drag-handle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(15px * var(--timer-bar-scale, 1));
+  cursor: grab;
+  opacity: 0.35;
   -webkit-app-region: drag;
+  transition: opacity 0.15s ease;
+}
+
+.timer-drag-handle svg {
+  width: calc(15px * var(--timer-bar-scale, 1));
+  height: auto;
+  display: block;
+}
+
+.timer-bar:hover .timer-drag-handle {
+  opacity: 0.65;
 }
 
 .timer-bar.is-running {
@@ -1499,14 +1560,14 @@ body.mode-edit #edit-view.view {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: calc(2px * var(--timer-bar-scale, 1));
   flex-shrink: 0;
   -webkit-app-region: no-drag;
 }
 
 .timer-mode-label {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: calc(9px * var(--timer-bar-scale, 1));
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -1521,7 +1582,7 @@ body.mode-edit #edit-view.view {
 .timer-display {
   flex-shrink: 0;
   font-family: var(--mono);
-  font-size: var(--font-xl);
+  font-size: calc(var(--font-xl) * var(--timer-bar-scale, 1));
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
@@ -1531,7 +1592,7 @@ body.mode-edit #edit-view.view {
   padding: 0;
   cursor: pointer;
   line-height: 1;
-  min-width: 44px;
+  min-width: calc(44px * var(--timer-bar-scale, 1));
   -webkit-app-region: no-drag;
   transition: opacity 0.15s;
 }
@@ -1551,7 +1612,7 @@ body.mode-edit #edit-view.view {
   flex: 1 1 auto;
   align-self: stretch;
   min-width: 0;
-  margin-left: 12px;
+  margin-left: calc(12px * var(--timer-bar-scale, 1));
   -webkit-app-region: no-drag;
 }
 
@@ -1561,10 +1622,10 @@ body.mode-edit #edit-view.view {
   flex: 1 1 auto;
   min-width: 0;
   max-width: 100%;
-  padding-right: 8px;
+  padding-right: calc(8px * var(--timer-bar-scale, 1));
   box-sizing: border-box;
   font-family: var(--mono);
-  font-size: var(--font-sm);
+  font-size: calc(var(--font-sm) * var(--timer-bar-scale, 1));
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1581,7 +1642,7 @@ body.mode-edit #edit-view.view {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: calc(4px * var(--timer-bar-scale, 1));
   visibility: hidden;
   opacity: 0;
   pointer-events: none;
@@ -1594,13 +1655,7 @@ body.mode-edit #edit-view.view {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: linear-gradient(
-    to left,
-    rgba(10, 10, 10, 0.97) 32%,
-    rgba(10, 10, 10, 0.55) 58%,
-    rgba(10, 10, 10, 0.15) 78%,
-    transparent 100%
-  );
+  background: var(--bg);
   pointer-events: none;
 }
 
@@ -1613,8 +1668,6 @@ body.mode-edit #edit-view.view {
   background-repeat: repeat;
   background-size: var(--grain-size);
   opacity: 0.4;
-  -webkit-mask-image: linear-gradient(to left, black 0%, black 45%, transparent 100%);
-  mask-image: linear-gradient(to left, black 0%, black 45%, transparent 100%);
   pointer-events: none;
 }
 
@@ -1648,9 +1701,9 @@ body.mode-edit #edit-view.view {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: calc(28px * var(--timer-bar-scale, 1));
+  height: calc(28px * var(--timer-bar-scale, 1));
+  border-radius: calc(6px * var(--timer-bar-scale, 1));
   border: none;
   background: transparent;
   color: var(--text);
@@ -1682,12 +1735,30 @@ body.mode-edit #edit-view.view {
 }
 
 .timer-actions .icon-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: calc(28px * var(--timer-bar-scale, 1));
+  height: calc(28px * var(--timer-bar-scale, 1));
+  border-radius: calc(6px * var(--timer-bar-scale, 1));
   border: 1px solid transparent;
   padding: 0;
   transition: background 0.15s;
+}
+
+.timer-actions .icon-size .size-icon-small {
+  display: none;
+}
+
+.timer-actions .icon-size.timer-size-btn--small .size-icon-normal {
+  display: none;
+}
+
+.timer-actions .icon-size.timer-size-btn--small .size-icon-small {
+  display: block;
+}
+
+.timer-actions .icon-size svg,
+.timer-actions .icon-hide svg {
+  width: calc(14px * var(--timer-bar-scale, 1));
+  height: calc(14px * var(--timer-bar-scale, 1));
 }
 
 .timer-actions .icon-btn:hover:not(:disabled) {
@@ -1728,10 +1799,20 @@ body.mode-edit #edit-view.view {
 .icon-skip .skip-icon,
 .icon-edit .edit-icon {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: calc(14px * var(--timer-bar-scale, 1));
+  height: calc(14px * var(--timer-bar-scale, 1));
   object-fit: contain;
   filter: brightness(0) invert(1);
+}
+
+.pause-btn svg {
+  width: calc(12px * var(--timer-bar-scale, 1));
+  height: calc(12px * var(--timer-bar-scale, 1));
+}
+
+.timer-actions .icon-complete svg {
+  width: calc(16px * var(--timer-bar-scale, 1));
+  height: calc(16px * var(--timer-bar-scale, 1));
 }
 
 .icon-edit {
@@ -1748,7 +1829,7 @@ body.mode-edit #edit-view.view {
 .expired-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: calc(8px * var(--timer-bar-scale, 1));
   flex-shrink: 0;
   -webkit-app-region: no-drag;
 }
@@ -1759,16 +1840,17 @@ body.mode-edit #edit-view.view {
 
 .expired-btn {
   font-family: var(--mono);
-  font-size: var(--font-xs);
+  font-size: calc(var(--font-xs) * var(--timer-bar-scale, 1));
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  padding: 5px 10px;
-  border-radius: 6px;
+  padding: calc(5px * var(--timer-bar-scale, 1)) calc(10px * var(--timer-bar-scale, 1));
+  border-radius: calc(6px * var(--timer-bar-scale, 1));
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
   cursor: pointer;
+  line-height: 1;
   transition: border-color 0.15s, color 0.15s;
 }
 
@@ -1789,7 +1871,7 @@ body.mode-edit #edit-view.view {
 .extend-panel {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: calc(8px * var(--timer-bar-scale, 1));
   flex-shrink: 0;
   -webkit-app-region: no-drag;
 }
@@ -1800,26 +1882,28 @@ body.mode-edit #edit-view.view {
 
 .extend-label {
   font-family: var(--mono);
-  font-size: var(--font-xs);
+  font-size: calc(var(--font-xs) * var(--timer-bar-scale, 1));
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-secondary);
   white-space: nowrap;
+  line-height: 1;
 }
 
 .extend-input {
-  width: 48px;
-  padding: 4px 6px;
+  width: calc(48px * var(--timer-bar-scale, 1));
+  padding: calc(4px * var(--timer-bar-scale, 1)) calc(6px * var(--timer-bar-scale, 1));
   font-family: var(--mono);
-  font-size: var(--font-sm);
+  font-size: calc(var(--font-sm) * var(--timer-bar-scale, 1));
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: calc(6px * var(--timer-bar-scale, 1));
   outline: none;
   text-align: center;
   user-select: text;
+  line-height: 1;
 }
 
 .extend-input:focus {

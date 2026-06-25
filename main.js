@@ -1,12 +1,7 @@
-const { app, BrowserWindow, ipcMain, screen, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, nativeImage, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
-
-let mainWindow;
-let overlayWindow;
-let drawerOverlayWindow;
-let overlayMode = 'none';
-let celebrationHideTimer = null;
+const { createDataStore } = require('./data-store');
 
 const CELEBRATION_DURATION_MS = 3500;
 
@@ -30,34 +25,18 @@ const WINDOW_SIZES = {
   done: { width: 500, height: 620, minWidth: 420, minHeight: 560, resizable: true },
 };
 
-function getDataFile() {
-  return path.join(app.getPath('userData'), 'slash-it-data.json');
-}
+let mainWindow;
+let overlayWindow;
+let drawerOverlayWindow;
+let overlayMode = 'none';
+let celebrationHideTimer = null;
+let currentWindowMode = 'edit';
+let focusPositionCustomized = false;
+let focusBarHeight = FOCUS_BAR_HEIGHT;
+let focusWindowHiddenByUser = false;
+let suppressFocusMoveEvent = false;
 
-function loadData() {
-  try {
-    const dataFile = getDataFile();
-    if (fs.existsSync(dataFile)) {
-      return JSON.parse(fs.readFileSync(dataFile, 'utf8'));
-    }
-  } catch {
-    // ignore corrupt data
-  }
-  return {
-    tasks: [],
-    plannedSessions: [],
-    expandedSessionId: null,
-    currentIndex: 0,
-    focusTaskIndex: 0,
-    elapsedMs: 0,
-    isRunning: false,
-    mode: 'edit',
-  };
-}
-
-function saveData(data) {
-  fs.writeFileSync(getDataFile(), JSON.stringify(data, null, 2));
-}
+const dataStore = createDataStore(app);
 
 function getMainDisplay() {
   if (!isLiveWindow(mainWindow)) return screen.getPrimaryDisplay();
@@ -258,10 +237,47 @@ function getTimerBarBounds() {
   const bounds = mainWindow.getBounds();
   return {
     x: bounds.x,
-    y: bounds.y + bounds.height - FOCUS_BAR_HEIGHT,
+    y: bounds.y,
     width: bounds.width,
-    height: FOCUS_BAR_HEIGHT,
+    height: bounds.height,
   };
+}
+
+function clampFocusBounds(x, y, width, height) {
+  const display = screen.getDisplayNearestPoint({ x: x + width / 2, y: y + height / 2 });
+  const { x: areaX, y: areaY, width: areaWidth, height: areaHeight } = display.workArea;
+  const maxX = areaX + areaWidth - width;
+  const maxY = areaY + areaHeight - height;
+  return {
+    x: Math.round(Math.max(areaX, Math.min(x, maxX))),
+    y: Math.round(Math.max(areaY, Math.min(y, maxY))),
+  };
+}
+
+function isFocusPositionOnScreen(x, y, width, height) {
+  const displays = screen.getAllDisplays();
+  return displays.some((display) => {
+    const { x: areaX, y: areaY, width: areaWidth, height: areaHeight } = display.workArea;
+    const right = x + width;
+    const bottom = y + height;
+    return right > areaX && x < areaX + areaWidth && bottom > areaY && y < areaY + areaHeight;
+  });
+}
+
+function notifyFocusPositionChanged() {
+  if (!isLiveWindow(mainWindow)) return;
+  const bounds = mainWindow.getBounds();
+  mainWindow.webContents.send('focus-position-changed', { x: bounds.x, y: bounds.y });
+}
+
+function attachFocusMoveListener() {
+  if (!isLiveWindow(mainWindow)) return;
+  mainWindow.removeAllListeners('moved');
+  mainWindow.on('moved', () => {
+    if (suppressFocusMoveEvent || currentWindowMode !== 'focus') return;
+    focusPositionCustomized = true;
+    notifyFocusPositionChanged();
+  });
 }
 
 function showSessionDrawerOverlay({ drawerWidth, drawerHeight, tasks, sessionTitle, sessionDurationText }) {
@@ -314,7 +330,7 @@ function destroyDrawerOverlayWindow() {
 }
 
 function getInitialWindowMode() {
-  const saved = loadData();
+  const saved = dataStore.loadData();
   const sessionTasks = saved.sessionTasks || saved.tasks || [];
   const incomplete = sessionTasks.filter((t) => !t.completed);
   if (saved.mode === 'focus' && incomplete.length > 0) return 'focus';
@@ -322,7 +338,7 @@ function getInitialWindowMode() {
   return 'edit';
 }
 
-function positionWindow(mode) {
+function positionWindow(mode, { focusPosition = null, focusPositionCustomized: customized = false } = {}) {
   if (!isLiveWindow(mainWindow)) return;
 
   const bounds = mainWindow.getBounds();
@@ -330,22 +346,77 @@ function positionWindow(mode) {
   const { x: areaX, y: areaY, width: areaWidth, height: areaHeight } = display.workArea;
   const [width, height] = mainWindow.getSize();
 
+  if (mode === 'focus' && customized && focusPosition && isFocusPositionOnScreen(focusPosition.x, focusPosition.y, width, height)) {
+    const clamped = clampFocusBounds(focusPosition.x, focusPosition.y, width, height);
+    suppressFocusMoveEvent = true;
+    mainWindow.setPosition(clamped.x, clamped.y, true);
+    suppressFocusMoveEvent = false;
+    focusPositionCustomized = true;
+    return;
+  }
+
   const x = Math.round(areaX + (areaWidth - width) / 2);
   let y;
 
   if (mode === 'focus') {
     const bottomMargin = 20;
     y = Math.round(areaY + areaHeight - height - bottomMargin);
+    focusPositionCustomized = false;
   } else {
     y = Math.round(areaY + (areaHeight - height) / 2);
   }
 
+  suppressFocusMoveEvent = true;
   mainWindow.setPosition(x, y, true);
+  suppressFocusMoveEvent = false;
+}
+
+function getFocusMinWidth() {
+  return Math.round(300 * (focusBarHeight / FOCUS_BAR_HEIGHT));
 }
 
 function getFocusMaxWidth() {
   const { width: areaWidth } = getMainDisplay().workArea;
-  return Math.max(WINDOW_SIZES.focus.minWidth, areaWidth - FOCUS_WIDTH_MARGIN);
+  return Math.max(getFocusMinWidth(), areaWidth - FOCUS_WIDTH_MARGIN);
+}
+
+function resizeFocusWindow({ width: contentWidth, height: contentHeight, x, y, preservePosition } = {}) {
+  if (!isLiveWindow(mainWindow) || currentWindowMode !== 'focus') return;
+  const minWidth = getFocusMinWidth();
+  const maxWidth = getFocusMaxWidth();
+  const width = Math.max(minWidth, Math.min(Math.ceil(contentWidth || minWidth), maxWidth));
+  const height = Math.max(1, Math.ceil(contentHeight || focusBarHeight));
+  focusBarHeight = height;
+  const boundsBefore = mainWindow.getBounds();
+  const useCustomPosition = preservePosition || focusPositionCustomized;
+
+  mainWindow.setMinimumSize(minWidth, height);
+  mainWindow.setMaximumSize(maxWidth, height);
+  mainWindow.setResizable(WINDOW_SIZES.focus.resizable);
+  mainWindow.setBackgroundColor('#00000000');
+
+  let nextX;
+  let nextY;
+
+  if (useCustomPosition) {
+    const anchorX = Number.isFinite(x) ? x : boundsBefore.x;
+    const anchorY = Number.isFinite(y) ? y : boundsBefore.y;
+    const clamped = clampFocusBounds(anchorX, anchorY, width, height);
+    nextX = clamped.x;
+    nextY = clamped.y;
+    focusPositionCustomized = true;
+  } else {
+    const bottom = boundsBefore.y + boundsBefore.height;
+    nextX = Math.round(boundsBefore.x + (boundsBefore.width - width) / 2);
+    nextY = bottom - height;
+    const clamped = clampFocusBounds(nextX, nextY, width, height);
+    nextX = clamped.x;
+    nextY = clamped.y;
+  }
+
+  suppressFocusMoveEvent = true;
+  mainWindow.setBounds({ x: nextX, y: nextY, width, height }, false);
+  suppressFocusMoveEvent = false;
 }
 
 function isFloatingMode(mode) {
@@ -365,37 +436,35 @@ function applyWindowPresentation(mode) {
   mainWindow.setMaximizable(false);
 }
 
-function resizeFocusWindow({ width: contentWidth } = {}) {
-  if (!isLiveWindow(mainWindow) || currentWindowMode !== 'focus') return;
-  const size = WINDOW_SIZES.focus;
-  const maxWidth = getFocusMaxWidth();
-  const width = Math.max(size.minWidth, Math.min(Math.ceil(contentWidth), maxWidth));
-  const height = FOCUS_BAR_HEIGHT;
-  const boundsBefore = mainWindow.getBounds();
-  mainWindow.setMinimumSize(size.minWidth, size.minHeight);
-  mainWindow.setMaximumSize(maxWidth, size.maxHeight);
-  mainWindow.setResizable(size.resizable);
-  mainWindow.setBackgroundColor('#00000000');
-  const bottom = boundsBefore.y + boundsBefore.height;
-  const x = Math.round(boundsBefore.x + (boundsBefore.width - width) / 2);
-  mainWindow.setBounds({ x, y: bottom - height, width, height }, false);
-}
-
-function applyWindowSize(mode) {
+function applyWindowSize(mode, options = {}) {
   if (!isLiveWindow(mainWindow)) return;
   currentWindowMode = mode;
   const size = WINDOW_SIZES[mode] || WINDOW_SIZES.edit;
   const display = getMainDisplay();
   const { x: areaX, y: areaY, width: areaWidth, height: areaHeight } = display.workArea;
 
+  if (mode !== 'focus') {
+    focusWindowHiddenByUser = false;
+    if (!mainWindow.isVisible()) mainWindow.show();
+  }
+
   if (mode === 'focus') {
-    mainWindow.setMinimumSize(size.minWidth, size.minHeight);
-    mainWindow.setMaximumSize(getFocusMaxWidth(), size.maxHeight);
+    const barHeight = Math.max(1, Math.round(options.height || FOCUS_BAR_HEIGHT));
+    focusBarHeight = barHeight;
+    const minWidth = getFocusMinWidth();
+    mainWindow.setMinimumSize(minWidth, barHeight);
+    mainWindow.setMaximumSize(getFocusMaxWidth(), barHeight);
     mainWindow.setResizable(size.resizable);
     mainWindow.setBackgroundColor('#00000000');
-    mainWindow.setSize(size.width, size.height, false);
-    positionWindow(mode);
+    mainWindow.setSize(size.width, barHeight, false);
+    focusPositionCustomized = !!options.focusPositionCustomized;
+    positionWindow(mode, {
+      focusPosition: options.focusPosition || null,
+      focusPositionCustomized: focusPositionCustomized,
+    });
   } else {
+    focusPositionCustomized = false;
+    focusBarHeight = FOCUS_BAR_HEIGHT;
     mainWindow.setMaximumSize(10000, 10000);
     mainWindow.setMinimumSize(size.minWidth, size.minHeight);
     mainWindow.setResizable(size.resizable);
@@ -456,7 +525,12 @@ function createWindow() {
     if (process.platform === 'darwin') {
       app.focus({ steal: true });
     }
+    if (currentWindowMode === 'focus' && focusWindowHiddenByUser) {
+      mainWindow.webContents.send('focus-window-restore-request');
+    }
   });
+
+  attachFocusMoveListener();
 
   mainWindow.loadFile('index.html');
 
@@ -477,7 +551,13 @@ app.whenReady().then(() => {
   createWindow();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+      return;
+    }
+    if (isLiveWindow(mainWindow) && currentWindowMode === 'focus' && focusWindowHiddenByUser) {
+      mainWindow.webContents.send('focus-window-restore-request');
+    }
   });
 });
 
@@ -485,18 +565,57 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-ipcMain.handle('set-window-mode', (_event, mode) => {
-  applyWindowSize(mode);
+let isQuitting = false;
+app.on('before-quit', (event) => {
+  if (isQuitting) return;
+  event.preventDefault();
+  isQuitting = true;
+  dataStore.flushDocumentsBackup()
+    .catch((err) => {
+      console.error('Failed to flush Documents backup on quit:', err);
+    })
+    .finally(() => {
+      app.quit();
+    });
+});
+
+ipcMain.handle('set-window-mode', (_event, mode, options = {}) => {
+  applyWindowSize(mode, options);
   return true;
 });
 
 ipcMain.handle('set-focus-width', (_event, contentWidth) => {
-  resizeFocusWindow({ width: contentWidth });
+  resizeFocusWindow({ width: contentWidth, height: focusBarHeight, preservePosition: focusPositionCustomized });
   return true;
 });
 
-ipcMain.handle('set-focus-dimensions', (_event, dimensions) => {
-  resizeFocusWindow({ width: dimensions.width });
+ipcMain.handle('set-focus-dimensions', (_event, dimensions = {}) => {
+  if (typeof dimensions.focusPositionCustomized === 'boolean') {
+    focusPositionCustomized = dimensions.focusPositionCustomized;
+  }
+  resizeFocusWindow({
+    width: dimensions.width,
+    height: dimensions.height,
+    x: dimensions.x,
+    y: dimensions.y,
+    preservePosition: dimensions.preservePosition ?? focusPositionCustomized,
+  });
+  return true;
+});
+
+ipcMain.handle('hide-focus-window', () => {
+  if (!isLiveWindow(mainWindow) || currentWindowMode !== 'focus') return false;
+  focusWindowHiddenByUser = true;
+  hideSessionDrawerOverlay({ immediate: true });
+  mainWindow.hide();
+  return true;
+});
+
+ipcMain.handle('show-focus-window', () => {
+  if (!isLiveWindow(mainWindow) || currentWindowMode !== 'focus') return false;
+  focusWindowHiddenByUser = false;
+  mainWindow.showInactive();
+  mainWindow.setAlwaysOnTop(true, 'floating');
   return true;
 });
 
@@ -549,8 +668,48 @@ ipcMain.handle('stop-celebration', () => {
   return true;
 });
 
-ipcMain.handle('load-data', () => loadData());
+ipcMain.handle('load-data', () => dataStore.loadData());
 ipcMain.handle('save-data', (_event, data) => {
-  saveData(data);
+  dataStore.saveDataAsync(data);
   return true;
+});
+
+ipcMain.handle('get-data-info', () => dataStore.getDataInfo());
+
+ipcMain.handle('backup-data-now', async () => {
+  const lastDocumentsBackupAt = await dataStore.backupDocumentsNow();
+  return { lastDocumentsBackupAt };
+});
+
+ipcMain.handle('open-documents-data-folder', async () => {
+  const documentsDir = dataStore.getDocumentsDir();
+  await fs.promises.mkdir(documentsDir, { recursive: true });
+  const errorMessage = await shell.openPath(documentsDir);
+  return { ok: !errorMessage, errorMessage };
+});
+
+ipcMain.handle('restore-data-from-file', async (event) => {
+  const parentWindow = BrowserWindow.fromWebContents(event.sender);
+  const { canceled, filePaths } = await dialog.showOpenDialog(parentWindow, {
+    title: 'Restore from backup',
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+    properties: ['openFile'],
+  });
+
+  if (canceled || !filePaths?.length) {
+    return { canceled: true };
+  }
+
+  try {
+    const content = await fs.promises.readFile(filePaths[0], 'utf8');
+    const data = dataStore.parseDataContent(content);
+    if (!data) {
+      return { canceled: false, error: 'That file is not a valid Slash It backup.' };
+    }
+    await dataStore.saveDataPipeline(data);
+    return { canceled: false, data };
+  } catch (err) {
+    console.error('Failed to restore data:', err);
+    return { canceled: false, error: 'Could not restore from that backup file.' };
+  }
 });

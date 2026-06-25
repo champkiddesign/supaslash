@@ -23,14 +23,25 @@ const state = {
   taskOvertimeMode: false,
   selectedTasks: new Set(),
   lastSelected: null,
+  timerBarSize: 'normal',
+  timerBarSizeBeforeHide: 'normal',
+  focusPosition: null,
+  focusPositionCustomized: false,
 };
 
 const editView = document.getElementById('edit-view');
 const settingsBtn = document.getElementById('settings-btn');
 const settingsMenu = document.getElementById('settings-menu');
 const settingsShortcutsBtn = document.getElementById('settings-shortcuts-btn');
+const settingsDataBtn = document.getElementById('settings-data-btn');
 const shortcutsModal = document.getElementById('shortcuts-modal');
 const shortcutsCloseBtn = document.getElementById('shortcuts-close-btn');
+const dataModal = document.getElementById('data-modal');
+const dataModalStatus = document.getElementById('data-modal-status');
+const dataBackupNowBtn = document.getElementById('data-backup-now-btn');
+const dataRestoreBtn = document.getElementById('data-restore-btn');
+const dataOpenFolderBtn = document.getElementById('data-open-folder-btn');
+const dataCloseBtn = document.getElementById('data-close-btn');
 const focusView = document.getElementById('focus-view');
 const doneView = document.getElementById('done-view');
 const plannedSessionsList = document.getElementById('planned-sessions-list');
@@ -48,6 +59,8 @@ const deleteSessionMessage = document.getElementById('delete-session-message');
 const deleteSessionConfirmBtn = document.getElementById('delete-session-confirm-btn');
 const deleteSessionCancelBtn = document.getElementById('delete-session-cancel-btn');
 const backToEditBtn = document.getElementById('back-to-edit-btn');
+const timerSizeBtn = document.getElementById('timer-size-btn');
+const timerHideBtn = document.getElementById('timer-hide-btn');
 const pauseBtn = document.getElementById('pause-btn');
 const timerDisplay = document.getElementById('timer-display');
 const timerModeLabel = document.getElementById('timer-mode-label');
@@ -79,10 +92,15 @@ let focusDimensionsRaf = null;
 let drawerOpen = false;
 let drawerCloseTimer = null;
 let sessionExpandTimer = null;
+let timerBarHideTimeout = null;
+let focusBarWidthCache = null;
+let isInitializing = true;
 
-const FOCUS_BAR_HEIGHT = 56;
-const FOCUS_BAR_MIN_WIDTH = 300;
-const FOCUS_BAR_MAX_WIDTH = 450;
+const FOCUS_BAR_BASE_HEIGHT = 56;
+const FOCUS_BAR_BASE_MIN_WIDTH = 300;
+const FOCUS_BAR_BASE_MAX_WIDTH = 450;
+const FOCUS_BAR_SCALE_SMALL = 0.75;
+const TIMER_BAR_HIDE_DURATION_MS = 5 * 60 * 1000;
 const FOCUS_DRAWER_GAP = 6;
 const DRAWER_CLOSE_DELAY_MS = 280;
 const SESSION_EXPAND_DELAY_MS = 400;
@@ -194,9 +212,65 @@ function getRandomFunSessionName() {
   return FUN_SESSION_NAMES[Math.floor(Math.random() * FUN_SESSION_NAMES.length)];
 }
 const FOCUS_DRAWER_SLOT = 180 + 16 + 6 + 8;
-const FOCUS_SHELL_HEIGHT = FOCUS_BAR_HEIGHT + FOCUS_DRAWER_SLOT;
 
-function measureTimerBarWidth() {
+function getTimerBarScale() {
+  return state.timerBarSize === 'small' ? FOCUS_BAR_SCALE_SMALL : 1;
+}
+
+function getScaledFocusBarHeight() {
+  return Math.round(FOCUS_BAR_BASE_HEIGHT * getTimerBarScale());
+}
+
+function getScaledFocusBarMinWidth() {
+  return Math.round(FOCUS_BAR_BASE_MIN_WIDTH * getTimerBarScale());
+}
+
+function getScaledFocusBarMaxWidth() {
+  return Math.round(FOCUS_BAR_BASE_MAX_WIDTH * getTimerBarScale());
+}
+
+function applyTimerBarSizeClass() {
+  document.body.classList.toggle('timer-bar-size-small', state.mode === 'focus' && state.timerBarSize === 'small');
+}
+
+function getFocusWindowModeOptions() {
+  return {
+    height: getScaledFocusBarHeight(),
+    focusPosition: state.focusPosition,
+    focusPositionCustomized: state.focusPositionCustomized,
+  };
+}
+
+function getFocusDimensionsPayload(barWidth) {
+  return {
+    width: barWidth,
+    height: getScaledFocusBarHeight(),
+    x: state.focusPosition?.x,
+    y: state.focusPosition?.y,
+    preservePosition: state.focusPositionCustomized,
+    focusPositionCustomized: state.focusPositionCustomized,
+  };
+}
+
+function clearTimerBarHideTimeout() {
+  if (timerBarHideTimeout) {
+    clearTimeout(timerBarHideTimeout);
+    timerBarHideTimeout = null;
+  }
+}
+
+function invalidateFocusBarWidthCache() {
+  focusBarWidthCache = null;
+}
+
+function clampBarWidth(width, scale = getTimerBarScale()) {
+  const minWidth = Math.round(FOCUS_BAR_BASE_MIN_WIDTH * scale);
+  const maxWidth = Math.round(FOCUS_BAR_BASE_MAX_WIDTH * scale);
+  return Math.max(minWidth, Math.min(maxWidth, width));
+}
+
+function measureTimerBarWidthFromDom() {
+  applyTimerBarSizeClass();
   const clone = timerBar.cloneNode(true);
   clone.removeAttribute('id');
   clone.style.position = 'absolute';
@@ -210,16 +284,87 @@ function measureTimerBarWidth() {
 
   const width = Math.ceil(clone.getBoundingClientRect().width);
   document.body.removeChild(clone);
-  return Math.max(FOCUS_BAR_MIN_WIDTH, Math.min(FOCUS_BAR_MAX_WIDTH, width));
+  return width;
+}
+
+function updateTimerBarControlLabels() {
+  if (timerSizeBtn) {
+    if (state.timerBarSize === 'small') {
+      timerSizeBtn.title = 'Normal size timer bar';
+      timerSizeBtn.setAttribute('aria-label', 'Restore normal timer bar size');
+      timerSizeBtn.classList.add('timer-size-btn--small');
+    } else {
+      timerSizeBtn.title = 'Smaller timer bar';
+      timerSizeBtn.setAttribute('aria-label', 'Make timer bar smaller');
+      timerSizeBtn.classList.remove('timer-size-btn--small');
+    }
+  }
+  if (timerHideBtn) {
+    timerHideBtn.title = 'Hide timer bar for 5 minutes';
+    timerHideBtn.setAttribute('aria-label', 'Hide timer bar for 5 minutes');
+  }
+}
+
+function measureTimerBarWidth() {
+  const scale = getTimerBarScale();
+  if (focusBarWidthCache != null) {
+    return clampBarWidth(Math.round(focusBarWidthCache * scale), scale);
+  }
+
+  const width = measureTimerBarWidthFromDom();
+  focusBarWidthCache = width / scale;
+  return clampBarWidth(width, scale);
+}
+
+function applyFocusWindowSizeImmediate() {
+  if (state.mode !== 'focus' || state.timerBarSize === 'hidden') return;
+  const barWidth = measureTimerBarWidth();
+  void window.slashIt.setFocusDimensions(getFocusDimensionsPayload(barWidth)).then(() => {
+    if (state.mode !== 'focus' || state.timerBarSize === 'hidden') return;
+    if (drawerOpen) void window.slashIt.showSessionDrawer(getDrawerPayload());
+  });
 }
 
 async function applyFocusWindowSize() {
-  if (state.mode !== 'focus') return;
+  if (state.mode !== 'focus' || state.timerBarSize === 'hidden') return;
   const barWidth = measureTimerBarWidth();
-  await window.slashIt.setFocusDimensions({ width: barWidth, height: FOCUS_BAR_HEIGHT });
-  if (state.mode !== 'focus') return;
+  await window.slashIt.setFocusDimensions(getFocusDimensionsPayload(barWidth));
+  if (state.mode !== 'focus' || state.timerBarSize === 'hidden') return;
   if (drawerOpen) await window.slashIt.showSessionDrawer(getDrawerPayload());
 }
+
+function restoreTimerBarFromHide() {
+  if (state.timerBarSize !== 'hidden') return;
+  clearTimerBarHideTimeout();
+  state.timerBarSize = state.timerBarSizeBeforeHide || 'normal';
+  applyTimerBarSizeClass();
+  updateTimerBarControlLabels();
+  window.slashIt.showFocusWindow();
+  applyFocusWindowSizeImmediate();
+  persist();
+}
+
+function hideTimerBar() {
+  if (state.mode !== 'focus' || state.timerBarSize === 'hidden') return;
+  state.timerBarSizeBeforeHide = state.timerBarSize === 'small' ? 'small' : 'normal';
+  state.timerBarSize = 'hidden';
+  closeSessionDrawer({ immediate: true });
+  window.slashIt.hideFocusWindow();
+  clearTimerBarHideTimeout();
+  timerBarHideTimeout = setTimeout(restoreTimerBarFromHide, TIMER_BAR_HIDE_DURATION_MS);
+  persist();
+}
+
+function toggleTimerBarSize() {
+  if (state.mode !== 'focus' || state.timerBarSize === 'hidden') return;
+  state.timerBarSize = state.timerBarSize === 'small' ? 'normal' : 'small';
+  applyTimerBarSizeClass();
+  updateTimerBarControlLabels();
+  applyFocusWindowSizeImmediate();
+  persist();
+}
+
+const FOCUS_SHELL_HEIGHT = FOCUS_BAR_BASE_HEIGHT + FOCUS_DRAWER_SLOT;
 
 function scheduleFocusDimensionsUpdate() {
   if (state.mode !== 'focus') return;
@@ -847,10 +992,17 @@ function persist() {
     isRunning: state.isRunning,
     limitExpired: state.limitExpired,
     mode: state.mode,
+    timerBarSize: state.timerBarSize === 'hidden' ? 'hidden' : state.timerBarSize,
+    timerBarSizeBeforeHide: state.timerBarSizeBeforeHide,
+    focusPosition: state.focusPosition,
+    focusPositionCustomized: state.focusPositionCustomized,
   });
 }
 
 function showView(mode) {
+  if (state.mode === 'focus' && mode !== 'focus') {
+    saveCurrentTaskProgress();
+  }
   state.mode = mode;
   document.body.classList.toggle('mode-focus', mode === 'focus');
   document.body.classList.toggle('mode-edit', mode === 'edit');
@@ -858,11 +1010,30 @@ function showView(mode) {
   editView.classList.toggle('hidden', mode !== 'edit');
   focusView.classList.toggle('hidden', mode !== 'focus');
   doneView.classList.toggle('hidden', mode !== 'done');
-  if (mode !== 'focus') cancelFocusDimensionsUpdate();
-  window.slashIt.setWindowMode(mode);
-  if (mode === 'focus') scheduleFocusDimensionsUpdate();
-  else closeSessionDrawer({ immediate: true });
-  persist();
+
+  if (mode !== 'focus') {
+    cancelFocusDimensionsUpdate();
+    clearTimerBarHideTimeout();
+    if (state.timerBarSize === 'hidden') {
+      state.timerBarSize = state.timerBarSizeBeforeHide || 'normal';
+      window.slashIt.showFocusWindow();
+    }
+    applyTimerBarSizeClass();
+    window.slashIt.setWindowMode(mode);
+    closeSessionDrawer({ immediate: true });
+  } else {
+    applyTimerBarSizeClass();
+    updateTimerBarControlLabels();
+    window.slashIt.setWindowMode(mode, getFocusWindowModeOptions());
+    if (state.timerBarSize === 'hidden') {
+      window.slashIt.hideFocusWindow();
+      clearTimerBarHideTimeout();
+      timerBarHideTimeout = setTimeout(restoreTimerBarFromHide, TIMER_BAR_HIDE_DURATION_MS);
+    } else {
+      scheduleFocusDimensionsUpdate();
+    }
+  }
+  if (!isInitializing) persist();
 }
 
 function getIncompleteTasks() {
@@ -943,6 +1114,22 @@ function getSessionElapsedMs() {
   return state.totalSessionMs + state.elapsedMs;
 }
 
+function isSessionInProgress() {
+  if (getCompletedCount() > 0) return true;
+  if (state.totalSessionMs > 0) return true;
+  return state.sessionTasks.some((task) => !task.completed && task.elapsedMs > 0);
+}
+
+function getEditTaskTimeHtml(task, isCompleted) {
+  if (isCompleted) {
+    return task.durationMs != null
+      ? `<span class="task-duration-badge">${formatTime(task.durationMs)}</span>`
+      : '';
+  }
+  const limitValue = escapeHtml(formatLimitField(task.limitMs));
+  return `<input class="task-limit-input" type="text" value="${limitValue}" placeholder="20m" title="Time limit" autocomplete="off" />`;
+}
+
 function isTaskOvertimeActive() {
   return state.taskOvertimeMode || (state.limitExpired && state.limitExpiredKind === 'task');
 }
@@ -997,6 +1184,7 @@ function updateTimerDisplay() {
   pauseBtn.title = state.isRunning ? 'Pause' : 'Resume';
   pauseBtn.setAttribute('aria-label', state.isRunning ? 'Pause' : 'Resume');
   updateSkipButtonState();
+  updateTimerBarControlLabels();
   if (drawerOpen) {
     void window.slashIt.updateSessionDrawer(getDrawerPayload());
   }
@@ -1477,16 +1665,7 @@ function renderTaskList(listEl, listId) {
       li.classList.add('selected');
     }
 
-    const limitFieldValue = isSession ? formatLimitField(task.limitMs) : '';
-    const limitFieldHtml = isSession
-      ? (isCompleted
-        ? (task.durationMs != null
-          ? `<span class="task-duration-badge">${formatTime(task.durationMs)}</span>`
-          : '')
-        : (task.limitMs
-          ? `<span class="task-limit-badge">${limitFieldValue}</span>`
-          : `<input class="task-limit-input" type="text" value="" title="Time limit" />`))
-      : '';
+    const limitFieldHtml = isSession ? getEditTaskTimeHtml(task, isCompleted) : '';
     const limitBadgeHtml = isPlanned && task.limitMs
       ? `<span class="task-limit-badge">${formatLimitField(task.limitMs)}</span>`
       : '';
@@ -1542,34 +1721,17 @@ function renderTaskList(listEl, listId) {
         moveTask('session', taskIndex, targetListId, getTasksForList(targetListId).length);
       });
 
-      const limitEl = li.querySelector('.task-limit-input, .task-limit-badge');
-      if (!isCompleted && limitEl?.classList.contains('task-limit-input')) {
-        limitEl.addEventListener('change', () => {
-          state.sessionTasks[taskIndex].limitMs = parseManualLimit(limitEl.value);
+      const limitInput = li.querySelector('.task-limit-input');
+      if (!isCompleted && limitInput) {
+        const saveLimit = () => {
+          state.sessionTasks[taskIndex].limitMs = parseManualLimit(limitInput.value);
           persist();
           renderEditView();
-        });
-        limitEl.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') limitEl.blur();
-        });
-      } else if (!isCompleted && limitEl) {
-        limitEl.addEventListener('dblclick', () => {
-          const input = document.createElement('input');
-          input.type = 'text';
-          input.className = 'task-limit-input';
-          input.value = formatLimitField(task.limitMs);
-          limitEl.replaceWith(input);
-          input.focus();
-          input.select();
-          const save = () => {
-            state.sessionTasks[taskIndex].limitMs = parseManualLimit(input.value);
-            persist();
-            renderEditView();
-          };
-          input.addEventListener('blur', save);
-          input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') input.blur();
-          });
+        };
+        limitInput.addEventListener('mousedown', (e) => e.stopPropagation());
+        limitInput.addEventListener('blur', saveLimit);
+        limitInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') limitInput.blur();
         });
       }
     }
@@ -1831,7 +1993,61 @@ function restoreSessionAddFocus() {
 
 function isSettingsUiOpen() {
   return !settingsMenu.classList.contains('hidden')
-    || !shortcutsModal.classList.contains('hidden');
+    || !shortcutsModal.classList.contains('hidden')
+    || !dataModal.classList.contains('hidden');
+}
+
+function formatRelativeBackupTime(timestamp) {
+  if (!timestamp) return 'Not yet backed up';
+  const diffMs = Date.now() - timestamp;
+  if (diffMs < 60000) return 'Just now';
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+async function refreshDataModalStatus() {
+  if (!dataModalStatus) return;
+  const info = await window.slashIt.getDataInfo();
+  dataModalStatus.textContent = `Last backed up: ${formatRelativeBackupTime(info.lastDocumentsBackupAt)}`;
+}
+
+function openDataModal() {
+  hideSettingsMenu();
+  dataModal.classList.remove('hidden');
+  void refreshDataModalStatus();
+}
+
+function closeDataModal() {
+  dataModal.classList.add('hidden');
+}
+
+async function handleBackupNow() {
+  dataBackupNowBtn.disabled = true;
+  try {
+    const result = await window.slashIt.backupDataNow();
+    dataModalStatus.textContent = `Last backed up: ${formatRelativeBackupTime(result.lastDocumentsBackupAt)}`;
+  } finally {
+    dataBackupNowBtn.disabled = false;
+  }
+}
+
+async function handleRestoreFromBackup() {
+  const result = await window.slashIt.restoreDataFromFile();
+  if (result.canceled) return;
+  if (result.error) {
+    window.alert(result.error);
+    return;
+  }
+  closeDataModal();
+  await applyRestoredData(result.data);
+}
+
+async function handleOpenBackupFolder() {
+  await window.slashIt.openDocumentsDataFolder();
 }
 
 function positionSettingsMenu() {
@@ -1882,11 +2098,80 @@ function closeShortcutsModal() {
   shortcutsModal.classList.add('hidden');
 }
 
+function applySavedData(saved) {
+  state.sessionTasks = (saved.sessionTasks || saved.tasks || []).map(normalizeSessionTask);
+  loadPlannedSessionsFromSaved(saved);
+  state.activeSessionName = saved.activeSessionName || null;
+  state.totalSessionMs = saved.totalSessionMs || 0;
+  state.timerView = saved.timerView === 'session' ? 'session' : 'task';
+  state.limitExpired = saved.limitExpiredKind === 'task' ? !!saved.limitExpired : false;
+  state.limitExpiredKind = saved.limitExpiredKind === 'task' && saved.limitExpired ? 'task' : null;
+  state.taskOvertimeMode = !!saved.taskOvertimeMode;
+  state.currentIndex = saved.currentIndex || 0;
+  state.focusTaskIndex = Number.isInteger(saved.focusTaskIndex) ? saved.focusTaskIndex : 0;
+  state.elapsedMs = saved.elapsedMs || 0;
+  state.isRunning = false;
+  state.timerBarSize = saved.timerBarSize === 'small' ? 'small' : 'normal';
+  state.timerBarSizeBeforeHide = saved.timerBarSizeBeforeHide === 'small' ? 'small' : 'normal';
+  state.focusPosition = saved.focusPosition && Number.isFinite(saved.focusPosition.x) && Number.isFinite(saved.focusPosition.y)
+    ? { x: saved.focusPosition.x, y: saved.focusPosition.y }
+    : null;
+  state.focusPositionCustomized = !!saved.focusPositionCustomized;
+
+  if (saved.timerBarSize === 'hidden') {
+    state.timerBarSize = state.timerBarSizeBeforeHide;
+  }
+
+  if (!state.sessionTasks[state.focusTaskIndex] || state.sessionTasks[state.focusTaskIndex].completed) {
+    state.focusTaskIndex = Math.max(0, getNextFocusTaskIndex());
+  }
+}
+
+function routeToSavedMode(saved) {
+  if (saved.mode === 'focus' && getIncompleteTasks().length > 0) {
+    const current = getCurrentTask();
+    if (current) {
+      state.elapsedMs = current.elapsedMs || saved.elapsedMs || 0;
+      current.elapsedMs = state.elapsedMs;
+      state.taskOvertimeMode = current.taskOvertimeMode || state.taskOvertimeMode;
+      current.taskOvertimeMode = state.taskOvertimeMode;
+    }
+    showView('focus');
+    renderFocusView();
+    if (current) restoreTaskTimerFromTask(current);
+    else if (state.limitExpired) setExpiredUI(true);
+    if (saved.isRunning) startTimer();
+    return;
+  }
+
+  if (saved.mode === 'done' && getIncompleteTasks().length === 0 && state.sessionTasks.length > 0) {
+    showDoneView();
+    return;
+  }
+
+  showView('edit');
+  renderEditView();
+  focusSessionAddInput();
+}
+
+async function applyRestoredData(saved) {
+  stopTimer();
+  clearTimerBarHideTimeout();
+  closeSessionDrawer({ immediate: true });
+  state.limitExpired = false;
+  state.limitExpiredKind = null;
+  setExpiredUI(false);
+  applySavedData(saved);
+  routeToSavedMode(saved);
+  persist();
+}
+
 function renderEditView() {
   hideTaskContextMenu();
   renderPlannedSessions();
   renderTaskList(sessionList, 'session');
   startBtn.disabled = getSessionIncompleteIndices().length === 0;
+  startBtn.textContent = isSessionInProgress() ? 'Resume Session' : 'Start Session';
   clearSessionBtn.disabled = state.sessionTasks.length === 0;
   moveBackToListBtn.disabled = state.sessionTasks.length === 0;
   clearSessionCompletedBtn.disabled = getCompletedCount() === 0;
@@ -2043,10 +2328,7 @@ function startEditingTask(li, listId, index) {
     if (value) {
       if (listId === 'session') {
         const limitInput = li.querySelector('.task-limit-input');
-        const limitBadge = li.querySelector('.task-limit-badge');
-        const manualLimit = limitInput
-          ? limitInput.value
-          : (limitBadge ? limitBadge.textContent : '');
+        const manualLimit = limitInput ? limitInput.value : '';
         const parsed = parseTaskInput(value, manualLimit);
         tasks[index].text = parsed.text;
         if (parsed.limitMs) tasks[index].limitMs = parsed.limitMs;
@@ -2165,6 +2447,7 @@ function renderFocusView() {
   }
 
   currentTaskEl.textContent = current.text.toUpperCase();
+  invalidateFocusBarWidthCache();
   updateTimerDisplay();
   updateSkipButtonState();
   scheduleFocusDimensionsUpdate();
@@ -2209,6 +2492,10 @@ function startTimer() {
 }
 
 function stopTimer() {
+  if (state.isRunning && state.sessionStartMs) {
+    state.elapsedMs = Date.now() - state.sessionStartMs;
+    saveCurrentTaskProgress();
+  }
   state.isRunning = false;
   if (state.timerInterval) {
     clearInterval(state.timerInterval);
@@ -2330,9 +2617,13 @@ function confirmExtend() {
   persist();
 }
 
-function startSlashing() {
-  if (getIncompleteTasks().length === 0) return;
+function enterFocusMode() {
+  showView('focus');
+  renderFocusView();
+  startTimer();
+}
 
+function beginFreshSession() {
   const first = getIncompleteTasks()[0];
   state.activeSessionName = first?.sourceSessionName || 'Braindump';
   state.timerView = 'task';
@@ -2351,15 +2642,42 @@ function startSlashing() {
   setExpiredUI(false);
   state.isRunning = false;
   state.focusTaskIndex = getNextFocusTaskIndex();
+  enterFocusMode();
+}
 
-  showView('focus');
-  renderFocusView();
-  startTimer();
+function resumeSession() {
+  clearAllSkippedFlags();
+  state.isRunning = false;
+
+  if (!state.sessionTasks[state.focusTaskIndex] || state.sessionTasks[state.focusTaskIndex].completed) {
+    state.focusTaskIndex = getNextFocusTaskIndex();
+  }
+
+  const current = getCurrentTask();
+  if (current) {
+    restoreTaskTimerFromTask(current);
+  } else {
+    resetTaskTimerState();
+  }
+
+  enterFocusMode();
+}
+
+function startSlashing() {
+  if (getIncompleteTasks().length === 0) return;
+
+  if (isSessionInProgress()) {
+    resumeSession();
+    return;
+  }
+
+  beginFreshSession();
 }
 
 function backToEdit() {
   closeSessionDrawer({ immediate: true });
   stopTimer();
+  saveCurrentTaskProgress();
   state.limitExpired = false;
   state.limitExpiredKind = null;
   state.taskOvertimeMode = false;
@@ -2381,10 +2699,18 @@ settingsBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   toggleSettingsMenu();
 });
+settingsDataBtn.addEventListener('click', openDataModal);
 settingsShortcutsBtn.addEventListener('click', openShortcutsModal);
 shortcutsCloseBtn.addEventListener('click', closeShortcutsModal);
+dataCloseBtn.addEventListener('click', closeDataModal);
+dataBackupNowBtn.addEventListener('click', handleBackupNow);
+dataRestoreBtn.addEventListener('click', handleRestoreFromBackup);
+dataOpenFolderBtn.addEventListener('click', handleOpenBackupFolder);
 shortcutsModal.addEventListener('click', (e) => {
   if (e.target === shortcutsModal) closeShortcutsModal();
+});
+dataModal.addEventListener('click', (e) => {
+  if (e.target === dataModal) closeDataModal();
 });
 clearSessionBtn.addEventListener('click', openClearSessionModal);
 moveBackToListBtn.addEventListener('click', moveAllSessionTasksBackToLists);
@@ -2433,6 +2759,10 @@ document.addEventListener('keydown', (e) => {
       closeShortcutsModal();
       return;
     }
+    if (!dataModal.classList.contains('hidden')) {
+      closeDataModal();
+      return;
+    }
     if (!settingsMenu.classList.contains('hidden')) {
       hideSettingsMenu();
       return;
@@ -2463,8 +2793,25 @@ document.addEventListener('contextmenu', (e) => {
 });
 
 backToEditBtn.addEventListener('click', backToEdit);
+timerSizeBtn.addEventListener('click', toggleTimerBarSize);
+timerHideBtn.addEventListener('click', hideTimerBar);
 pauseBtn.addEventListener('click', toggleTimer);
 timerDisplay.addEventListener('click', toggleTimerView);
+
+window.slashIt.onFocusPositionChanged(({ x, y }) => {
+  state.focusPosition = { x, y };
+  state.focusPositionCustomized = true;
+  persist();
+  if (drawerOpen && state.mode === 'focus') {
+    window.slashIt.showSessionDrawer(getDrawerPayload());
+  }
+});
+
+window.slashIt.onFocusWindowRestoreRequest(() => {
+  if (state.mode === 'focus' && state.timerBarSize === 'hidden') {
+    restoreTimerBarFromHide();
+  }
+});
 timerTaskZone.addEventListener('mouseenter', handleFocusStackMouseEnter);
 timerTaskZone.addEventListener('mouseleave', handleFocusHoverMouseLeave);
 focusView.addEventListener('mouseleave', handleFocusViewMouseLeave);
@@ -2531,43 +2878,9 @@ function loadPlannedSessionsFromSaved(saved) {
 
 async function init() {
   const saved = await window.slashIt.loadData();
-  state.sessionTasks = (saved.sessionTasks || saved.tasks || []).map(normalizeSessionTask);
-  loadPlannedSessionsFromSaved(saved);
-  state.activeSessionName = saved.activeSessionName || null;
-  state.totalSessionMs = saved.totalSessionMs || 0;
-  state.timerView = saved.timerView === 'session' ? 'session' : 'task';
-  state.limitExpired = saved.limitExpiredKind === 'task' ? !!saved.limitExpired : false;
-  state.limitExpiredKind = saved.limitExpiredKind === 'task' && saved.limitExpired ? 'task' : null;
-  state.taskOvertimeMode = !!saved.taskOvertimeMode;
-  state.currentIndex = saved.currentIndex || 0;
-  state.focusTaskIndex = Number.isInteger(saved.focusTaskIndex) ? saved.focusTaskIndex : 0;
-  state.elapsedMs = saved.elapsedMs || 0;
-  state.isRunning = false;
-
-  if (!state.sessionTasks[state.focusTaskIndex] || state.sessionTasks[state.focusTaskIndex].completed) {
-    state.focusTaskIndex = Math.max(0, getNextFocusTaskIndex());
-  }
-
-  if (saved.mode === 'focus' && getIncompleteTasks().length > 0) {
-    const current = getCurrentTask();
-    if (current) {
-      state.elapsedMs = current.elapsedMs || saved.elapsedMs || 0;
-      current.elapsedMs = state.elapsedMs;
-      state.taskOvertimeMode = current.taskOvertimeMode || state.taskOvertimeMode;
-      current.taskOvertimeMode = state.taskOvertimeMode;
-    }
-    showView('focus');
-    renderFocusView();
-    if (current) restoreTaskTimerFromTask(current);
-    else if (state.limitExpired) setExpiredUI(true);
-    if (saved.isRunning) startTimer();
-  } else if (saved.mode === 'done' && getIncompleteTasks().length === 0 && state.sessionTasks.length > 0) {
-    showDoneView();
-  } else {
-    showView('edit');
-    renderEditView();
-    focusSessionAddInput();
-  }
+  applySavedData(saved);
+  routeToSavedMode(saved);
+  isInitializing = false;
 }
 
 init();

@@ -84,11 +84,11 @@ body {
 
 .session-drawer-task--current .session-drawer-task-name,
 .session-drawer-task--current .session-drawer-task-time {
-  color: #ff5500;
+  color: #ffffff;
 }
 
 .session-drawer-task--pending .session-drawer-task-name {
-  color: #f9f9f9;
+  color: #9a9a9a;
 }
 
 .session-drawer-task--skipped .session-drawer-task-name {

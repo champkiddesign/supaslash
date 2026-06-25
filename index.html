@@ -14,8 +14,8 @@
   <div id="edit-view" class="view">
     <header class="edit-header">
       <div class="edit-header-row">
-        <button id="plan-session-btn" class="plan-session-btn plan-session-btn--header" type="button">+ Create New Session</button>
         <div class="edit-header-actions">
+          <button id="plan-session-btn" class="plan-session-btn plan-session-btn--header" type="button">+ Create New Session</button>
           <button id="settings-btn" class="settings-btn icon-btn" type="button" aria-label="Settings" aria-haspopup="true" aria-expanded="false">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/>
@@ -75,6 +75,7 @@
     </div>
 
     <div id="settings-menu" class="settings-menu hidden" role="menu" aria-label="Settings">
+      <button type="button" id="settings-data-btn" class="settings-menu-item" role="menuitem">Data &amp; backup</button>
       <button type="button" id="settings-shortcuts-btn" class="settings-menu-item" role="menuitem">Keyboard shortcuts</button>
       <div class="settings-menu-item settings-menu-item--disabled" role="menuitem" aria-disabled="true">
         <span>Power Features</span>
@@ -128,6 +129,20 @@
         </div>
       </div>
     </div>
+
+    <div id="data-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="data-modal-title">
+      <div class="clear-session-modal-card data-modal-card">
+        <h3 id="data-modal-title" class="clear-session-modal-title">Data &amp; backup</h3>
+        <p class="data-modal-body">Your tasks are saved on this Mac. A backup copy is kept in Documents/Slash It so you can recover after reinstalling.</p>
+        <p id="data-modal-status" class="data-modal-status">Last backed up: Not yet backed up</p>
+        <div class="data-modal-actions">
+          <button id="data-backup-now-btn" class="clear-session-modal-btn" type="button">Back up now</button>
+          <button id="data-restore-btn" class="clear-session-modal-btn" type="button">Restore from backup…</button>
+          <button id="data-open-folder-btn" class="clear-session-modal-btn" type="button">Open backup folder</button>
+          <button id="data-close-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Close</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Focus Mode -->
@@ -137,6 +152,16 @@
         <ul id="session-drawer-list" class="session-drawer-list"></ul>
       </div>
       <div class="timer-bar" id="timer-bar">
+        <div class="timer-drag-handle" aria-hidden="true" title="Drag to move">
+          <svg class="timer-drag-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="9" cy="6" r="2" fill="#9a9a9a"/>
+            <circle cx="15" cy="6" r="2" fill="#9a9a9a"/>
+            <circle cx="9" cy="12" r="2" fill="#9a9a9a"/>
+            <circle cx="15" cy="12" r="2" fill="#9a9a9a"/>
+            <circle cx="9" cy="18" r="2" fill="#9a9a9a"/>
+            <circle cx="15" cy="18" r="2" fill="#9a9a9a"/>
+          </svg>
+        </div>
         <div class="timer-stack">
           <span id="timer-mode-label" class="timer-mode-label">TASK</span>
           <button id="timer-display" class="timer-display" type="button" title="Switch between task and session timer">0:00</button>
@@ -144,6 +169,26 @@
       <div class="timer-task-zone" id="timer-task-zone">
         <span id="current-task" class="current-task"></span>
         <div id="timer-actions" class="timer-actions">
+          <button id="timer-size-btn" class="icon-btn icon-size" type="button" title="Smaller timer bar" aria-label="Make timer bar smaller">
+            <svg class="size-icon-normal" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <polyline points="15 3 21 3 21 9"/>
+              <polyline points="9 21 3 21 3 15"/>
+              <line x1="21" y1="3" x2="14" y2="10"/>
+              <line x1="3" y1="21" x2="10" y2="14"/>
+            </svg>
+            <svg class="size-icon-small" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <polyline points="4 14 10 14 10 20"/>
+              <polyline points="20 10 14 10 14 4"/>
+              <line x1="14" y1="10" x2="21" y2="3"/>
+              <line x1="3" y1="21" x2="10" y2="14"/>
+            </svg>
+          </button>
+          <button id="timer-hide-btn" class="icon-btn icon-hide" type="button" title="Hide timer bar for 5 minutes" aria-label="Hide timer bar for 5 minutes">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
           <button id="back-to-edit-btn" class="icon-btn icon-edit" type="button" title="Edit tasks" aria-label="Edit tasks">
             <img src="edit-tasks.png" width="14" height="14" alt="" aria-hidden="true" class="edit-icon" />
           </button>
