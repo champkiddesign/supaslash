@@ -229,6 +229,15 @@ function getTimerBarScale() {
   return state.timerBarSize === 'small' ? FOCUS_BAR_SCALE_SMALL : 1;
 }
 
+function isTimerBarFullscreen() {
+  return state.timerBarSize === 'fullscreen';
+}
+
+function normalizeTimerBarSize(size) {
+  if (size === 'small' || size === 'fullscreen') return size;
+  return 'normal';
+}
+
 function getScaledFocusBarHeight() {
   return Math.round(FOCUS_BAR_BASE_HEIGHT * getTimerBarScale());
 }
@@ -242,10 +251,15 @@ function getScaledFocusBarMaxWidth() {
 }
 
 function applyTimerBarSizeClass() {
-  document.body.classList.toggle('timer-bar-size-small', state.mode === 'focus' && state.timerBarSize === 'small');
+  const inFocus = state.mode === 'focus';
+  document.body.classList.toggle('timer-bar-size-small', inFocus && state.timerBarSize === 'small');
+  document.body.classList.toggle('timer-bar-size-fullscreen', inFocus && state.timerBarSize === 'fullscreen');
 }
 
 function getFocusWindowModeOptions() {
+  if (isTimerBarFullscreen()) {
+    return { fullscreen: true };
+  }
   return {
     height: getScaledFocusBarHeight(),
     focusPosition: state.focusPosition,
@@ -254,6 +268,13 @@ function getFocusWindowModeOptions() {
 }
 
 function getFocusDimensionsPayload(barWidth) {
+  if (isTimerBarFullscreen()) {
+    return {
+      fullscreen: true,
+      preservePosition: false,
+      focusPositionCustomized: false,
+    };
+  }
   return {
     width: barWidth,
     height: getScaledFocusBarHeight(),
@@ -314,14 +335,17 @@ function measureTimerBarWidthFromDom() {
 
 function updateTimerBarControlLabels() {
   if (timerSizeBtn) {
+    timerSizeBtn.classList.remove('timer-size-btn--next-fullscreen');
     if (state.timerBarSize === 'small') {
-      timerSizeBtn.title = 'Normal size timer bar';
-      timerSizeBtn.setAttribute('aria-label', 'Restore normal timer bar size');
-      timerSizeBtn.classList.add('timer-size-btn--small');
+      timerSizeBtn.title = 'Fullscreen timer';
+      timerSizeBtn.setAttribute('aria-label', 'Enter fullscreen timer mode');
+      timerSizeBtn.classList.add('timer-size-btn--next-fullscreen');
+    } else if (state.timerBarSize === 'fullscreen') {
+      timerSizeBtn.title = 'Normal timer bar';
+      timerSizeBtn.setAttribute('aria-label', 'Return to normal timer bar size');
     } else {
       timerSizeBtn.title = 'Smaller timer bar';
       timerSizeBtn.setAttribute('aria-label', 'Make timer bar smaller');
-      timerSizeBtn.classList.remove('timer-size-btn--small');
     }
   }
   if (timerHideBtn) {
@@ -341,21 +365,31 @@ function measureTimerBarWidth() {
   return clampBarWidth(width, scale);
 }
 
+function notifyFocusWindowLayoutChanged() {
+  window.dispatchEvent(new Event('resize'));
+}
+
 function applyFocusWindowSizeImmediate() {
   if (state.mode !== 'focus' || state.timerBarSize === 'hidden') return;
-  const barWidth = measureTimerBarWidth();
-  void window.slashIt.setFocusDimensions(getFocusDimensionsPayload(barWidth)).then(() => {
+  const payload = isTimerBarFullscreen()
+    ? getFocusDimensionsPayload()
+    : getFocusDimensionsPayload(measureTimerBarWidth());
+  void window.slashIt.setFocusDimensions(payload).then(() => {
     if (state.mode !== 'focus' || state.timerBarSize === 'hidden') return;
-    if (drawerOpen) void window.slashIt.showSessionDrawer(getDrawerPayload());
+    notifyFocusWindowLayoutChanged();
+    if (drawerOpen && !isTimerBarFullscreen()) void window.slashIt.showSessionDrawer(getDrawerPayload());
   });
 }
 
 async function applyFocusWindowSize() {
   if (state.mode !== 'focus' || state.timerBarSize === 'hidden') return;
-  const barWidth = measureTimerBarWidth();
-  await window.slashIt.setFocusDimensions(getFocusDimensionsPayload(barWidth));
+  const payload = isTimerBarFullscreen()
+    ? getFocusDimensionsPayload()
+    : getFocusDimensionsPayload(measureTimerBarWidth());
+  await window.slashIt.setFocusDimensions(payload);
   if (state.mode !== 'focus' || state.timerBarSize === 'hidden') return;
-  if (drawerOpen) await window.slashIt.showSessionDrawer(getDrawerPayload());
+  notifyFocusWindowLayoutChanged();
+  if (drawerOpen && !isTimerBarFullscreen()) await window.slashIt.showSessionDrawer(getDrawerPayload());
 }
 
 function restoreTimerBarFromHide() {
@@ -371,7 +405,7 @@ function restoreTimerBarFromHide() {
 
 function hideTimerBar() {
   if (state.mode !== 'focus' || state.timerBarSize === 'hidden') return;
-  state.timerBarSizeBeforeHide = state.timerBarSize === 'small' ? 'small' : 'normal';
+  state.timerBarSizeBeforeHide = normalizeTimerBarSize(state.timerBarSize);
   state.timerBarSize = 'hidden';
   closeSessionDrawer({ immediate: true });
   window.slashIt.hideFocusWindow();
@@ -382,7 +416,15 @@ function hideTimerBar() {
 
 function toggleTimerBarSize() {
   if (state.mode !== 'focus' || state.timerBarSize === 'hidden') return;
-  state.timerBarSize = state.timerBarSize === 'small' ? 'normal' : 'small';
+  if (state.timerBarSize === 'normal') {
+    state.timerBarSize = 'small';
+  } else if (state.timerBarSize === 'small') {
+    state.timerBarSize = 'fullscreen';
+    closeSessionDrawer({ immediate: true });
+  } else {
+    state.timerBarSize = 'normal';
+  }
+  invalidateFocusBarWidthCache();
   applyTimerBarSizeClass();
   updateTimerBarControlLabels();
   applyFocusWindowSizeImmediate();
@@ -518,7 +560,7 @@ if (sessionDrawerList) {
 }
 
 async function openSessionDrawer() {
-  if (drawerOpen || state.mode !== 'focus') return;
+  if (drawerOpen || state.mode !== 'focus' || isTimerBarFullscreen()) return;
   clearTimeout(drawerCloseTimer);
   drawerOpen = true;
   const payload = getDrawerPayload();
@@ -2376,8 +2418,8 @@ function applySavedData(saved) {
   state.focusTaskIndex = Number.isInteger(saved.focusTaskIndex) ? saved.focusTaskIndex : 0;
   state.elapsedMs = saved.elapsedMs || 0;
   state.isRunning = false;
-  state.timerBarSize = saved.timerBarSize === 'small' ? 'small' : 'normal';
-  state.timerBarSizeBeforeHide = saved.timerBarSizeBeforeHide === 'small' ? 'small' : 'normal';
+  state.timerBarSize = normalizeTimerBarSize(saved.timerBarSize);
+  state.timerBarSizeBeforeHide = normalizeTimerBarSize(saved.timerBarSizeBeforeHide);
   state.focusPosition = saved.focusPosition && Number.isFinite(saved.focusPosition.x) && Number.isFinite(saved.focusPosition.y)
     ? { x: saved.focusPosition.x, y: saved.focusPosition.y }
     : null;

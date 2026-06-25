@@ -33,6 +33,7 @@ let celebrationHideTimer = null;
 let currentWindowMode = 'edit';
 let focusPositionCustomized = false;
 let focusBarHeight = FOCUS_BAR_HEIGHT;
+let focusWindowFullscreen = false;
 let focusWindowHiddenByUser = false;
 let suppressFocusMoveEvent = false;
 
@@ -380,8 +381,25 @@ function getFocusMaxWidth() {
   return Math.max(getFocusMinWidth(), areaWidth - FOCUS_WIDTH_MARGIN);
 }
 
-function resizeFocusWindow({ width: contentWidth, height: contentHeight, x, y, preservePosition } = {}) {
+function resizeFocusWindow({ width: contentWidth, height: contentHeight, x, y, preservePosition, fullscreen } = {}) {
   if (!isLiveWindow(mainWindow) || currentWindowMode !== 'focus') return;
+
+  if (fullscreen) {
+    focusWindowFullscreen = true;
+    const display = getMainDisplay();
+    const { x: areaX, y: areaY, width: areaWidth, height: areaHeight } = display.workArea;
+    focusPositionCustomized = false;
+    mainWindow.setMinimumSize(200, 200);
+    mainWindow.setMaximumSize(areaWidth, areaHeight);
+    mainWindow.setResizable(WINDOW_SIZES.focus.resizable);
+    mainWindow.setBackgroundColor('#00000000');
+    suppressFocusMoveEvent = true;
+    mainWindow.setBounds({ x: areaX, y: areaY, width: areaWidth, height: areaHeight }, false);
+    suppressFocusMoveEvent = false;
+    return;
+  }
+
+  focusWindowFullscreen = false;
   const minWidth = getFocusMinWidth();
   const maxWidth = getFocusMaxWidth();
   const width = Math.max(minWidth, Math.min(Math.ceil(contentWidth || minWidth), maxWidth));
@@ -449,19 +467,24 @@ function applyWindowSize(mode, options = {}) {
   }
 
   if (mode === 'focus') {
-    const barHeight = Math.max(1, Math.round(options.height || FOCUS_BAR_HEIGHT));
-    focusBarHeight = barHeight;
-    const minWidth = getFocusMinWidth();
-    mainWindow.setMinimumSize(minWidth, barHeight);
-    mainWindow.setMaximumSize(getFocusMaxWidth(), barHeight);
-    mainWindow.setResizable(size.resizable);
-    mainWindow.setBackgroundColor('#00000000');
-    mainWindow.setSize(size.width, barHeight, false);
-    focusPositionCustomized = !!options.focusPositionCustomized;
-    positionWindow(mode, {
-      focusPosition: options.focusPosition || null,
-      focusPositionCustomized: focusPositionCustomized,
-    });
+    if (options.fullscreen) {
+      resizeFocusWindow({ fullscreen: true });
+    } else {
+      focusWindowFullscreen = false;
+      const barHeight = Math.max(1, Math.round(options.height || FOCUS_BAR_HEIGHT));
+      focusBarHeight = barHeight;
+      const minWidth = getFocusMinWidth();
+      mainWindow.setMinimumSize(minWidth, barHeight);
+      mainWindow.setMaximumSize(getFocusMaxWidth(), barHeight);
+      mainWindow.setResizable(size.resizable);
+      mainWindow.setBackgroundColor('#00000000');
+      mainWindow.setSize(size.width, barHeight, false);
+      focusPositionCustomized = !!options.focusPositionCustomized;
+      positionWindow(mode, {
+        focusPosition: options.focusPosition || null,
+        focusPositionCustomized: focusPositionCustomized,
+      });
+    }
   } else {
     focusPositionCustomized = false;
     focusBarHeight = FOCUS_BAR_HEIGHT;
@@ -590,6 +613,11 @@ ipcMain.handle('set-focus-width', (_event, contentWidth) => {
 });
 
 ipcMain.handle('set-focus-dimensions', (_event, dimensions = {}) => {
+  if (dimensions.fullscreen) {
+    focusPositionCustomized = false;
+    resizeFocusWindow({ fullscreen: true });
+    return true;
+  }
   if (typeof dimensions.focusPositionCustomized === 'boolean') {
     focusPositionCustomized = dimensions.focusPositionCustomized;
   }
@@ -599,6 +627,7 @@ ipcMain.handle('set-focus-dimensions', (_event, dimensions = {}) => {
     x: dimensions.x,
     y: dimensions.y,
     preservePosition: dimensions.preservePosition ?? focusPositionCustomized,
+    fullscreen: false,
   });
   return true;
 });

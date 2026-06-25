@@ -100,6 +100,12 @@ body.mode-focus.timer-bar-size-small {
   --timer-bar-scale: 0.75;
 }
 
+body.mode-focus.timer-bar-size-fullscreen {
+  --timer-bar-scale: 1;
+  --fullscreen-timer-anchor: 40%;
+  background: var(--bg);
+}
+
 body.mode-done {
   background: transparent;
   overflow: hidden;
@@ -1946,15 +1952,21 @@ body.mode-edit #edit-view.view {
   transition: background 0.15s;
 }
 
+.timer-actions .icon-size .size-icon-fullscreen {
+  display: none;
+}
+
+/* Default: shrink arrow (normal → small, fullscreen → normal) */
 .timer-actions .icon-size .size-icon-small {
+  display: block;
+}
+
+/* Small mode → next is fullscreen */
+.timer-actions .icon-size.timer-size-btn--next-fullscreen .size-icon-small {
   display: none;
 }
 
-.timer-actions .icon-size.timer-size-btn--small .size-icon-normal {
-  display: none;
-}
-
-.timer-actions .icon-size.timer-size-btn--small .size-icon-small {
+.timer-actions .icon-size.timer-size-btn--next-fullscreen .size-icon-fullscreen {
   display: block;
 }
 
@@ -2120,6 +2132,183 @@ body.mode-edit #edit-view.view {
 
 .expired-btn-accent:hover {
   background: rgba(250, 80, 0, 0.12);
+}
+
+/* ── Fullscreen timer mode ── */
+
+body.mode-focus.timer-bar-size-fullscreen #focus-view {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  background-color: var(--bg);
+  background-image: var(--grain-image);
+  background-repeat: repeat;
+  background-size: var(--grain-size);
+}
+
+body.mode-focus.timer-bar-size-fullscreen .focus-stack {
+  position: fixed;
+  inset: 0;
+  transform: none;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  max-width: none;
+}
+
+body.mode-focus.timer-bar-size-fullscreen .timer-bar {
+  position: relative;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  max-width: none;
+  padding: clamp(32px, 6vh, 80px) clamp(24px, 5vw, 64px);
+  border-radius: 0;
+  background-color: var(--bg);
+  background-image: var(--grain-image);
+  background-repeat: repeat;
+  background-size: var(--grain-size);
+}
+
+body.mode-focus.timer-bar-size-fullscreen .timer-drag-handle {
+  display: none;
+}
+
+body.mode-focus.timer-bar-size-fullscreen .timer-stack {
+  position: absolute;
+  top: var(--fullscreen-timer-anchor);
+  left: 50%;
+  transform: translate(-50%, -50%);
+  gap: clamp(10px, 1.9vh, 20px);
+  margin: 0;
+  z-index: 2;
+}
+
+body.mode-focus.timer-bar-size-fullscreen .timer-mode-label {
+  font-size: clamp(14px, 1.5vw, 18px);
+  letter-spacing: 0.14em;
+}
+
+body.mode-focus.timer-bar-size-fullscreen .timer-display {
+  font-size: clamp(90px, 15vw, 180px);
+  min-width: 0;
+  line-height: 1;
+}
+
+body.mode-focus.timer-bar-size-fullscreen .timer-task-zone {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-left: 0;
+  min-height: 0;
+  width: 100%;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+
+body.mode-focus.timer-bar-size-fullscreen .current-task {
+  position: absolute;
+  top: calc(var(--fullscreen-timer-anchor) + clamp(70px, 10vh, 120px));
+  left: 50%;
+  transform: translateX(-50%);
+  flex: none;
+  width: min(80%, 720px);
+  max-width: 80%;
+  margin: 0;
+  padding: 0;
+  text-align: center;
+  font-size: clamp(18px, 2.5vw, 28px);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+body.mode-focus.timer-bar-size-fullscreen .timer-actions {
+  position: relative;
+  inset: auto;
+  visibility: visible;
+  opacity: 0.45;
+  pointer-events: auto;
+  justify-content: center;
+  gap: clamp(8px, 1.2vw, 14px);
+  margin-top: auto;
+  padding-top: clamp(24px, 4vh, 48px);
+  transition: opacity 0.25s ease;
+}
+
+body.mode-focus.timer-bar-size-fullscreen .timer-actions::before,
+body.mode-focus.timer-bar-size-fullscreen .timer-actions::after {
+  display: none;
+}
+
+body.mode-focus.timer-bar-size-fullscreen .timer-bar:hover .timer-actions,
+body.mode-focus.timer-bar-size-fullscreen .timer-task-zone:focus-within .timer-actions {
+  opacity: 1;
+}
+
+body.mode-focus.timer-bar-size-fullscreen .timer-actions .icon-btn,
+body.mode-focus.timer-bar-size-fullscreen .pause-btn {
+  width: clamp(36px, 4vw, 44px);
+  height: clamp(36px, 4vw, 44px);
+  border-radius: 10px;
+}
+
+body.mode-focus.timer-bar-size-fullscreen .timer-actions .icon-size svg,
+body.mode-focus.timer-bar-size-fullscreen .timer-actions .icon-hide svg,
+body.mode-focus.timer-bar-size-fullscreen .pause-btn svg,
+body.mode-focus.timer-bar-size-fullscreen .timer-actions .icon-complete svg {
+  width: clamp(16px, 1.8vw, 20px);
+  height: clamp(16px, 1.8vw, 20px);
+}
+
+body.mode-focus.timer-bar-size-fullscreen .icon-skip .skip-icon,
+body.mode-focus.timer-bar-size-fullscreen .icon-edit .edit-icon {
+  width: clamp(16px, 1.8vw, 20px);
+  height: clamp(16px, 1.8vw, 20px);
+}
+
+body.mode-focus.timer-bar-size-fullscreen .expired-actions,
+body.mode-focus.timer-bar-size-fullscreen .extend-panel {
+  position: absolute;
+  bottom: clamp(24px, 4vh, 48px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  gap: clamp(10px, 1.5vw, 16px);
+}
+
+body.mode-focus.timer-bar-size-fullscreen .expired-btn {
+  font-size: clamp(12px, 1.2vw, 14px);
+  padding: clamp(8px, 1vh, 12px) clamp(14px, 1.5vw, 20px);
+  border-radius: 8px;
+}
+
+body.mode-focus.timer-bar-size-fullscreen .extend-label {
+  font-size: clamp(12px, 1.2vw, 14px);
+}
+
+body.mode-focus.timer-bar-size-fullscreen .extend-input {
+  width: clamp(56px, 6vw, 72px);
+  font-size: clamp(13px, 1.3vw, 15px);
+  padding: clamp(6px, 0.8vh, 10px) clamp(8px, 1vw, 12px);
+  border-radius: 8px;
+}
+
+body.mode-focus.timer-bar-size-fullscreen .timer-bar.timer-bar--expanded {
+  padding-bottom: clamp(48px, 8vh, 96px);
 }
 
 .done-content {
