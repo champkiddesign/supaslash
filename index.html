@@ -75,19 +75,24 @@
     </div>
 
     <div id="settings-menu" class="settings-menu hidden" role="menu" aria-label="Settings">
+      <button type="button" id="settings-templates-btn" class="settings-menu-item" role="menuitem">Templates</button>
       <button type="button" id="settings-history-btn" class="settings-menu-item" role="menuitem">Session history</button>
       <button type="button" id="settings-data-btn" class="settings-menu-item" role="menuitem">Data &amp; backup</button>
       <button type="button" id="settings-shortcuts-btn" class="settings-menu-item" role="menuitem">Keyboard shortcuts</button>
-      <div class="settings-menu-item settings-menu-item--disabled" role="menuitem" aria-disabled="true">
-        <span>Power Features</span>
-        <span class="settings-menu-item-note">Coming Soon</span>
-      </div>
     </div>
 
     <div id="shortcuts-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-title">
       <div class="clear-session-modal-card shortcuts-modal-card">
         <h3 id="shortcuts-modal-title" class="clear-session-modal-title">Keyboard shortcuts</h3>
         <dl class="shortcuts-list">
+          <div class="shortcuts-row">
+            <dt>Insert task or list template (from New Task input)</dt>
+            <dd><kbd class="shortcut-key">/</kbd> then pick</dd>
+          </div>
+          <div class="shortcuts-row">
+            <dt>Navigate template suggestions</dt>
+            <dd><kbd class="shortcut-key">↑</kbd> <kbd class="shortcut-key">↓</kbd> <kbd class="shortcut-key">Enter</kbd></dd>
+          </div>
           <div class="shortcuts-row">
             <dt>Add task to session (from New Task input)</dt>
             <dd><kbd class="shortcut-key">Enter</kbd></dd>
@@ -242,7 +247,64 @@
   </div>
 
   <div id="task-context-menu" class="task-context-menu hidden" role="menu">
-    <button type="button" id="task-context-delete" class="task-context-menu-item" role="menuitem">Delete</button>
+    <button type="button" id="task-context-duplicate" class="task-context-menu-item" role="menuitem">
+      <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <rect x="9" y="9" width="13" height="13" rx="2"/>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+      </svg>
+      <span>Duplicate</span>
+    </button>
+    <button type="button" id="task-context-save-template" class="task-context-menu-item" role="menuitem">
+      <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+        <rect x="8" y="2" width="8" height="4" rx="1"/>
+        <path d="M9 14h6M9 18h6M9 10h6"/>
+      </svg>
+      <span>Save as Template</span>
+    </button>
+    <button type="button" id="task-context-delete" class="task-context-menu-item task-context-menu-item--danger" role="menuitem">
+      <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+        <path d="M10 11v6M14 11v6"/>
+      </svg>
+      <span>Delete</span>
+    </button>
+  </div>
+
+  <div id="session-context-menu" class="task-context-menu hidden" role="menu">
+    <button type="button" id="session-context-save-template" class="task-context-menu-item" role="menuitem">
+      <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+        <rect x="8" y="2" width="8" height="4" rx="1"/>
+        <path d="M9 14h6M9 18h6M9 10h6"/>
+      </svg>
+      <span>Save as Template</span>
+    </button>
+  </div>
+
+  <div id="template-autocomplete" class="template-autocomplete hidden" role="listbox" aria-label="Template suggestions"></div>
+
+  <div id="save-template-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="save-template-title">
+    <div class="clear-session-modal-card">
+      <h3 id="save-template-title" class="clear-session-modal-title">Save as template</h3>
+      <p id="save-template-message" class="save-template-message"></p>
+      <input id="save-template-name-input" type="text" class="save-template-name-input" autocomplete="off" />
+      <p id="save-template-error" class="save-template-error hidden"></p>
+      <div class="clear-session-modal-actions">
+        <button id="save-template-confirm-btn" class="clear-session-modal-btn" type="button">Save</button>
+        <button id="save-template-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="templates-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="templates-modal-title">
+    <div class="clear-session-modal-card templates-modal-card">
+      <h3 id="templates-modal-title" class="clear-session-modal-title">Templates</h3>
+      <div id="templates-modal-body" class="templates-modal-body"></div>
+      <div class="templates-modal-actions">
+        <button id="templates-close-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Close</button>
+      </div>
+    </div>
   </div>
 
   <div id="history-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="history-modal-title">

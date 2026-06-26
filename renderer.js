@@ -30,6 +30,8 @@ const state = {
   sessionHistory: [],
   activeSessionRunId: null,
   activeSessionStartedAt: null,
+  taskTemplates: [],
+  listTemplates: [],
 };
 
 const editView = document.getElementById('edit-view');
@@ -38,6 +40,7 @@ const settingsMenu = document.getElementById('settings-menu');
 const settingsShortcutsBtn = document.getElementById('settings-shortcuts-btn');
 const settingsDataBtn = document.getElementById('settings-data-btn');
 const settingsHistoryBtn = document.getElementById('settings-history-btn');
+const settingsTemplatesBtn = document.getElementById('settings-templates-btn');
 const shortcutsModal = document.getElementById('shortcuts-modal');
 const shortcutsCloseBtn = document.getElementById('shortcuts-close-btn');
 const dataModal = document.getElementById('data-modal');
@@ -92,10 +95,28 @@ const historyModal = document.getElementById('history-modal');
 const historyList = document.getElementById('history-list');
 const historyCloseBtn = document.getElementById('history-close-btn');
 const taskContextMenu = document.getElementById('task-context-menu');
+const taskContextDuplicateBtn = document.getElementById('task-context-duplicate');
+const taskContextSaveTemplateBtn = document.getElementById('task-context-save-template');
 const taskContextDeleteBtn = document.getElementById('task-context-delete');
+const sessionContextMenu = document.getElementById('session-context-menu');
+const sessionContextSaveTemplateBtn = document.getElementById('session-context-save-template');
+const templateAutocomplete = document.getElementById('template-autocomplete');
+const saveTemplateModal = document.getElementById('save-template-modal');
+const saveTemplateMessage = document.getElementById('save-template-message');
+const saveTemplateNameInput = document.getElementById('save-template-name-input');
+const saveTemplateError = document.getElementById('save-template-error');
+const saveTemplateConfirmBtn = document.getElementById('save-template-confirm-btn');
+const saveTemplateCancelBtn = document.getElementById('save-template-cancel-btn');
+const templatesModal = document.getElementById('templates-modal');
+const templatesModalBody = document.getElementById('templates-modal-body');
+const templatesCloseBtn = document.getElementById('templates-close-btn');
 
 let taskContextMenuTarget = null;
+let sessionContextMenuTarget = null;
 let pendingDeleteSessionId = null;
+let pendingSaveTemplate = null;
+let templateAutocompleteState = null;
+let templateEditorState = null;
 let focusDimensionsRaf = null;
 let drawerOpen = false;
 let drawerCloseTimer = null;
@@ -782,6 +803,418 @@ function normalizePlannedSession(session) {
   };
 }
 
+function normalizeTaskTemplate(template) {
+  const now = Date.now();
+  return {
+    id: template.id || crypto.randomUUID(),
+    name: template.name || 'Task template',
+    text: template.text || '',
+    limitMs: template.limitMs ?? null,
+    createdAt: template.createdAt || now,
+    updatedAt: template.updatedAt || template.createdAt || now,
+  };
+}
+
+function normalizeListTemplate(template) {
+  const now = Date.now();
+  return {
+    id: template.id || crypto.randomUUID(),
+    name: template.name || 'List template',
+    tasks: (template.tasks || []).map(normalizeBraindumpTask),
+    createdAt: template.createdAt || now,
+    updatedAt: template.updatedAt || template.createdAt || now,
+  };
+}
+
+function normalizeTemplateName(name) {
+  return (name || '').trim();
+}
+
+function templateNamesMatch(a, b) {
+  return normalizeTemplateName(a).toLowerCase() === normalizeTemplateName(b).toLowerCase();
+}
+
+function isTaskTemplateNameTaken(name, excludeId = null) {
+  const normalized = normalizeTemplateName(name);
+  if (!normalized) return false;
+  return state.taskTemplates.some(
+    (template) => template.id !== excludeId && templateNamesMatch(template.name, normalized),
+  );
+}
+
+function isListTemplateNameTaken(name, excludeId = null) {
+  const normalized = normalizeTemplateName(name);
+  if (!normalized) return false;
+  return state.listTemplates.some(
+    (template) => template.id !== excludeId && templateNamesMatch(template.name, normalized),
+  );
+}
+
+function getSlashQuery(value) {
+  const trimmed = value.trimStart();
+  if (!trimmed.startsWith('/')) return null;
+  return trimmed.slice(1);
+}
+
+function isSlashInput(value) {
+  return value.trimStart().startsWith('/');
+}
+
+function findTemplatesMatchingQuery(query) {
+  const normalized = (query || '').trim().toLowerCase();
+  const matches = [];
+
+  state.taskTemplates.forEach((template) => {
+    if (!normalized || template.name.toLowerCase().includes(normalized)) {
+      matches.push({
+        type: 'task',
+        id: template.id,
+        name: template.name,
+        preview: template.text,
+        template,
+      });
+    }
+  });
+
+  state.listTemplates.forEach((template) => {
+    if (!normalized || template.name.toLowerCase().includes(normalized)) {
+      const count = template.tasks.length;
+      matches.push({
+        type: 'list',
+        id: template.id,
+        name: template.name,
+        preview: count === 1 ? '1 task' : `${count} tasks`,
+        template,
+      });
+    }
+  });
+
+  matches.sort((a, b) => a.name.localeCompare(b.name));
+  return matches;
+}
+
+function findExactTemplateMatches(query) {
+  const normalized = normalizeTemplateName(query);
+  if (!normalized) return [];
+  return findTemplatesMatchingQuery(normalized).filter(
+    (match) => templateNamesMatch(match.name, normalized),
+  );
+}
+
+function hideTemplateAutocomplete() {
+  if (!templateAutocomplete) return;
+  templateAutocomplete.classList.add('hidden');
+  templateAutocomplete.innerHTML = '';
+  templateAutocompleteState = null;
+}
+
+function renderTemplateAutocomplete() {
+  if (!templateAutocomplete || !templateAutocompleteState) return;
+
+  const { matches, highlightIndex } = templateAutocompleteState;
+  if (matches.length === 0) {
+    templateAutocomplete.innerHTML = '<div class="templates-empty">No matching templates</div>';
+    templateAutocomplete.classList.remove('hidden');
+    return;
+  }
+
+  templateAutocomplete.innerHTML = matches.map((match, index) => `
+    <button
+      type="button"
+      class="template-autocomplete-item${index === highlightIndex ? ' template-autocomplete-item--highlight' : ''}"
+      data-match-index="${index}"
+      role="option"
+      aria-selected="${index === highlightIndex}"
+    >
+      <span class="template-autocomplete-name">${escapeHtml(match.name)}</span>
+      <span class="template-autocomplete-badge">${match.type === 'list' ? 'List' : 'Task'}</span>
+      <span class="template-autocomplete-preview">${escapeHtml(match.preview)}</span>
+    </button>
+  `).join('');
+  templateAutocomplete.classList.remove('hidden');
+}
+
+function positionTemplateAutocomplete(inputEl) {
+  if (!templateAutocomplete || !inputEl) return;
+  const rect = inputEl.getBoundingClientRect();
+  const padding = 8;
+  templateAutocomplete.style.left = `${Math.max(padding, rect.left)}px`;
+  templateAutocomplete.style.top = `${rect.bottom + 4}px`;
+  const menuRect = templateAutocomplete.getBoundingClientRect();
+  if (rect.left + menuRect.width > window.innerWidth - padding) {
+    templateAutocomplete.style.left = `${window.innerWidth - menuRect.width - padding}px`;
+  }
+}
+
+function updateTemplateAutocomplete(inputEl, sessionId) {
+  const query = getSlashQuery(inputEl.value);
+  if (query === null) {
+    hideTemplateAutocomplete();
+    return;
+  }
+
+  const matches = findTemplatesMatchingQuery(query);
+  templateAutocompleteState = {
+    sessionId,
+    inputEl,
+    highlightIndex: matches.length > 0 ? 0 : -1,
+    matches,
+  };
+  renderTemplateAutocomplete();
+  positionTemplateAutocomplete(inputEl);
+}
+
+function moveTemplateAutocompleteHighlight(delta) {
+  if (!templateAutocompleteState || templateAutocompleteState.matches.length === 0) return;
+  const count = templateAutocompleteState.matches.length;
+  let next = templateAutocompleteState.highlightIndex + delta;
+  if (next < 0) next = count - 1;
+  if (next >= count) next = 0;
+  templateAutocompleteState.highlightIndex = next;
+  renderTemplateAutocomplete();
+}
+
+function insertTaskIntoSession(sessionId, task) {
+  const session = getPlannedSession(sessionId);
+  if (!session) return;
+  session.tasks.push({ text: task.text, limitMs: task.limitMs ?? null });
+  state.addFocusSessionId = sessionId;
+  state.lastAddSessionId = sessionId;
+  state.activeAddSessionIds.add(sessionId);
+  persist();
+  renderEditView();
+}
+
+function insertTasksIntoSession(sessionId, tasks) {
+  const session = getPlannedSession(sessionId);
+  if (!session || tasks.length === 0) return;
+  session.tasks.push(...tasks.map(normalizeBraindumpTask));
+  state.addFocusSessionId = sessionId;
+  state.lastAddSessionId = sessionId;
+  state.activeAddSessionIds.add(sessionId);
+  persist();
+  renderEditView();
+}
+
+function insertTaskIntoQueue(sessionId, task) {
+  const session = getPlannedSession(sessionId);
+  if (!session) return;
+  const sourceMeta = getSourceMetaFromSession(session);
+  const insertAt = getSessionActiveInsertIndex();
+  state.sessionTasks.splice(
+    insertAt,
+    0,
+    toSessionTaskFromBraindump({ text: task.text, limitMs: task.limitMs ?? null }, sourceMeta),
+  );
+  state.lastAddSessionId = sessionId;
+  persist();
+  renderEditView();
+}
+
+function insertTasksIntoQueue(sessionId, tasks) {
+  const session = getPlannedSession(sessionId);
+  if (!session || tasks.length === 0) return;
+  const sourceMeta = getSourceMetaFromSession(session);
+  const insertAt = getSessionActiveInsertIndex();
+  state.sessionTasks.splice(
+    insertAt,
+    0,
+    ...tasks.map((task) => toSessionTaskFromBraindump(task, sourceMeta)),
+  );
+  state.lastAddSessionId = sessionId;
+  persist();
+  renderEditView();
+}
+
+function applyTaskTemplate(template, sessionId, { toQueue = false } = {}) {
+  const payload = { text: template.text, limitMs: template.limitMs ?? null };
+  if (toQueue) insertTaskIntoQueue(sessionId, payload);
+  else insertTaskIntoSession(sessionId, payload);
+}
+
+function applyListTemplate(template, sessionId, { toQueue = false } = {}) {
+  const tasks = template.tasks.map(normalizeBraindumpTask);
+  if (toQueue) insertTasksIntoQueue(sessionId, tasks);
+  else insertTasksIntoSession(sessionId, tasks);
+}
+
+function applyTemplateMatch(match, sessionId, { toQueue = false } = {}) {
+  if (!match) return;
+  if (match.type === 'task') applyTaskTemplate(match.template, sessionId, { toQueue });
+  else applyListTemplate(match.template, sessionId, { toQueue });
+}
+
+function applyTemplateFromInput(inputEl, sessionId, { toQueue = false, match = null } = {}) {
+  let selected = match;
+  if (!selected && templateAutocompleteState?.inputEl === inputEl) {
+    const { highlightIndex, matches } = templateAutocompleteState;
+    if (highlightIndex >= 0 && matches[highlightIndex]) {
+      selected = matches[highlightIndex];
+    }
+  }
+  if (!selected) {
+    const query = getSlashQuery(inputEl.value);
+    const exactMatches = findExactTemplateMatches(query || '');
+    if (exactMatches.length === 1) selected = exactMatches[0];
+  }
+  if (!selected) return false;
+
+  applyTemplateMatch(selected, sessionId, { toQueue });
+  inputEl.value = '';
+  hideTemplateAutocomplete();
+  requestAnimationFrame(() => inputEl.focus());
+  return true;
+}
+
+function createTaskTemplate(name, text, limitMs) {
+  const now = Date.now();
+  const template = normalizeTaskTemplate({
+    id: crypto.randomUUID(),
+    name: normalizeTemplateName(name),
+    text: text.trim(),
+    limitMs: limitMs ?? null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  state.taskTemplates.unshift(template);
+  persist();
+  return template;
+}
+
+function createListTemplate(name, tasks) {
+  const now = Date.now();
+  const template = normalizeListTemplate({
+    id: crypto.randomUUID(),
+    name: normalizeTemplateName(name),
+    tasks: tasks.map(normalizeBraindumpTask),
+    createdAt: now,
+    updatedAt: now,
+  });
+  state.listTemplates.unshift(template);
+  persist();
+  return template;
+}
+
+function updateTaskTemplate(id, name, text, limitMs) {
+  const template = state.taskTemplates.find((item) => item.id === id);
+  if (!template) return false;
+  template.name = normalizeTemplateName(name);
+  template.text = text.trim();
+  template.limitMs = limitMs ?? null;
+  template.updatedAt = Date.now();
+  persist();
+  return true;
+}
+
+function updateListTemplate(id, name, tasks) {
+  const template = state.listTemplates.find((item) => item.id === id);
+  if (!template) return false;
+  template.name = normalizeTemplateName(name);
+  template.tasks = tasks.map(normalizeBraindumpTask);
+  template.updatedAt = Date.now();
+  persist();
+  return true;
+}
+
+function deleteTaskTemplate(id) {
+  state.taskTemplates = state.taskTemplates.filter((item) => item.id !== id);
+  persist();
+}
+
+function deleteListTemplate(id) {
+  state.listTemplates = state.listTemplates.filter((item) => item.id !== id);
+  persist();
+}
+
+function duplicateTask(listId, taskIndex) {
+  const tasks = getTasksForList(listId);
+  const task = tasks[taskIndex];
+  if (!task) return;
+  const copy = listId === 'session'
+    ? normalizeSessionTask(task)
+    : normalizeBraindumpTask(task);
+  tasks.splice(taskIndex + 1, 0, copy);
+  persist();
+  renderEditView();
+}
+
+function openSaveTemplateModal(pending) {
+  pendingSaveTemplate = pending;
+  saveTemplateMessage.textContent = pending.type === 'list'
+    ? 'Save this session as a reusable list template.'
+    : 'Save this task as a reusable template.';
+  saveTemplateNameInput.value = pending.defaultName || '';
+  saveTemplateError.classList.add('hidden');
+  saveTemplateError.textContent = '';
+  saveTemplateModal.classList.remove('hidden');
+  requestAnimationFrame(() => {
+    saveTemplateNameInput.focus();
+    saveTemplateNameInput.select();
+  });
+}
+
+function closeSaveTemplateModal() {
+  saveTemplateModal.classList.add('hidden');
+  pendingSaveTemplate = null;
+  saveTemplateNameInput.value = '';
+  saveTemplateError.classList.add('hidden');
+}
+
+function confirmSaveTemplateModal() {
+  if (!pendingSaveTemplate) return;
+  const name = normalizeTemplateName(saveTemplateNameInput.value);
+  if (!name) {
+    saveTemplateError.textContent = 'Enter a template name.';
+    saveTemplateError.classList.remove('hidden');
+    return;
+  }
+
+  if (pendingSaveTemplate.type === 'task') {
+    if (isTaskTemplateNameTaken(name)) {
+      saveTemplateError.textContent = 'A task template with that name already exists.';
+      saveTemplateError.classList.remove('hidden');
+      return;
+    }
+    createTaskTemplate(name, pendingSaveTemplate.text, pendingSaveTemplate.limitMs);
+  } else {
+    if (isListTemplateNameTaken(name)) {
+      saveTemplateError.textContent = 'A list template with that name already exists.';
+      saveTemplateError.classList.remove('hidden');
+      return;
+    }
+    if (!pendingSaveTemplate.tasks || pendingSaveTemplate.tasks.length === 0) {
+      saveTemplateError.textContent = 'Add at least one task before saving a list template.';
+      saveTemplateError.classList.remove('hidden');
+      return;
+    }
+    createListTemplate(name, pendingSaveTemplate.tasks);
+  }
+
+  closeSaveTemplateModal();
+  if (!templatesModal.classList.contains('hidden')) renderTemplatesModal();
+}
+
+function saveTaskAsTemplateFromContext(listId, taskIndex) {
+  const task = getTasksForList(listId)[taskIndex];
+  if (!task) return;
+  openSaveTemplateModal({
+    type: 'task',
+    defaultName: task.text,
+    text: task.text,
+    limitMs: task.limitMs ?? null,
+  });
+}
+
+function saveSessionAsTemplateFromContext(sessionId) {
+  const session = getPlannedSession(sessionId);
+  if (!session) return;
+  openSaveTemplateModal({
+    type: 'list',
+    defaultName: session.name,
+    tasks: session.tasks.map(normalizeBraindumpTask),
+  });
+}
+
 function isPlannedList(listId) {
   return typeof listId === 'string' && listId.startsWith('planned:');
 }
@@ -1066,6 +1499,8 @@ function persist() {
     sessionHistory: state.sessionHistory,
     activeSessionRunId: state.activeSessionRunId,
     activeSessionStartedAt: state.activeSessionStartedAt,
+    taskTemplates: state.taskTemplates,
+    listTemplates: state.listTemplates,
   });
 }
 
@@ -1763,18 +2198,31 @@ function setupSessionHeaderDropZone(sessionBlock, listId, sessionId, isExpanded)
 
 function hideTaskContextMenu() {
   taskContextMenu.classList.add('hidden');
+  taskContextMenu.style.visibility = '';
   taskContextMenuTarget = null;
 }
 
-function showTaskContextMenu(e, listId, taskIndex) {
-  e.preventDefault();
-  taskContextMenuTarget = { listId, taskIndex };
-  taskContextMenu.classList.remove('hidden');
+function hideSessionContextMenu() {
+  sessionContextMenu.classList.add('hidden');
+  sessionContextMenu.style.visibility = '';
+  sessionContextMenuTarget = null;
+}
 
-  const menuRect = taskContextMenu.getBoundingClientRect();
+function hideAllContextMenus() {
+  hideTaskContextMenu();
+  hideSessionContextMenu();
+}
+
+function positionContextMenu(menuEl, clientX, clientY) {
+  menuEl.classList.remove('hidden');
+  menuEl.style.visibility = 'hidden';
+  menuEl.style.left = '0px';
+  menuEl.style.top = '0px';
+
+  const menuRect = menuEl.getBoundingClientRect();
   const padding = 8;
-  let x = e.clientX;
-  let y = e.clientY;
+  let x = clientX;
+  let y = clientY;
 
   if (x + menuRect.width > window.innerWidth - padding) {
     x = window.innerWidth - menuRect.width - padding;
@@ -1783,8 +2231,27 @@ function showTaskContextMenu(e, listId, taskIndex) {
     y = window.innerHeight - menuRect.height - padding;
   }
 
-  taskContextMenu.style.left = `${Math.max(padding, x)}px`;
-  taskContextMenu.style.top = `${Math.max(padding, y)}px`;
+  menuEl.style.left = `${Math.max(padding, x)}px`;
+  menuEl.style.top = `${Math.max(padding, y)}px`;
+  menuEl.style.visibility = 'visible';
+}
+
+function showTaskContextMenu(e, listId, taskIndex) {
+  e.preventDefault();
+  e.stopPropagation();
+  hideSessionContextMenu();
+  hideTemplateAutocomplete();
+  taskContextMenuTarget = { listId, taskIndex };
+  positionContextMenu(taskContextMenu, e.clientX, e.clientY);
+}
+
+function showSessionContextMenu(e, sessionId) {
+  e.preventDefault();
+  e.stopPropagation();
+  hideTaskContextMenu();
+  hideTemplateAutocomplete();
+  sessionContextMenuTarget = { sessionId };
+  positionContextMenu(sessionContextMenu, e.clientX, e.clientY);
 }
 
 function addAllFromSession(sessionId) {
@@ -2020,6 +2487,13 @@ function setupSessionAddTask(block, session) {
     const shift = e.shiftKey || e.getModifierState('Shift');
     if (shift && meta) return;
 
+    if (isSlashInput(textInput.value)) {
+      e.preventDefault();
+      e.stopPropagation();
+      applyTemplateFromInput(textInput, session.id, { toQueue: meta });
+      return;
+    }
+
     e.preventDefault();
     e.stopPropagation();
 
@@ -2031,8 +2505,40 @@ function setupSessionAddTask(block, session) {
     submitPlannedSessionTask(session.id, textInput.value, limitInput.value);
   });
 
+  textInput.addEventListener('input', () => {
+    updateTemplateAutocomplete(textInput, session.id);
+  });
+
   textInput.addEventListener('keydown', (e) => {
+    if (templateAutocompleteState?.inputEl === textInput && !templateAutocomplete.classList.contains('hidden')) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        e.stopPropagation();
+        moveTemplateAutocompleteHighlight(1);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        e.stopPropagation();
+        moveTemplateAutocompleteHighlight(-1);
+        return;
+      }
+      if (e.key === 'Enter' || e.code === 'NumpadEnter') {
+        const meta = e.metaKey || e.ctrlKey || e.getModifierState('Meta') || e.getModifierState('Control');
+        e.preventDefault();
+        e.stopPropagation();
+        applyTemplateFromInput(textInput, session.id, { toQueue: meta });
+        return;
+      }
+    }
+
     if (e.key === 'Escape') {
+      if (templateAutocompleteState?.inputEl === textInput && !templateAutocomplete.classList.contains('hidden')) {
+        e.preventDefault();
+        e.stopPropagation();
+        hideTemplateAutocomplete();
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       closeSessionAddForm(session.id);
@@ -2099,6 +2605,10 @@ function renderPlannedSessions() {
     header.addEventListener('click', (e) => {
       if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn, .session-send-to-queue-btn')) return;
       if (!isExpanded) expandSession(session.id);
+    });
+    header.addEventListener('contextmenu', (e) => {
+      if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn, .session-send-to-queue-btn')) return;
+      showSessionContextMenu(e, session.id);
     });
 
     const deleteBtn = block.querySelector('.planned-session-delete-btn');
@@ -2176,7 +2686,9 @@ function isSettingsUiOpen() {
   return !settingsMenu.classList.contains('hidden')
     || !shortcutsModal.classList.contains('hidden')
     || !dataModal.classList.contains('hidden')
-    || !historyModal.classList.contains('hidden');
+    || !historyModal.classList.contains('hidden')
+    || !templatesModal.classList.contains('hidden')
+    || !saveTemplateModal.classList.contains('hidden');
 }
 
 function formatRelativeBackupTime(timestamp) {
@@ -2264,7 +2776,8 @@ function hideSettingsMenu() {
 
 function toggleSettingsMenu() {
   if (settingsMenu.classList.contains('hidden')) {
-    hideTaskContextMenu();
+    hideAllContextMenus();
+    hideTemplateAutocomplete();
     showSettingsMenu();
   } else {
     hideSettingsMenu();
@@ -2405,6 +2918,288 @@ function handleHistoryListClick(event) {
   renderHistoryModal();
 }
 
+function renderTemplateEditor() {
+  if (!templateEditorState) return '';
+
+  if (templateEditorState.mode === 'task-new' || templateEditorState.mode === 'task-edit') {
+    const isEdit = templateEditorState.mode === 'task-edit';
+    const template = isEdit
+      ? state.taskTemplates.find((item) => item.id === templateEditorState.id)
+      : { name: '', text: '', limitMs: null };
+    if (isEdit && !template) return '';
+
+    return `
+      <div class="template-editor" data-editor="task">
+        <label class="template-editor-label" for="template-editor-task-name">Template name</label>
+        <input id="template-editor-task-name" class="template-editor-input" type="text" value="${escapeHtml(template.name)}" autocomplete="off" />
+        <label class="template-editor-label" for="template-editor-task-text">Task</label>
+        <input id="template-editor-task-text" class="template-editor-input" type="text" value="${escapeHtml(template.text)}" autocomplete="off" />
+        <label class="template-editor-label" for="template-editor-task-limit">Time limit</label>
+        <input id="template-editor-task-limit" class="template-editor-input template-editor-limit" type="text" value="${escapeHtml(formatLimitField(template.limitMs))}" placeholder="20m" autocomplete="off" />
+        <div class="template-editor-actions">
+          <button type="button" class="template-row-btn" data-template-editor-cancel>Cancel</button>
+          <button type="button" class="template-row-btn" data-template-editor-save-task>${isEdit ? 'Save' : 'Create'}</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (templateEditorState.mode === 'list-new' || templateEditorState.mode === 'list-edit') {
+    const isEdit = templateEditorState.mode === 'list-edit';
+    const template = isEdit
+      ? state.listTemplates.find((item) => item.id === templateEditorState.id)
+      : { name: '', tasks: [{ text: '', limitMs: null }] };
+    if (isEdit && !template) return '';
+    const tasks = isEdit ? template.tasks : templateEditorState.draftTasks || [{ text: '', limitMs: null }];
+
+    return `
+      <div class="template-editor" data-editor="list">
+        <label class="template-editor-label" for="template-editor-list-name">Template name</label>
+        <input id="template-editor-list-name" class="template-editor-input" type="text" value="${escapeHtml(template.name)}" autocomplete="off" />
+        <span class="template-editor-label">Tasks</span>
+        <div class="template-editor-task-list" id="template-editor-list-tasks">
+          ${tasks.map((task, index) => `
+            <div class="template-editor-row" data-task-row="${index}">
+              <input class="template-editor-input template-editor-task-text" type="text" value="${escapeHtml(task.text)}" placeholder="Task" autocomplete="off" />
+              <input class="template-editor-input template-editor-limit template-editor-task-limit" type="text" value="${escapeHtml(formatLimitField(task.limitMs))}" placeholder="20m" autocomplete="off" />
+              <button type="button" class="template-row-btn template-row-btn--danger" data-remove-task-row="${index}" aria-label="Remove task">×</button>
+            </div>
+          `).join('')}
+        </div>
+        <button type="button" class="templates-add-btn" data-add-task-row>+ Add task</button>
+        <div class="template-editor-actions">
+          <button type="button" class="template-row-btn" data-template-editor-cancel>Cancel</button>
+          <button type="button" class="template-row-btn" data-template-editor-save-list>${isEdit ? 'Save' : 'Create'}</button>
+        </div>
+      </div>
+    `;
+  }
+
+  return '';
+}
+
+function renderTemplatesModal() {
+  if (!templatesModalBody) return;
+
+  const editorHtml = renderTemplateEditor();
+
+  const taskRows = state.taskTemplates.map((template) => `
+    <div class="template-row" data-task-template-id="${escapeHtml(template.id)}">
+      <div class="template-row-main">
+        <div class="template-row-name">${escapeHtml(template.name)}</div>
+        <div class="template-row-preview">${escapeHtml(template.text)}${template.limitMs ? ` · ${escapeHtml(formatLimitField(template.limitMs))}` : ''}</div>
+      </div>
+      <div class="template-row-actions">
+        <button type="button" class="template-row-btn" data-edit-task-template="${escapeHtml(template.id)}">Edit</button>
+        <button type="button" class="template-row-btn template-row-btn--danger" data-delete-task-template="${escapeHtml(template.id)}">Delete</button>
+      </div>
+    </div>
+  `).join('');
+
+  const listRows = state.listTemplates.map((template) => `
+    <div class="template-row" data-list-template-id="${escapeHtml(template.id)}">
+      <div class="template-row-main">
+        <div class="template-row-name">${escapeHtml(template.name)}</div>
+        <div class="template-row-preview">${template.tasks.length} task${template.tasks.length === 1 ? '' : 's'}</div>
+      </div>
+      <div class="template-row-actions">
+        <button type="button" class="template-row-btn" data-edit-list-template="${escapeHtml(template.id)}">Edit</button>
+        <button type="button" class="template-row-btn template-row-btn--danger" data-delete-list-template="${escapeHtml(template.id)}">Delete</button>
+      </div>
+    </div>
+  `).join('');
+
+  templatesModalBody.innerHTML = `
+    ${editorHtml}
+    <section class="templates-section">
+      <h4 class="templates-section-title">Task templates</h4>
+      <div class="templates-list">
+        ${taskRows || '<p class="templates-empty">No task templates yet.</p>'}
+      </div>
+      ${templateEditorState ? '' : '<button type="button" class="templates-add-btn" data-new-task-template>+ New task template</button>'}
+    </section>
+    <section class="templates-section">
+      <h4 class="templates-section-title">List templates</h4>
+      <div class="templates-list">
+        ${listRows || '<p class="templates-empty">No list templates yet.</p>'}
+      </div>
+      ${templateEditorState ? '' : '<button type="button" class="templates-add-btn" data-new-list-template>+ New list template</button>'}
+    </section>
+  `;
+}
+
+function openTemplatesModal() {
+  hideSettingsMenu();
+  templateEditorState = null;
+  renderTemplatesModal();
+  templatesModal.classList.remove('hidden');
+}
+
+function closeTemplatesModal() {
+  templatesModal.classList.add('hidden');
+  templateEditorState = null;
+}
+
+function collectListEditorTasks() {
+  const rows = templatesModalBody?.querySelectorAll('[data-task-row]') || [];
+  return [...rows].map((row) => {
+    const text = row.querySelector('.template-editor-task-text')?.value || '';
+    const limitValue = row.querySelector('.template-editor-task-limit')?.value || '';
+    const parsed = parseTaskInput(text, limitValue);
+    return { text: parsed.text, limitMs: parsed.limitMs };
+  }).filter((task) => task.text);
+}
+
+function handleTemplatesModalClick(event) {
+  const target = event.target.closest('[data-new-task-template], [data-new-list-template], [data-edit-task-template], [data-edit-list-template], [data-delete-task-template], [data-delete-list-template], [data-template-editor-cancel], [data-template-editor-save-task], [data-template-editor-save-list], [data-add-task-row], [data-remove-task-row]');
+  if (!target) return;
+
+  if (target.matches('[data-new-task-template]')) {
+    templateEditorState = { mode: 'task-new' };
+    renderTemplatesModal();
+    templatesModalBody.querySelector('#template-editor-task-name')?.focus();
+    return;
+  }
+
+  if (target.matches('[data-new-list-template]')) {
+    templateEditorState = { mode: 'list-new', draftTasks: [{ text: '', limitMs: null }] };
+    renderTemplatesModal();
+    templatesModalBody.querySelector('#template-editor-list-name')?.focus();
+    return;
+  }
+
+  if (target.matches('[data-edit-task-template]')) {
+    templateEditorState = { mode: 'task-edit', id: target.dataset.editTaskTemplate };
+    renderTemplatesModal();
+    templatesModalBody.querySelector('#template-editor-task-name')?.focus();
+    return;
+  }
+
+  if (target.matches('[data-edit-list-template]')) {
+    templateEditorState = { mode: 'list-edit', id: target.dataset.editListTemplate };
+    renderTemplatesModal();
+    templatesModalBody.querySelector('#template-editor-list-name')?.focus();
+    return;
+  }
+
+  if (target.matches('[data-delete-task-template]')) {
+    const template = state.taskTemplates.find((item) => item.id === target.dataset.deleteTaskTemplate);
+    if (template && window.confirm(`Delete task template "${template.name}"?`)) {
+      deleteTaskTemplate(template.id);
+      renderTemplatesModal();
+    }
+    return;
+  }
+
+  if (target.matches('[data-delete-list-template]')) {
+    const template = state.listTemplates.find((item) => item.id === target.dataset.deleteListTemplate);
+    if (template && window.confirm(`Delete list template "${template.name}"?`)) {
+      deleteListTemplate(template.id);
+      renderTemplatesModal();
+    }
+    return;
+  }
+
+  if (target.matches('[data-template-editor-cancel]')) {
+    templateEditorState = null;
+    renderTemplatesModal();
+    return;
+  }
+
+  if (target.matches('[data-add-task-row]')) {
+    const listEl = templatesModalBody.querySelector('#template-editor-list-tasks');
+    if (!listEl) return;
+    const index = listEl.querySelectorAll('[data-task-row]').length;
+    const row = document.createElement('div');
+    row.className = 'template-editor-row';
+    row.dataset.taskRow = String(index);
+    row.innerHTML = `
+      <input class="template-editor-input template-editor-task-text" type="text" value="" placeholder="Task" autocomplete="off" />
+      <input class="template-editor-input template-editor-limit template-editor-task-limit" type="text" value="" placeholder="20m" autocomplete="off" />
+      <button type="button" class="template-row-btn template-row-btn--danger" data-remove-task-row="${index}" aria-label="Remove task">×</button>
+    `;
+    listEl.appendChild(row);
+    row.querySelector('.template-editor-task-text')?.focus();
+    return;
+  }
+
+  if (target.matches('[data-remove-task-row]')) {
+    const row = target.closest('[data-task-row]');
+    row?.remove();
+    return;
+  }
+
+  if (target.matches('[data-template-editor-save-task]')) {
+    const name = normalizeTemplateName(templatesModalBody.querySelector('#template-editor-task-name')?.value);
+    const text = templatesModalBody.querySelector('#template-editor-task-text')?.value || '';
+    const limitValue = templatesModalBody.querySelector('#template-editor-task-limit')?.value || '';
+    const parsed = parseTaskInput(text, limitValue);
+    const excludeId = templateEditorState?.mode === 'task-edit' ? templateEditorState.id : null;
+
+    if (!name) {
+      window.alert('Enter a template name.');
+      return;
+    }
+    if (!parsed.text) {
+      window.alert('Enter task text.');
+      return;
+    }
+    if (isTaskTemplateNameTaken(name, excludeId)) {
+      window.alert('A task template with that name already exists.');
+      return;
+    }
+
+    if (templateEditorState?.mode === 'task-edit') {
+      updateTaskTemplate(templateEditorState.id, name, parsed.text, parsed.limitMs);
+    } else {
+      createTaskTemplate(name, parsed.text, parsed.limitMs);
+    }
+    templateEditorState = null;
+    renderTemplatesModal();
+    return;
+  }
+
+  if (target.matches('[data-template-editor-save-list]')) {
+    const name = normalizeTemplateName(templatesModalBody.querySelector('#template-editor-list-name')?.value);
+    const tasks = collectListEditorTasks();
+    const excludeId = templateEditorState?.mode === 'list-edit' ? templateEditorState.id : null;
+
+    if (!name) {
+      window.alert('Enter a template name.');
+      return;
+    }
+    if (tasks.length === 0) {
+      window.alert('Add at least one task.');
+      return;
+    }
+    if (isListTemplateNameTaken(name, excludeId)) {
+      window.alert('A list template with that name already exists.');
+      return;
+    }
+
+    if (templateEditorState?.mode === 'list-edit') {
+      updateListTemplate(templateEditorState.id, name, tasks);
+    } else {
+      createListTemplate(name, tasks);
+    }
+    templateEditorState = null;
+    renderTemplatesModal();
+  }
+}
+
+function handleTemplateAutocompleteClick(event) {
+  const item = event.target.closest('.template-autocomplete-item');
+  if (!item || !templateAutocompleteState) return;
+  const index = Number(item.dataset.matchIndex);
+  const match = templateAutocompleteState.matches[index];
+  if (!match) return;
+  const { sessionId, inputEl } = templateAutocompleteState;
+  applyTemplateMatch(match, sessionId, { toQueue: false });
+  inputEl.value = '';
+  hideTemplateAutocomplete();
+  requestAnimationFrame(() => inputEl.focus());
+}
+
 function applySavedData(saved) {
   state.sessionTasks = (saved.sessionTasks || saved.tasks || []).map(normalizeSessionTask);
   loadPlannedSessionsFromSaved(saved);
@@ -2429,6 +3224,12 @@ function applySavedData(saved) {
     : [];
   state.activeSessionRunId = saved.activeSessionRunId || null;
   state.activeSessionStartedAt = saved.activeSessionStartedAt || null;
+  state.taskTemplates = Array.isArray(saved.taskTemplates)
+    ? saved.taskTemplates.map(normalizeTaskTemplate)
+    : [];
+  state.listTemplates = Array.isArray(saved.listTemplates)
+    ? saved.listTemplates.map(normalizeListTemplate)
+    : [];
 
   if (saved.timerBarSize === 'hidden') {
     state.timerBarSize = state.timerBarSizeBeforeHide;
@@ -3020,12 +3821,28 @@ settingsBtn.addEventListener('click', (e) => {
   toggleSettingsMenu();
 });
 settingsDataBtn.addEventListener('click', openDataModal);
+settingsTemplatesBtn.addEventListener('click', openTemplatesModal);
 settingsHistoryBtn.addEventListener('click', () => openHistoryModal());
 settingsShortcutsBtn.addEventListener('click', openShortcutsModal);
 shortcutsCloseBtn.addEventListener('click', closeShortcutsModal);
 dataCloseBtn.addEventListener('click', closeDataModal);
 historyCloseBtn.addEventListener('click', closeHistoryModal);
 historyList.addEventListener('click', handleHistoryListClick);
+templatesCloseBtn.addEventListener('click', closeTemplatesModal);
+templatesModalBody.addEventListener('click', handleTemplatesModalClick);
+templatesModal.addEventListener('click', (e) => {
+  if (e.target === templatesModal) closeTemplatesModal();
+});
+saveTemplateConfirmBtn.addEventListener('click', confirmSaveTemplateModal);
+saveTemplateCancelBtn.addEventListener('click', closeSaveTemplateModal);
+saveTemplateModal.addEventListener('click', (e) => {
+  if (e.target === saveTemplateModal) closeSaveTemplateModal();
+});
+saveTemplateNameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') confirmSaveTemplateModal();
+  if (e.key === 'Escape') closeSaveTemplateModal();
+});
+templateAutocomplete.addEventListener('click', handleTemplateAutocompleteClick);
 dataBackupNowBtn.addEventListener('click', handleBackupNow);
 dataRestoreBtn.addEventListener('click', handleRestoreFromBackup);
 dataOpenFolderBtn.addEventListener('click', handleOpenBackupFolder);
@@ -3050,6 +3867,20 @@ deleteSessionModal.addEventListener('click', (e) => {
   if (e.target === deleteSessionModal) closeDeleteSessionModal();
 });
 
+taskContextDuplicateBtn.addEventListener('click', () => {
+  if (!taskContextMenuTarget) return;
+  const { listId, taskIndex } = taskContextMenuTarget;
+  hideTaskContextMenu();
+  duplicateTask(listId, taskIndex);
+});
+
+taskContextSaveTemplateBtn.addEventListener('click', () => {
+  if (!taskContextMenuTarget) return;
+  const { listId, taskIndex } = taskContextMenuTarget;
+  hideTaskContextMenu();
+  saveTaskAsTemplateFromContext(listId, taskIndex);
+});
+
 taskContextDeleteBtn.addEventListener('click', () => {
   if (!taskContextMenuTarget) return;
   const { listId, taskIndex } = taskContextMenuTarget;
@@ -3057,10 +3888,26 @@ taskContextDeleteBtn.addEventListener('click', () => {
   removeTask(listId, taskIndex);
 });
 
+sessionContextSaveTemplateBtn.addEventListener('click', () => {
+  if (!sessionContextMenuTarget) return;
+  const { sessionId } = sessionContextMenuTarget;
+  hideSessionContextMenu();
+  saveSessionAsTemplateFromContext(sessionId);
+});
+
 document.addEventListener('click', (e) => {
   if (!taskContextMenu.classList.contains('hidden')
     && !taskContextMenu.contains(e.target)) {
     hideTaskContextMenu();
+  }
+  if (!sessionContextMenu.classList.contains('hidden')
+    && !sessionContextMenu.contains(e.target)) {
+    hideSessionContextMenu();
+  }
+  if (!templateAutocomplete.classList.contains('hidden')
+    && !templateAutocomplete.contains(e.target)
+    && !e.target.closest('.session-add-task-input')) {
+    hideTemplateAutocomplete();
   }
   if (!settingsMenu.classList.contains('hidden')
     && !settingsMenu.contains(e.target)
@@ -3070,6 +3917,7 @@ document.addEventListener('click', (e) => {
   if (state.mode === 'edit'
     && !e.target.closest('.task-item')
     && !e.target.closest('#task-context-menu')
+    && !e.target.closest('#session-context-menu')
     && e.target.closest('#edit-view')) {
     clearSelection();
   }
@@ -3077,7 +3925,21 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    hideTaskContextMenu();
+    hideAllContextMenus();
+    hideTemplateAutocomplete();
+    if (!saveTemplateModal.classList.contains('hidden')) {
+      closeSaveTemplateModal();
+      return;
+    }
+    if (!templatesModal.classList.contains('hidden')) {
+      if (templateEditorState) {
+        templateEditorState = null;
+        renderTemplatesModal();
+        return;
+      }
+      closeTemplatesModal();
+      return;
+    }
     if (!shortcutsModal.classList.contains('hidden')) {
       closeShortcutsModal();
       return;
@@ -3113,9 +3975,15 @@ document.addEventListener('keydown', (e) => {
 });
 
 document.addEventListener('contextmenu', (e) => {
-  if (!taskContextMenu.classList.contains('hidden')
-    && !taskContextMenu.contains(e.target)) {
+  const onTask = e.target.closest('.task-item');
+  const onSessionHeader = e.target.closest('.planned-session-header');
+  if (onTask || onSessionHeader) return;
+
+  if (!taskContextMenu.classList.contains('hidden')) {
     hideTaskContextMenu();
+  }
+  if (!sessionContextMenu.classList.contains('hidden')) {
+    hideSessionContextMenu();
   }
 });
 
