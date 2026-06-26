@@ -1957,6 +1957,56 @@ body.mode-edit #edit-view.view {
   display: none;
 }
 
+.fullscreen-task-header {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.fullscreen-task-chevron {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  margin-top: 6px;
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: color 0.15s;
+  -webkit-app-region: no-drag;
+}
+
+.fullscreen-task-chevron svg {
+  transition: transform 0.2s ease;
+}
+
+.fullscreen-task-chevron--open svg {
+  transform: rotate(180deg);
+}
+
+.session-drawer--fullscreen-panel {
+  display: none;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  box-sizing: border-box;
+}
+
+.session-drawer--fullscreen-panel:not(.hidden) {
+  display: block;
+}
+
+.session-drawer--fullscreen-panel .session-drawer-list {
+  max-height: min(240px, 30vh);
+}
+
 .session-drawer-list {
   list-style: none;
   margin: 0;
@@ -2521,14 +2571,23 @@ body.mode-focus.timer-bar-size-fullscreen .timer-task-zone {
   pointer-events: none;
 }
 
-body.mode-focus.timer-bar-size-fullscreen .current-task {
+body.mode-focus.timer-bar-size-fullscreen .fullscreen-task-header {
   position: absolute;
   top: calc(var(--fullscreen-timer-anchor) + clamp(70px, 10vh, 120px));
   left: 50%;
   transform: translateX(-50%);
-  flex: none;
   width: min(80%, 720px);
   max-width: 80%;
+  pointer-events: auto;
+  z-index: 2;
+}
+
+body.mode-focus.timer-bar-size-fullscreen .fullscreen-task-header .current-task {
+  position: static;
+  transform: none;
+  flex: none;
+  width: 100%;
+  max-width: none;
   margin: 0;
   padding: 0;
   text-align: center;
@@ -2540,6 +2599,10 @@ body.mode-focus.timer-bar-size-fullscreen .current-task {
   pointer-events: none;
 }
 
+body.mode-focus.timer-bar-size-fullscreen .fullscreen-task-chevron:not(.hidden) {
+  display: flex;
+}
+
 body.mode-focus.timer-bar-size-fullscreen .timer-actions {
   position: relative;
   inset: auto;
@@ -2549,6 +2612,7 @@ body.mode-focus.timer-bar-size-fullscreen .timer-actions {
   justify-content: center;
   gap: clamp(8px, 1.2vw, 14px);
   margin-top: auto;
+  margin-bottom: 30px;
   padding-top: clamp(24px, 4vh, 48px);
   transition: opacity 0.25s ease;
 }

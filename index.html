@@ -16,10 +16,11 @@
       <div class="edit-header-row">
         <div class="edit-header-actions">
           <button id="plan-session-btn" class="plan-session-btn plan-session-btn--header" type="button">+ Create New Session</button>
-          <button id="settings-btn" class="settings-btn icon-btn" type="button" aria-label="Settings" aria-haspopup="true" aria-expanded="false">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
+          <button id="settings-btn" class="settings-btn icon-btn" type="button" aria-label="Menu" aria-haspopup="true" aria-expanded="false">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <line x1="4" y1="7" x2="20" y2="7"/>
+            <line x1="4" y1="12" x2="20" y2="12"/>
+            <line x1="4" y1="17" x2="20" y2="17"/>
           </svg>
           </button>
         </div>
@@ -154,9 +155,6 @@
   <!-- Focus Mode -->
   <div id="focus-view" class="view hidden">
     <div class="focus-stack" id="focus-stack">
-      <div id="session-drawer" class="session-drawer" aria-hidden="true">
-        <ul id="session-drawer-list" class="session-drawer-list"></ul>
-      </div>
       <div class="timer-bar" id="timer-bar">
         <div class="timer-drag-handle" aria-hidden="true" title="Drag to move">
           <svg class="timer-drag-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -173,7 +171,17 @@
           <button id="timer-display" class="timer-display" type="button" title="Switch between task and session timer">0:00</button>
         </div>
       <div class="timer-task-zone" id="timer-task-zone">
-        <span id="current-task" class="current-task"></span>
+        <div class="fullscreen-task-header">
+          <span id="current-task" class="current-task"></span>
+          <button id="fullscreen-task-toggle" type="button" class="fullscreen-task-chevron hidden" aria-expanded="false" aria-label="Show session tasks">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+          <div id="session-drawer" class="session-drawer session-drawer--fullscreen-panel hidden" aria-hidden="true">
+            <ul id="session-drawer-list" class="session-drawer-list"></ul>
+          </div>
+        </div>
         <div id="timer-actions" class="timer-actions">
           <button id="timer-size-btn" class="icon-btn icon-size" type="button" title="Smaller timer bar" aria-label="Make timer bar smaller">
             <svg class="size-icon-small" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -253,14 +261,6 @@
         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
       </svg>
       <span>Duplicate</span>
-    </button>
-    <button type="button" id="task-context-save-template" class="task-context-menu-item" role="menuitem">
-      <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-        <rect x="8" y="2" width="8" height="4" rx="1"/>
-        <path d="M9 14h6M9 18h6M9 10h6"/>
-      </svg>
-      <span>Save as Template</span>
     </button>
     <button type="button" id="task-context-delete" class="task-context-menu-item task-context-menu-item--danger" role="menuitem">
       <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">

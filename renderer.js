@@ -30,8 +30,8 @@ const state = {
   sessionHistory: [],
   activeSessionRunId: null,
   activeSessionStartedAt: null,
-  taskTemplates: [],
   listTemplates: [],
+  fullscreenTaskPanelOpen: false,
 };
 
 const editView = document.getElementById('edit-view');
@@ -96,8 +96,8 @@ const historyList = document.getElementById('history-list');
 const historyCloseBtn = document.getElementById('history-close-btn');
 const taskContextMenu = document.getElementById('task-context-menu');
 const taskContextDuplicateBtn = document.getElementById('task-context-duplicate');
-const taskContextSaveTemplateBtn = document.getElementById('task-context-save-template');
 const taskContextDeleteBtn = document.getElementById('task-context-delete');
+const fullscreenTaskToggleBtn = document.getElementById('fullscreen-task-toggle');
 const sessionContextMenu = document.getElementById('session-context-menu');
 const sessionContextSaveTemplateBtn = document.getElementById('session-context-save-template');
 const templateAutocomplete = document.getElementById('template-autocomplete');
@@ -442,13 +442,16 @@ function toggleTimerBarSize() {
   } else if (state.timerBarSize === 'small') {
     state.timerBarSize = 'fullscreen';
     closeSessionDrawer({ immediate: true });
+    state.fullscreenTaskPanelOpen = false;
   } else {
     state.timerBarSize = 'normal';
+    state.fullscreenTaskPanelOpen = false;
   }
   invalidateFocusBarWidthCache();
   applyTimerBarSizeClass();
   updateTimerBarControlLabels();
   applyFocusWindowSizeImmediate();
+  updateFullscreenTaskPanel();
   persist();
 }
 
@@ -578,6 +581,42 @@ if (sessionDrawerList) {
     const index = parseInt(li.dataset.taskIndex, 10);
     if (Number.isInteger(index)) switchToTask(index);
   });
+}
+
+function closeFullscreenTaskPanel() {
+  state.fullscreenTaskPanelOpen = false;
+  updateFullscreenTaskPanel();
+}
+
+function toggleFullscreenTaskPanel() {
+  if (!isTimerBarFullscreen() || state.mode !== 'focus') return;
+  state.fullscreenTaskPanelOpen = !state.fullscreenTaskPanelOpen;
+  updateFullscreenTaskPanel();
+}
+
+function updateFullscreenTaskPanel() {
+  if (!fullscreenTaskToggleBtn || !sessionDrawer) return;
+
+  const inFullscreen = isTimerBarFullscreen() && state.mode === 'focus';
+  fullscreenTaskToggleBtn.classList.toggle('hidden', !inFullscreen);
+
+  if (!inFullscreen) {
+    state.fullscreenTaskPanelOpen = false;
+    sessionDrawer.classList.add('hidden');
+    sessionDrawer.setAttribute('aria-hidden', 'true');
+    fullscreenTaskToggleBtn.setAttribute('aria-expanded', 'false');
+    fullscreenTaskToggleBtn.classList.remove('fullscreen-task-chevron--open');
+    return;
+  }
+
+  renderSessionDrawer();
+
+  const isOpen = state.fullscreenTaskPanelOpen;
+  sessionDrawer.classList.toggle('hidden', !isOpen);
+  sessionDrawer.setAttribute('aria-hidden', String(!isOpen));
+  fullscreenTaskToggleBtn.setAttribute('aria-expanded', String(isOpen));
+  fullscreenTaskToggleBtn.classList.toggle('fullscreen-task-chevron--open', isOpen);
+  fullscreenTaskToggleBtn.setAttribute('aria-label', isOpen ? 'Hide session tasks' : 'Show session tasks');
 }
 
 async function openSessionDrawer() {
@@ -803,18 +842,6 @@ function normalizePlannedSession(session) {
   };
 }
 
-function normalizeTaskTemplate(template) {
-  const now = Date.now();
-  return {
-    id: template.id || crypto.randomUUID(),
-    name: template.name || 'Task template',
-    text: template.text || '',
-    limitMs: template.limitMs ?? null,
-    createdAt: template.createdAt || now,
-    updatedAt: template.updatedAt || template.createdAt || now,
-  };
-}
-
 function normalizeListTemplate(template) {
   const now = Date.now();
   return {
@@ -832,14 +859,6 @@ function normalizeTemplateName(name) {
 
 function templateNamesMatch(a, b) {
   return normalizeTemplateName(a).toLowerCase() === normalizeTemplateName(b).toLowerCase();
-}
-
-function isTaskTemplateNameTaken(name, excludeId = null) {
-  const normalized = normalizeTemplateName(name);
-  if (!normalized) return false;
-  return state.taskTemplates.some(
-    (template) => template.id !== excludeId && templateNamesMatch(template.name, normalized),
-  );
 }
 
 function isListTemplateNameTaken(name, excludeId = null) {
@@ -864,23 +883,10 @@ function findTemplatesMatchingQuery(query) {
   const normalized = (query || '').trim().toLowerCase();
   const matches = [];
 
-  state.taskTemplates.forEach((template) => {
-    if (!normalized || template.name.toLowerCase().includes(normalized)) {
-      matches.push({
-        type: 'task',
-        id: template.id,
-        name: template.name,
-        preview: template.text,
-        template,
-      });
-    }
-  });
-
   state.listTemplates.forEach((template) => {
     if (!normalized || template.name.toLowerCase().includes(normalized)) {
       const count = template.tasks.length;
       matches.push({
-        type: 'list',
         id: template.id,
         name: template.name,
         preview: count === 1 ? '1 task' : `${count} tasks`,
@@ -927,7 +933,6 @@ function renderTemplateAutocomplete() {
       aria-selected="${index === highlightIndex}"
     >
       <span class="template-autocomplete-name">${escapeHtml(match.name)}</span>
-      <span class="template-autocomplete-badge">${match.type === 'list' ? 'List' : 'Task'}</span>
       <span class="template-autocomplete-preview">${escapeHtml(match.preview)}</span>
     </button>
   `).join('');
@@ -1026,22 +1031,9 @@ function insertTasksIntoQueue(sessionId, tasks) {
   renderEditView();
 }
 
-function applyTaskTemplate(template, sessionId, { toQueue = false } = {}) {
-  const payload = { text: template.text, limitMs: template.limitMs ?? null };
-  if (toQueue) insertTaskIntoQueue(sessionId, payload);
-  else insertTaskIntoSession(sessionId, payload);
-}
-
-function applyListTemplate(template, sessionId, { toQueue = false } = {}) {
-  const tasks = template.tasks.map(normalizeBraindumpTask);
-  if (toQueue) insertTasksIntoQueue(sessionId, tasks);
-  else insertTasksIntoSession(sessionId, tasks);
-}
-
 function applyTemplateMatch(match, sessionId, { toQueue = false } = {}) {
   if (!match) return;
-  if (match.type === 'task') applyTaskTemplate(match.template, sessionId, { toQueue });
-  else applyListTemplate(match.template, sessionId, { toQueue });
+  applyListTemplate(match.template, sessionId, { toQueue });
 }
 
 function applyTemplateFromInput(inputEl, sessionId, { toQueue = false, match = null } = {}) {
@@ -1066,19 +1058,10 @@ function applyTemplateFromInput(inputEl, sessionId, { toQueue = false, match = n
   return true;
 }
 
-function createTaskTemplate(name, text, limitMs) {
-  const now = Date.now();
-  const template = normalizeTaskTemplate({
-    id: crypto.randomUUID(),
-    name: normalizeTemplateName(name),
-    text: text.trim(),
-    limitMs: limitMs ?? null,
-    createdAt: now,
-    updatedAt: now,
-  });
-  state.taskTemplates.unshift(template);
-  persist();
-  return template;
+function applyListTemplate(template, sessionId, { toQueue = false } = {}) {
+  const tasks = template.tasks.map(normalizeBraindumpTask);
+  if (toQueue) insertTasksIntoQueue(sessionId, tasks);
+  else insertTasksIntoSession(sessionId, tasks);
 }
 
 function createListTemplate(name, tasks) {
@@ -1095,17 +1078,6 @@ function createListTemplate(name, tasks) {
   return template;
 }
 
-function updateTaskTemplate(id, name, text, limitMs) {
-  const template = state.taskTemplates.find((item) => item.id === id);
-  if (!template) return false;
-  template.name = normalizeTemplateName(name);
-  template.text = text.trim();
-  template.limitMs = limitMs ?? null;
-  template.updatedAt = Date.now();
-  persist();
-  return true;
-}
-
 function updateListTemplate(id, name, tasks) {
   const template = state.listTemplates.find((item) => item.id === id);
   if (!template) return false;
@@ -1114,11 +1086,6 @@ function updateListTemplate(id, name, tasks) {
   template.updatedAt = Date.now();
   persist();
   return true;
-}
-
-function deleteTaskTemplate(id) {
-  state.taskTemplates = state.taskTemplates.filter((item) => item.id !== id);
-  persist();
 }
 
 function deleteListTemplate(id) {
@@ -1140,9 +1107,7 @@ function duplicateTask(listId, taskIndex) {
 
 function openSaveTemplateModal(pending) {
   pendingSaveTemplate = pending;
-  saveTemplateMessage.textContent = pending.type === 'list'
-    ? 'Save this session as a reusable list template.'
-    : 'Save this task as a reusable template.';
+  saveTemplateMessage.textContent = 'Save this session as a reusable list template.';
   saveTemplateNameInput.value = pending.defaultName || '';
   saveTemplateError.classList.add('hidden');
   saveTemplateError.textContent = '';
@@ -1169,47 +1134,26 @@ function confirmSaveTemplateModal() {
     return;
   }
 
-  if (pendingSaveTemplate.type === 'task') {
-    if (isTaskTemplateNameTaken(name)) {
-      saveTemplateError.textContent = 'A task template with that name already exists.';
-      saveTemplateError.classList.remove('hidden');
-      return;
-    }
-    createTaskTemplate(name, pendingSaveTemplate.text, pendingSaveTemplate.limitMs);
-  } else {
-    if (isListTemplateNameTaken(name)) {
-      saveTemplateError.textContent = 'A list template with that name already exists.';
-      saveTemplateError.classList.remove('hidden');
-      return;
-    }
-    if (!pendingSaveTemplate.tasks || pendingSaveTemplate.tasks.length === 0) {
-      saveTemplateError.textContent = 'Add at least one task before saving a list template.';
-      saveTemplateError.classList.remove('hidden');
-      return;
-    }
-    createListTemplate(name, pendingSaveTemplate.tasks);
+  if (isListTemplateNameTaken(name)) {
+    saveTemplateError.textContent = 'A list template with that name already exists.';
+    saveTemplateError.classList.remove('hidden');
+    return;
   }
+  if (!pendingSaveTemplate.tasks || pendingSaveTemplate.tasks.length === 0) {
+    saveTemplateError.textContent = 'Add at least one task before saving a list template.';
+    saveTemplateError.classList.remove('hidden');
+    return;
+  }
+  createListTemplate(name, pendingSaveTemplate.tasks);
 
   closeSaveTemplateModal();
   if (!templatesModal.classList.contains('hidden')) renderTemplatesModal();
-}
-
-function saveTaskAsTemplateFromContext(listId, taskIndex) {
-  const task = getTasksForList(listId)[taskIndex];
-  if (!task) return;
-  openSaveTemplateModal({
-    type: 'task',
-    defaultName: task.text,
-    text: task.text,
-    limitMs: task.limitMs ?? null,
-  });
 }
 
 function saveSessionAsTemplateFromContext(sessionId) {
   const session = getPlannedSession(sessionId);
   if (!session) return;
   openSaveTemplateModal({
-    type: 'list',
     defaultName: session.name,
     tasks: session.tasks.map(normalizeBraindumpTask),
   });
@@ -1499,7 +1443,6 @@ function persist() {
     sessionHistory: state.sessionHistory,
     activeSessionRunId: state.activeSessionRunId,
     activeSessionStartedAt: state.activeSessionStartedAt,
-    taskTemplates: state.taskTemplates,
     listTemplates: state.listTemplates,
   });
 }
@@ -1526,6 +1469,7 @@ function showView(mode) {
     applyTimerBarSizeClass();
     window.slashIt.setWindowMode(mode);
     closeSessionDrawer({ immediate: true });
+    updateFullscreenTaskPanel();
   } else {
     applyTimerBarSizeClass();
     updateTimerBarControlLabels();
@@ -2921,29 +2865,6 @@ function handleHistoryListClick(event) {
 function renderTemplateEditor() {
   if (!templateEditorState) return '';
 
-  if (templateEditorState.mode === 'task-new' || templateEditorState.mode === 'task-edit') {
-    const isEdit = templateEditorState.mode === 'task-edit';
-    const template = isEdit
-      ? state.taskTemplates.find((item) => item.id === templateEditorState.id)
-      : { name: '', text: '', limitMs: null };
-    if (isEdit && !template) return '';
-
-    return `
-      <div class="template-editor" data-editor="task">
-        <label class="template-editor-label" for="template-editor-task-name">Template name</label>
-        <input id="template-editor-task-name" class="template-editor-input" type="text" value="${escapeHtml(template.name)}" autocomplete="off" />
-        <label class="template-editor-label" for="template-editor-task-text">Task</label>
-        <input id="template-editor-task-text" class="template-editor-input" type="text" value="${escapeHtml(template.text)}" autocomplete="off" />
-        <label class="template-editor-label" for="template-editor-task-limit">Time limit</label>
-        <input id="template-editor-task-limit" class="template-editor-input template-editor-limit" type="text" value="${escapeHtml(formatLimitField(template.limitMs))}" placeholder="20m" autocomplete="off" />
-        <div class="template-editor-actions">
-          <button type="button" class="template-row-btn" data-template-editor-cancel>Cancel</button>
-          <button type="button" class="template-row-btn" data-template-editor-save-task>${isEdit ? 'Save' : 'Create'}</button>
-        </div>
-      </div>
-    `;
-  }
-
   if (templateEditorState.mode === 'list-new' || templateEditorState.mode === 'list-edit') {
     const isEdit = templateEditorState.mode === 'list-edit';
     const template = isEdit
@@ -2978,23 +2899,52 @@ function renderTemplateEditor() {
   return '';
 }
 
+function appendListTemplateEditorRow(listEl, { focus = true } = {}) {
+  if (!listEl) return null;
+  const index = listEl.querySelectorAll('[data-task-row]').length;
+  const row = document.createElement('div');
+  row.className = 'template-editor-row';
+  row.dataset.taskRow = String(index);
+  row.innerHTML = `
+    <input class="template-editor-input template-editor-task-text" type="text" value="" placeholder="Task" autocomplete="off" />
+    <input class="template-editor-input template-editor-limit template-editor-task-limit" type="text" value="" placeholder="20m" autocomplete="off" />
+    <button type="button" class="template-row-btn template-row-btn--danger" data-remove-task-row="${index}" aria-label="Remove task">×</button>
+  `;
+  listEl.appendChild(row);
+  const textInput = row.querySelector('.template-editor-task-text');
+  if (focus && textInput) textInput.focus();
+  return row;
+}
+
+function handleListTemplateEditorKeydown(e) {
+  if (e.key !== 'Enter' && e.code !== 'NumpadEnter') return;
+
+  const target = e.target;
+  if (!target.matches('.template-editor-task-text, .template-editor-task-limit')) return;
+
+  const row = target.closest('[data-task-row]');
+  if (!row) return;
+
+  const text = row.querySelector('.template-editor-task-text')?.value?.trim();
+  if (!text) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  const listEl = row.closest('#template-editor-list-tasks');
+  appendListTemplateEditorRow(listEl, { focus: true });
+}
+
+function bindListTemplateEditorKeyboard() {
+  const listEl = templatesModalBody?.querySelector('#template-editor-list-tasks');
+  if (!listEl) return;
+  listEl.addEventListener('keydown', handleListTemplateEditorKeydown, true);
+}
+
 function renderTemplatesModal() {
   if (!templatesModalBody) return;
 
   const editorHtml = renderTemplateEditor();
-
-  const taskRows = state.taskTemplates.map((template) => `
-    <div class="template-row" data-task-template-id="${escapeHtml(template.id)}">
-      <div class="template-row-main">
-        <div class="template-row-name">${escapeHtml(template.name)}</div>
-        <div class="template-row-preview">${escapeHtml(template.text)}${template.limitMs ? ` · ${escapeHtml(formatLimitField(template.limitMs))}` : ''}</div>
-      </div>
-      <div class="template-row-actions">
-        <button type="button" class="template-row-btn" data-edit-task-template="${escapeHtml(template.id)}">Edit</button>
-        <button type="button" class="template-row-btn template-row-btn--danger" data-delete-task-template="${escapeHtml(template.id)}">Delete</button>
-      </div>
-    </div>
-  `).join('');
 
   const listRows = state.listTemplates.map((template) => `
     <div class="template-row" data-list-template-id="${escapeHtml(template.id)}">
@@ -3012,13 +2962,6 @@ function renderTemplatesModal() {
   templatesModalBody.innerHTML = `
     ${editorHtml}
     <section class="templates-section">
-      <h4 class="templates-section-title">Task templates</h4>
-      <div class="templates-list">
-        ${taskRows || '<p class="templates-empty">No task templates yet.</p>'}
-      </div>
-      ${templateEditorState ? '' : '<button type="button" class="templates-add-btn" data-new-task-template>+ New task template</button>'}
-    </section>
-    <section class="templates-section">
       <h4 class="templates-section-title">List templates</h4>
       <div class="templates-list">
         ${listRows || '<p class="templates-empty">No list templates yet.</p>'}
@@ -3026,6 +2969,10 @@ function renderTemplatesModal() {
       ${templateEditorState ? '' : '<button type="button" class="templates-add-btn" data-new-list-template>+ New list template</button>'}
     </section>
   `;
+
+  if (templateEditorState?.mode === 'list-new' || templateEditorState?.mode === 'list-edit') {
+    bindListTemplateEditorKeyboard();
+  }
 }
 
 function openTemplatesModal() {
@@ -3051,15 +2998,8 @@ function collectListEditorTasks() {
 }
 
 function handleTemplatesModalClick(event) {
-  const target = event.target.closest('[data-new-task-template], [data-new-list-template], [data-edit-task-template], [data-edit-list-template], [data-delete-task-template], [data-delete-list-template], [data-template-editor-cancel], [data-template-editor-save-task], [data-template-editor-save-list], [data-add-task-row], [data-remove-task-row]');
+  const target = event.target.closest('[data-new-list-template], [data-edit-list-template], [data-delete-list-template], [data-template-editor-cancel], [data-template-editor-save-list], [data-add-task-row], [data-remove-task-row]');
   if (!target) return;
-
-  if (target.matches('[data-new-task-template]')) {
-    templateEditorState = { mode: 'task-new' };
-    renderTemplatesModal();
-    templatesModalBody.querySelector('#template-editor-task-name')?.focus();
-    return;
-  }
 
   if (target.matches('[data-new-list-template]')) {
     templateEditorState = { mode: 'list-new', draftTasks: [{ text: '', limitMs: null }] };
@@ -3068,26 +3008,10 @@ function handleTemplatesModalClick(event) {
     return;
   }
 
-  if (target.matches('[data-edit-task-template]')) {
-    templateEditorState = { mode: 'task-edit', id: target.dataset.editTaskTemplate };
-    renderTemplatesModal();
-    templatesModalBody.querySelector('#template-editor-task-name')?.focus();
-    return;
-  }
-
   if (target.matches('[data-edit-list-template]')) {
     templateEditorState = { mode: 'list-edit', id: target.dataset.editListTemplate };
     renderTemplatesModal();
     templatesModalBody.querySelector('#template-editor-list-name')?.focus();
-    return;
-  }
-
-  if (target.matches('[data-delete-task-template]')) {
-    const template = state.taskTemplates.find((item) => item.id === target.dataset.deleteTaskTemplate);
-    if (template && window.confirm(`Delete task template "${template.name}"?`)) {
-      deleteTaskTemplate(template.id);
-      renderTemplatesModal();
-    }
     return;
   }
 
@@ -3108,54 +3032,13 @@ function handleTemplatesModalClick(event) {
 
   if (target.matches('[data-add-task-row]')) {
     const listEl = templatesModalBody.querySelector('#template-editor-list-tasks');
-    if (!listEl) return;
-    const index = listEl.querySelectorAll('[data-task-row]').length;
-    const row = document.createElement('div');
-    row.className = 'template-editor-row';
-    row.dataset.taskRow = String(index);
-    row.innerHTML = `
-      <input class="template-editor-input template-editor-task-text" type="text" value="" placeholder="Task" autocomplete="off" />
-      <input class="template-editor-input template-editor-limit template-editor-task-limit" type="text" value="" placeholder="20m" autocomplete="off" />
-      <button type="button" class="template-row-btn template-row-btn--danger" data-remove-task-row="${index}" aria-label="Remove task">×</button>
-    `;
-    listEl.appendChild(row);
-    row.querySelector('.template-editor-task-text')?.focus();
+    appendListTemplateEditorRow(listEl, { focus: true });
     return;
   }
 
   if (target.matches('[data-remove-task-row]')) {
     const row = target.closest('[data-task-row]');
     row?.remove();
-    return;
-  }
-
-  if (target.matches('[data-template-editor-save-task]')) {
-    const name = normalizeTemplateName(templatesModalBody.querySelector('#template-editor-task-name')?.value);
-    const text = templatesModalBody.querySelector('#template-editor-task-text')?.value || '';
-    const limitValue = templatesModalBody.querySelector('#template-editor-task-limit')?.value || '';
-    const parsed = parseTaskInput(text, limitValue);
-    const excludeId = templateEditorState?.mode === 'task-edit' ? templateEditorState.id : null;
-
-    if (!name) {
-      window.alert('Enter a template name.');
-      return;
-    }
-    if (!parsed.text) {
-      window.alert('Enter task text.');
-      return;
-    }
-    if (isTaskTemplateNameTaken(name, excludeId)) {
-      window.alert('A task template with that name already exists.');
-      return;
-    }
-
-    if (templateEditorState?.mode === 'task-edit') {
-      updateTaskTemplate(templateEditorState.id, name, parsed.text, parsed.limitMs);
-    } else {
-      createTaskTemplate(name, parsed.text, parsed.limitMs);
-    }
-    templateEditorState = null;
-    renderTemplatesModal();
     return;
   }
 
@@ -3200,6 +3083,23 @@ function handleTemplateAutocompleteClick(event) {
   requestAnimationFrame(() => inputEl.focus());
 }
 
+function migrateLegacyTaskTemplates(savedTaskTemplates) {
+  if (!Array.isArray(savedTaskTemplates)) return;
+  savedTaskTemplates.forEach((raw) => {
+    const name = normalizeTemplateName(raw?.name);
+    if (!name || isListTemplateNameTaken(name)) return;
+    const text = (raw?.text || '').trim();
+    if (!text) return;
+    state.listTemplates.unshift(normalizeListTemplate({
+      id: raw?.id || crypto.randomUUID(),
+      name,
+      tasks: [{ text, limitMs: raw?.limitMs ?? null }],
+      createdAt: raw?.createdAt,
+      updatedAt: raw?.updatedAt,
+    }));
+  });
+}
+
 function applySavedData(saved) {
   state.sessionTasks = (saved.sessionTasks || saved.tasks || []).map(normalizeSessionTask);
   loadPlannedSessionsFromSaved(saved);
@@ -3224,12 +3124,10 @@ function applySavedData(saved) {
     : [];
   state.activeSessionRunId = saved.activeSessionRunId || null;
   state.activeSessionStartedAt = saved.activeSessionStartedAt || null;
-  state.taskTemplates = Array.isArray(saved.taskTemplates)
-    ? saved.taskTemplates.map(normalizeTaskTemplate)
-    : [];
   state.listTemplates = Array.isArray(saved.listTemplates)
     ? saved.listTemplates.map(normalizeListTemplate)
     : [];
+  migrateLegacyTaskTemplates(saved.taskTemplates);
 
   if (saved.timerBarSize === 'hidden') {
     state.timerBarSize = state.timerBarSizeBeforeHide;
@@ -3569,6 +3467,7 @@ function renderFocusView() {
   updateTimerDisplay();
   updateSkipButtonState();
   scheduleFocusDimensionsUpdate();
+  updateFullscreenTaskPanel();
 }
 
 function showDoneView() {
@@ -3874,13 +3773,6 @@ taskContextDuplicateBtn.addEventListener('click', () => {
   duplicateTask(listId, taskIndex);
 });
 
-taskContextSaveTemplateBtn.addEventListener('click', () => {
-  if (!taskContextMenuTarget) return;
-  const { listId, taskIndex } = taskContextMenuTarget;
-  hideTaskContextMenu();
-  saveTaskAsTemplateFromContext(listId, taskIndex);
-});
-
 taskContextDeleteBtn.addEventListener('click', () => {
   if (!taskContextMenuTarget) return;
   const { listId, taskIndex } = taskContextMenuTarget;
@@ -3988,6 +3880,10 @@ document.addEventListener('contextmenu', (e) => {
 });
 
 backToEditBtn.addEventListener('click', backToEdit);
+fullscreenTaskToggleBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleFullscreenTaskPanel();
+});
 timerSizeBtn.addEventListener('click', toggleTimerBarSize);
 timerHideBtn.addEventListener('click', hideTimerBar);
 pauseBtn.addEventListener('click', toggleTimer);
