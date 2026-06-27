@@ -64,6 +64,7 @@ sessionDrawerList.addEventListener('click', (e) => {
   if (!li) return;
   const index = parseInt(li.dataset.taskIndex, 10);
   if (Number.isInteger(index)) {
+    playClickSound();
     window.drawerOverlay.selectTask(index);
   }
 });

@@ -579,7 +579,10 @@ if (sessionDrawerList) {
     const li = e.target.closest('.session-drawer-task--clickable');
     if (!li) return;
     const index = parseInt(li.dataset.taskIndex, 10);
-    if (Number.isInteger(index)) switchToTask(index);
+    if (Number.isInteger(index)) {
+      playClickSound();
+      switchToTask(index);
+    }
   });
 }
 
@@ -2288,6 +2291,7 @@ function renderTaskList(listEl, listId) {
     });
     li.addEventListener('click', (e) => {
       if (e.target.closest('button, input, .task-limit-badge')) return;
+      playClickSound();
       if (e.metaKey || e.ctrlKey) {
         toggleSelection(task, listId);
       } else {
@@ -3486,6 +3490,7 @@ function handleLimitExpired() {
   state.limitExpired = true;
   state.limitExpiredKind = 'task';
   setExpiredUI(true);
+  playAlarmSound();
   persist();
 }
 
@@ -3552,6 +3557,7 @@ function completeCurrentTask() {
   state.sessionTasks[taskIndex].taskOvertimeMode = false;
   state.sessionTasks[taskIndex].skipped = false;
   state.totalSessionMs += completedElapsedMs;
+  playCompleteSound();
 
   state.focusTaskIndex = getNextFocusTaskIndex();
   const next = state.focusTaskIndex >= 0 ? state.sessionTasks[state.focusTaskIndex] : null;
