@@ -1,4 +1,27 @@
 const SOUND_POOL_SIZE = 3;
+const SOUND_EFFECTS_STORAGE_KEY = 'slash-it-sound-effects';
+
+let soundEffectsEnabled = localStorage.getItem(SOUND_EFFECTS_STORAGE_KEY) !== 'false';
+
+function setSoundEffectsEnabled(enabled) {
+  soundEffectsEnabled = !!enabled;
+  localStorage.setItem(SOUND_EFFECTS_STORAGE_KEY, soundEffectsEnabled ? 'true' : 'false');
+}
+
+function isSoundEffectsEnabled() {
+  return soundEffectsEnabled;
+}
+
+window.addEventListener('storage', (e) => {
+  if (e.key === SOUND_EFFECTS_STORAGE_KEY) {
+    soundEffectsEnabled = e.newValue !== 'false';
+  }
+});
+
+window.slashItSounds = {
+  setEnabled: setSoundEffectsEnabled,
+  isEnabled: isSoundEffectsEnabled,
+};
 const WHOOSH_BUTTON_SELECTOR = '.task-move-to-session, .task-move-to-braindump';
 const POP_BUTTON_SELECTOR = '#plan-session-btn';
 const DESTRUCTIVE_BUTTON_SELECTOR = [
@@ -34,6 +57,7 @@ function createSoundPool(url, volume = 1) {
   }
 
   function play() {
+    if (!soundEffectsEnabled) return;
     ensurePool();
     const audio = pool[index];
     index = (index + 1) % SOUND_POOL_SIZE;

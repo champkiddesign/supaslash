@@ -38,6 +38,8 @@ const editView = document.getElementById('edit-view');
 const settingsBtn = document.getElementById('settings-btn');
 const settingsMenu = document.getElementById('settings-menu');
 const settingsShortcutsBtn = document.getElementById('settings-shortcuts-btn');
+const settingsSoundEffectsBtn = document.getElementById('settings-sound-effects-btn');
+const settingsSoundEffectsStatus = document.getElementById('settings-sound-effects-status');
 const settingsDataBtn = document.getElementById('settings-data-btn');
 const settingsHistoryBtn = document.getElementById('settings-history-btn');
 const settingsTemplatesBtn = document.getElementById('settings-templates-btn');
@@ -65,6 +67,16 @@ const deleteSessionModal = document.getElementById('delete-session-modal');
 const deleteSessionMessage = document.getElementById('delete-session-message');
 const deleteSessionConfirmBtn = document.getElementById('delete-session-confirm-btn');
 const deleteSessionCancelBtn = document.getElementById('delete-session-cancel-btn');
+const billableModal = document.getElementById('billable-modal');
+const billableModalTitle = document.getElementById('billable-modal-title');
+const billableToggleBtn = document.getElementById('billable-toggle-btn');
+const billableToggleStatus = document.getElementById('billable-toggle-status');
+const billableRateRow = document.getElementById('billable-rate-row');
+const billableRateInput = document.getElementById('billable-rate-input');
+const billableRoundRow = document.getElementById('billable-round-row');
+const billableRoundOptions = document.getElementById('billable-round-options');
+const billableDoneBtn = document.getElementById('billable-done-btn');
+const billableCancelBtn = document.getElementById('billable-cancel-btn');
 const backToEditBtn = document.getElementById('back-to-edit-btn');
 const timerSizeBtn = document.getElementById('timer-size-btn');
 const timerHideBtn = document.getElementById('timer-hide-btn');
@@ -114,6 +126,8 @@ const templatesCloseBtn = document.getElementById('templates-close-btn');
 let taskContextMenuTarget = null;
 let sessionContextMenuTarget = null;
 let pendingDeleteSessionId = null;
+let pendingBillableSessionId = null;
+let billableSnapshot = null;
 let pendingSaveTemplate = null;
 let templateAutocompleteState = null;
 let templateEditorState = null;
@@ -677,6 +691,17 @@ function formatTime(ms) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
+const currencyFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+function formatCurrency(amount) {
+  return currencyFormatter.format(amount || 0);
+}
+
 function limitUnitToMs(value, unit) {
   const u = unit.toLowerCase();
   if (u.startsWith('h')) return Math.round(value * 3600000);
@@ -837,11 +862,47 @@ function normalizeBraindumpTask(task) {
   return { text: task.text || '', limitMs: task.limitMs ?? null };
 }
 
+function parseHourlyRate(value) {
+  if (value == null || value === '') return null;
+  const parsed = typeof value === 'number'
+    ? value
+    : parseFloat(String(value).replace(/[$,\s]/g, ''));
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function formatHourlyRateField(rate) {
+  if (rate == null || !Number.isFinite(rate)) return '';
+  return String(rate);
+}
+
+const BILLABLE_ROUND_OPTIONS = [10, 15, 20, 30];
+
+function normalizeBillableRoundMinutes(value) {
+  if (value == null || value === '' || value === 0) return null;
+  const parsed = Number(value);
+  return BILLABLE_ROUND_OPTIONS.includes(parsed) ? parsed : null;
+}
+
+function roundUpBillableMs(ms, roundMinutes) {
+  if (!roundMinutes || ms <= 0) return ms;
+  const intervalMs = roundMinutes * 60000;
+  return Math.ceil(ms / intervalMs) * intervalMs;
+}
+
+function calculateBillableEarnings(durationMs, rate, roundMinutes) {
+  if (!rate || durationMs == null || durationMs <= 0) return 0;
+  const ms = roundUpBillableMs(durationMs, roundMinutes);
+  return (ms / 3600000) * rate;
+}
+
 function normalizePlannedSession(session) {
   return {
     id: session.id || BRAINDUMP_SESSION_ID,
     name: session.name || 'Session',
     tasks: (session.tasks || []).map(normalizeBraindumpTask),
+    hourlyRateEnabled: !!session.hourlyRateEnabled,
+    hourlyRate: parseHourlyRate(session.hourlyRate),
+    billableRoundMinutes: normalizeBillableRoundMinutes(session.billableRoundMinutes),
   };
 }
 
@@ -1182,6 +1243,60 @@ function getPlannedSession(sessionId) {
   return state.plannedSessions.find((session) => session.id === sessionId) || null;
 }
 
+function getPlannedSessionRateSettings(sessionId) {
+  const session = getPlannedSession(sessionId || BRAINDUMP_SESSION_ID);
+  if (!session) return { enabled: false, rate: null, roundMinutes: null };
+  return {
+    enabled: !!session.hourlyRateEnabled,
+    rate: session.hourlyRate,
+    roundMinutes: session.billableRoundMinutes,
+  };
+}
+
+function getTaskEarningsMs(task, isCurrentTask) {
+  if (task.completed) return task.durationMs || 0;
+  if (isCurrentTask) return state.elapsedMs;
+  if (!task.completed && task.elapsedMs > 0) return task.elapsedMs;
+  return 0;
+}
+
+function getTaskEarnings(task, isCurrentTask) {
+  const { enabled, rate, roundMinutes } = getPlannedSessionRateSettings(task.sourceSessionId);
+  if (!enabled || !rate) return 0;
+  return calculateBillableEarnings(getTaskEarningsMs(task, isCurrentTask), rate, roundMinutes);
+}
+
+function getPlannedSessionQueueEarnings(sessionId) {
+  return state.sessionTasks.reduce((sum, task, index) => {
+    const taskSessionId = task.sourceSessionId || BRAINDUMP_SESSION_ID;
+    if (taskSessionId !== sessionId) return sum;
+    const isCurrentTask = state.mode === 'focus' && index === state.focusTaskIndex;
+    return sum + getTaskEarnings(task, isCurrentTask);
+  }, 0);
+}
+
+function hasPlannedSessionQueueTasks(sessionId) {
+  return state.sessionTasks.some(
+    (task) => (task.sourceSessionId || BRAINDUMP_SESSION_ID) === sessionId,
+  );
+}
+
+function getSessionEarnings() {
+  saveCurrentTaskProgress();
+  const currentIndex = state.focusTaskIndex;
+  return state.sessionTasks.reduce(
+    (sum, task, index) => sum + getTaskEarnings(task, index === currentIndex),
+    0,
+  );
+}
+
+function canShowSessionEarnings() {
+  return state.sessionTasks.some((task) => {
+    const { enabled, rate } = getPlannedSessionRateSettings(task.sourceSessionId);
+    return enabled && rate > 0;
+  });
+}
+
 function getBraindumpSession() {
   return getPlannedSession(BRAINDUMP_SESSION_ID);
 }
@@ -1324,6 +1439,112 @@ function closeDeleteSessionModal() {
   deleteSessionModal.classList.add('hidden');
 }
 
+function updateBillableModalUI(session) {
+  const enabled = !!session.hourlyRateEnabled;
+  billableToggleBtn.setAttribute('aria-checked', enabled ? 'true' : 'false');
+  billableToggleStatus.textContent = enabled ? 'On' : 'Off';
+  billableToggleStatus.classList.toggle('billable-toggle-status--on', enabled);
+  billableRateRow.classList.toggle('hidden', !enabled);
+  billableRoundRow.classList.toggle('hidden', !enabled);
+  billableRateInput.value = formatHourlyRateField(session.hourlyRate);
+
+  const roundMinutes = session.billableRoundMinutes;
+  billableRoundOptions.querySelectorAll('.billable-round-option').forEach((btn) => {
+    const value = btn.dataset.roundMinutes;
+    const isSelected = value === ''
+      ? roundMinutes == null
+      : Number(value) === roundMinutes;
+    btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+    btn.classList.toggle('billable-round-option--selected', isSelected);
+  });
+}
+
+function openBillableModal(sessionId) {
+  const session = getPlannedSession(sessionId);
+  if (!session) return;
+
+  pendingBillableSessionId = sessionId;
+  billableSnapshot = {
+    hourlyRateEnabled: session.hourlyRateEnabled,
+    hourlyRate: session.hourlyRate,
+    billableRoundMinutes: session.billableRoundMinutes,
+  };
+
+  billableModalTitle.textContent = `Billable · ${session.name}`;
+  updateBillableModalUI(session);
+  billableModal.classList.remove('hidden');
+
+  if (session.hourlyRateEnabled) {
+    requestAnimationFrame(() => {
+      billableRateInput.focus();
+      billableRateInput.select();
+    });
+  }
+}
+
+function closeBillableModal(revert = false) {
+  if (revert && pendingBillableSessionId && billableSnapshot) {
+    const session = getPlannedSession(pendingBillableSessionId);
+    if (session) {
+      session.hourlyRateEnabled = billableSnapshot.hourlyRateEnabled;
+      session.hourlyRate = billableSnapshot.hourlyRate;
+      session.billableRoundMinutes = billableSnapshot.billableRoundMinutes;
+    }
+  }
+
+  pendingBillableSessionId = null;
+  billableSnapshot = null;
+  billableModal.classList.add('hidden');
+  renderEditView();
+
+  if (state.mode === 'focus') {
+    if (state.timerView === 'earnings' && !canShowSessionEarnings()) {
+      state.timerView = 'session';
+    }
+    updateTimerDisplay();
+  }
+}
+
+function saveBillableModal() {
+  const session = getPlannedSession(pendingBillableSessionId);
+  if (!session) {
+    closeBillableModal(false);
+    return;
+  }
+
+  session.hourlyRate = parseHourlyRate(billableRateInput.value);
+  persist();
+  closeBillableModal(false);
+}
+
+function setBillableRoundMinutes(roundMinutes) {
+  const session = getPlannedSession(pendingBillableSessionId);
+  if (!session) return;
+  session.billableRoundMinutes = normalizeBillableRoundMinutes(roundMinutes);
+  updateBillableModalUI(session);
+}
+
+function renderSessionBillableButton(session) {
+  const enabled = !!session.hourlyRateEnabled;
+  const label = `Billable settings for ${session.name}`;
+  return `
+    <button
+      type="button"
+      class="session-billable-btn${enabled ? ' session-billable-btn--active' : ''}"
+      data-session-id="${escapeHtml(session.id)}"
+      title="${escapeHtml(label)}"
+      aria-label="${escapeHtml(label)}"
+    >$</button>
+  `;
+}
+
+function renderSessionEarningsBadge(session) {
+  if (!session.hourlyRateEnabled || !session.hourlyRate) return '';
+  if (!hasPlannedSessionQueueTasks(session.id)) return '';
+  const earnings = getPlannedSessionQueueEarnings(session.id);
+  return `<span class="session-earnings-badge" title="Earnings from queued tasks">${escapeHtml(formatCurrency(earnings))}</span>`;
+}
+
 function confirmDeletePlannedSession() {
   if (!pendingDeleteSessionId) return;
   deletePlannedSession(pendingDeleteSessionId);
@@ -1447,6 +1668,7 @@ function persist() {
     activeSessionRunId: state.activeSessionRunId,
     activeSessionStartedAt: state.activeSessionStartedAt,
     listTemplates: state.listTemplates,
+    soundEffectsEnabled: window.slashItSounds.isEnabled(),
   });
 }
 
@@ -1615,23 +1837,96 @@ function getArchiveTotalMs() {
 function buildHistoryTasks() {
   saveCurrentTaskProgress();
   return state.sessionTasks.map((task) => {
+    const sessionId = task.sourceSessionId || BRAINDUMP_SESSION_ID;
+    const { enabled, rate, roundMinutes } = getPlannedSessionRateSettings(sessionId);
+    const durationMs = task.completed
+      ? (task.durationMs ?? null)
+      : (task.elapsedMs > 0 ? task.elapsedMs : null);
     const entry = {
       text: task.text,
       status: getTaskArchiveStatus(task),
-      durationMs: task.completed
-        ? (task.durationMs ?? null)
-        : (task.elapsedMs > 0 ? task.elapsedMs : null),
+      durationMs,
       limitMs: task.limitMs ?? null,
+      sourceSessionId: sessionId,
     };
     if (task.sourceSessionName) {
       entry.sourceSessionName = task.sourceSessionName;
+    }
+    if (enabled && rate) {
+      entry.hourlyRateEnabled = true;
+      entry.hourlyRate = rate;
+      entry.billableRoundMinutes = roundMinutes;
+      entry.earnings = calculateBillableEarnings(durationMs, rate, roundMinutes);
     }
     return entry;
   });
 }
 
+function normalizeSessionHistoryTask(task) {
+  const normalized = {
+    text: task.text || '',
+    status: task.status === 'skipped' || task.status === 'incomplete' ? task.status : 'completed',
+    durationMs: task.durationMs ?? null,
+    limitMs: task.limitMs ?? null,
+    sourceSessionId: task.sourceSessionId || null,
+    ...(task.sourceSessionName ? { sourceSessionName: task.sourceSessionName } : {}),
+  };
+
+  if (task.hourlyRateEnabled) {
+    normalized.hourlyRateEnabled = true;
+    normalized.hourlyRate = parseHourlyRate(task.hourlyRate);
+    normalized.billableRoundMinutes = normalizeBillableRoundMinutes(task.billableRoundMinutes);
+    normalized.earnings = task.earnings ?? calculateBillableEarnings(
+      normalized.durationMs,
+      normalized.hourlyRate,
+      normalized.billableRoundMinutes,
+    );
+  }
+
+  return normalized;
+}
+
+function getHistoryTaskRateSettings(task) {
+  if (task.hourlyRateEnabled) {
+    return {
+      enabled: true,
+      rate: task.hourlyRate,
+      roundMinutes: task.billableRoundMinutes ?? null,
+    };
+  }
+  return getPlannedSessionRateSettings(task.sourceSessionId);
+}
+
+function getHistoryTaskEarnings(task) {
+  const { enabled, rate, roundMinutes } = getHistoryTaskRateSettings(task);
+  if (!enabled || !rate) return 0;
+  return calculateBillableEarnings(task.durationMs, rate, roundMinutes);
+}
+
+function getHistoryEntryEarnings(entry) {
+  if (!entry.billable) return 0;
+  return entry.tasks.reduce((sum, task) => sum + getHistoryTaskEarnings(task), 0);
+}
+
+function recalculateHistoryEntryBillable(entry) {
+  if (!entry.billable) {
+    entry.totalEarnings = null;
+    return;
+  }
+
+  entry.totalEarnings = entry.tasks.reduce((sum, task) => {
+    if (task.hourlyRateEnabled && task.hourlyRate) {
+      task.earnings = getHistoryTaskEarnings(task);
+      return sum + (task.earnings || 0);
+    }
+    return sum;
+  }, 0);
+}
+
 function normalizeSessionHistoryEntry(entry) {
-  return {
+  const tasks = (entry.tasks || []).map(normalizeSessionHistoryTask);
+  const billable = entry.billable ?? tasks.some((task) => task.hourlyRateEnabled && task.hourlyRate);
+  const normalized = {
     id: entry.id || crypto.randomUUID(),
     runId: entry.runId || crypto.randomUUID(),
     name: entry.name || 'Braindump',
@@ -1641,14 +1936,26 @@ function normalizeSessionHistoryEntry(entry) {
     totalMs: entry.totalMs || 0,
     completedCount: entry.completedCount ?? 0,
     totalCount: entry.totalCount ?? (entry.tasks?.length || 0),
-    tasks: (entry.tasks || []).map((task) => ({
-      text: task.text || '',
-      status: task.status === 'skipped' || task.status === 'incomplete' ? task.status : 'completed',
-      durationMs: task.durationMs ?? null,
-      limitMs: task.limitMs ?? null,
-      ...(task.sourceSessionName ? { sourceSessionName: task.sourceSessionName } : {}),
-    })),
+    billable: !!billable,
+    tasks,
   };
+
+  normalized.totalEarnings = billable
+    ? (entry.totalEarnings ?? getHistoryEntryEarnings(normalized))
+    : null;
+
+  return normalized;
+}
+
+function updateHistoryTaskDuration(entryId, taskIndex, durationMs) {
+  const entry = state.sessionHistory.find((item) => item.id === entryId);
+  if (!entry || !entry.tasks[taskIndex]) return;
+
+  const task = entry.tasks[taskIndex];
+  task.durationMs = durationMs;
+  recalculateHistoryEntryBillable(entry);
+  persist();
+  renderHistoryModal();
 }
 
 function archiveCurrentSession(status) {
@@ -1657,6 +1964,12 @@ function archiveCurrentSession(status) {
   const runId = state.activeSessionRunId;
   if (!runId) return null;
   if (state.sessionHistory.some((entry) => entry.runId === runId)) return null;
+
+  const tasks = buildHistoryTasks();
+  const billable = tasks.some((task) => task.hourlyRateEnabled && task.hourlyRate);
+  const totalEarnings = billable
+    ? tasks.reduce((sum, task) => sum + (task.earnings || 0), 0)
+    : null;
 
   const entry = {
     id: crypto.randomUUID(),
@@ -1668,7 +1981,9 @@ function archiveCurrentSession(status) {
     totalMs: getArchiveTotalMs(),
     completedCount: getCompletedCount(),
     totalCount: state.sessionTasks.length,
-    tasks: buildHistoryTasks(),
+    billable,
+    totalEarnings,
+    tasks,
   };
 
   state.sessionHistory.unshift(entry);
@@ -1723,21 +2038,37 @@ function getSessionDisplayMs() {
 }
 
 function isTimerDisplayExpired() {
+  if (state.timerView === 'earnings') return false;
   return state.limitExpired && state.limitExpiredKind === state.timerView;
 }
 
 function updateTimerDisplay() {
+  if (state.timerView === 'earnings' && !canShowSessionEarnings()) {
+    state.timerView = 'session';
+  }
+
   const current = getCurrentTask();
   if (timerModeLabel) {
-    timerModeLabel.textContent = state.timerView === 'task' ? 'TASK' : 'SESSION';
+    timerModeLabel.textContent = state.timerView === 'task'
+      ? 'TASK'
+      : state.timerView === 'session'
+        ? 'SESSION'
+        : 'EARNINGS';
     timerModeLabel.classList.toggle('timer-mode-label--session', state.timerView === 'session');
+    timerModeLabel.classList.toggle('timer-mode-label--earnings', state.timerView === 'earnings');
   }
-  const displayMs = state.timerView === 'session'
-    ? getSessionDisplayMs()
-    : getTaskDisplayMs(current);
-  timerDisplay.textContent = formatTime(displayMs);
-  timerDisplay.classList.toggle('paused', !state.isRunning && !state.limitExpired);
-  timerDisplay.classList.toggle('expired', isTimerDisplayExpired());
+
+  if (state.timerView === 'earnings') {
+    timerDisplay.textContent = formatCurrency(getSessionEarnings());
+    timerDisplay.classList.remove('paused', 'expired');
+  } else {
+    const displayMs = state.timerView === 'session'
+      ? getSessionDisplayMs()
+      : getTaskDisplayMs(current);
+    timerDisplay.textContent = formatTime(displayMs);
+    timerDisplay.classList.toggle('paused', !state.isRunning && !state.limitExpired);
+    timerDisplay.classList.toggle('expired', isTimerDisplayExpired());
+  }
   timerBar.classList.toggle('is-running', state.isRunning);
   pauseBtn.classList.toggle('is-paused', !state.isRunning);
   pauseBtn.title = state.isRunning ? 'Pause' : 'Resume';
@@ -2521,8 +2852,10 @@ function renderPlannedSessions() {
           <span class="planned-session-toggle-icon" aria-hidden="true"></span>
         </button>
         ${renderPlannedSessionName(session, isExpanded)}
+        ${renderSessionEarningsBadge(session)}
         <div class="planned-session-header-actions">
           ${renderPlannedSessionDeleteButton(session)}
+          ${renderSessionBillableButton(session)}
           <button
             type="button"
             class="session-send-to-queue-btn"
@@ -2551,11 +2884,11 @@ function renderPlannedSessions() {
 
     const header = block.querySelector('.planned-session-header');
     header.addEventListener('click', (e) => {
-      if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn, .session-send-to-queue-btn')) return;
+      if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn, .session-billable-btn, .session-send-to-queue-btn')) return;
       if (!isExpanded) expandSession(session.id);
     });
     header.addEventListener('contextmenu', (e) => {
-      if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn, .session-send-to-queue-btn')) return;
+      if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn, .session-billable-btn, .session-send-to-queue-btn')) return;
       showSessionContextMenu(e, session.id);
     });
 
@@ -2572,6 +2905,14 @@ function renderPlannedSessions() {
       sendBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         addAllFromSession(session.id);
+      });
+    }
+
+    const billableBtn = block.querySelector('.session-billable-btn');
+    if (billableBtn) {
+      billableBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openBillableModal(session.id);
       });
     }
 
@@ -2636,7 +2977,8 @@ function isSettingsUiOpen() {
     || !dataModal.classList.contains('hidden')
     || !historyModal.classList.contains('hidden')
     || !templatesModal.classList.contains('hidden')
-    || !saveTemplateModal.classList.contains('hidden');
+    || !saveTemplateModal.classList.contains('hidden')
+    || !billableModal.classList.contains('hidden');
 }
 
 function formatRelativeBackupTime(timestamp) {
@@ -2711,7 +3053,21 @@ function positionSettingsMenu() {
   settingsMenu.style.top = `${top}px`;
 }
 
+function updateSettingsSoundEffectsMenuItem() {
+  const enabled = window.slashItSounds.isEnabled();
+  settingsSoundEffectsBtn.setAttribute('aria-checked', enabled ? 'true' : 'false');
+  settingsSoundEffectsStatus.textContent = enabled ? 'On' : 'Off';
+  settingsSoundEffectsStatus.classList.toggle('settings-menu-item-note--on', enabled);
+}
+
+function toggleSoundEffects() {
+  window.slashItSounds.setEnabled(!window.slashItSounds.isEnabled());
+  updateSettingsSoundEffectsMenuItem();
+  persist();
+}
+
 function showSettingsMenu() {
+  updateSettingsSoundEffectsMenuItem();
   settingsMenu.classList.remove('hidden');
   settingsBtn.setAttribute('aria-expanded', 'true');
   positionSettingsMenu();
@@ -2747,19 +3103,32 @@ function getHistoryTaskStatusLabel(status) {
   return '';
 }
 
-function renderHistoryTaskItem(task) {
+function renderHistoryTaskItem(task, entryId, taskIndex) {
   const statusClass = task.status === 'skipped'
     ? 'history-task-item--skipped'
     : task.status === 'incomplete'
       ? 'history-task-item--incomplete'
       : '';
   const statusLabel = getHistoryTaskStatusLabel(task.status);
-  const duration = task.durationMs != null ? formatTime(task.durationMs) : '';
   const suffix = statusLabel ? ` (${statusLabel})` : '';
+  const durationValue = escapeHtml(formatLimitField(task.durationMs));
+  const showBillable = task.hourlyRateEnabled && task.hourlyRate;
+  const earnings = showBillable ? formatCurrency(getHistoryTaskEarnings(task)) : '';
+
   return `
-    <li class="history-task-item ${statusClass}">
+    <li class="history-task-item ${statusClass}" data-entry-id="${escapeHtml(entryId)}" data-task-index="${taskIndex}">
       <span class="history-task-label">${escapeHtml(task.text)}${suffix}</span>
-      ${duration ? `<span class="history-task-duration">${escapeHtml(duration)}</span>` : ''}
+      <div class="history-task-meta">
+        <input
+          type="text"
+          class="history-task-duration-input"
+          value="${durationValue}"
+          placeholder="0m"
+          title="Time worked"
+          autocomplete="off"
+        />
+        ${showBillable ? `<span class="history-task-earnings">${escapeHtml(earnings)}</span>` : ''}
+      </div>
     </li>
   `;
 }
@@ -2772,6 +3141,9 @@ function renderHistoryEntry(entry) {
     ? 'history-status-badge--abandoned'
     : 'history-status-badge--completed';
   const taskSummary = `${entry.completedCount} of ${entry.totalCount} task${entry.totalCount === 1 ? '' : 's'}`;
+  const earningsSummary = entry.billable
+    ? ` · ${formatCurrency(entry.totalEarnings ?? getHistoryEntryEarnings(entry))}`
+    : '';
 
   return `
     <article class="history-entry${isExpanded ? ' history-entry--expanded' : ''}${isHighlighted ? ' history-entry--highlight' : ''}" data-entry-id="${escapeHtml(entry.id)}">
@@ -2780,17 +3152,24 @@ function renderHistoryEntry(entry) {
           <div class="history-entry-top">
             <span class="history-entry-name">${escapeHtml(entry.name)}</span>
             <span class="history-status-badge ${statusClass}">${statusLabel}</span>
+            ${entry.billable ? '<span class="history-status-badge history-status-badge--billable">Billable</span>' : ''}
           </div>
           <div class="history-entry-meta">
-            ${escapeHtml(formatRelativeBackupTime(entry.endedAt))} · ${escapeHtml(formatTime(entry.totalMs))} · ${escapeHtml(taskSummary)}
+            ${escapeHtml(formatRelativeBackupTime(entry.endedAt))} · ${escapeHtml(formatTime(entry.totalMs))} · ${escapeHtml(taskSummary)}${escapeHtml(earningsSummary)}
           </div>
         </div>
         <span class="history-entry-chevron" aria-hidden="true">›</span>
       </button>
       <div class="history-entry-detail">
         <ul class="history-task-list">
-          ${entry.tasks.map(renderHistoryTaskItem).join('')}
+          ${entry.tasks.map((task, taskIndex) => renderHistoryTaskItem(task, entry.id, taskIndex)).join('')}
         </ul>
+        ${entry.billable ? `
+          <div class="history-entry-billable-summary">
+            <span class="history-entry-billable-label">Total earnings</span>
+            <span class="history-entry-billable-amount">${escapeHtml(formatCurrency(entry.totalEarnings ?? getHistoryEntryEarnings(entry)))}</span>
+          </div>
+        ` : ''}
         <div class="history-entry-actions">
           <button type="button" class="history-delete-btn" data-delete-id="${escapeHtml(entry.id)}">Delete</button>
         </div>
@@ -2820,7 +3199,10 @@ function openHistoryModal(highlightRunId = null) {
   historyHighlightRunId = highlightRunId;
   if (highlightRunId) {
     const entry = state.sessionHistory.find((item) => item.runId === highlightRunId);
-    if (entry) expandedHistoryEntryIds.add(entry.id);
+    if (entry) {
+      expandedHistoryEntryIds.clear();
+      expandedHistoryEntryIds.add(entry.id);
+    }
   }
   renderHistoryModal();
   historyModal.classList.remove('hidden');
@@ -2844,6 +3226,8 @@ function deleteHistoryEntry(entryId) {
 }
 
 function handleHistoryListClick(event) {
+  if (event.target.closest('.history-task-duration-input')) return;
+
   const deleteBtn = event.target.closest('.history-delete-btn');
   if (deleteBtn) {
     event.stopPropagation();
@@ -2861,9 +3245,33 @@ function handleHistoryListClick(event) {
   if (expandedHistoryEntryIds.has(entryId)) {
     expandedHistoryEntryIds.delete(entryId);
   } else {
+    expandedHistoryEntryIds.clear();
     expandedHistoryEntryIds.add(entryId);
   }
   renderHistoryModal();
+}
+
+function handleHistoryDurationInput(event) {
+  const input = event.target.closest('.history-task-duration-input');
+  if (!input) return;
+
+  if (event.type === 'keydown') {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      input.blur();
+    }
+    return;
+  }
+
+  if (event.type !== 'blur') return;
+
+  const item = input.closest('.history-task-item');
+  const entryId = item?.dataset.entryId;
+  const taskIndex = Number(item?.dataset.taskIndex);
+  if (!entryId || !Number.isInteger(taskIndex)) return;
+
+  const durationMs = parseManualLimit(input.value);
+  updateHistoryTaskDuration(entryId, taskIndex, durationMs);
 }
 
 function renderTemplateEditor() {
@@ -3109,7 +3517,16 @@ function applySavedData(saved) {
   loadPlannedSessionsFromSaved(saved);
   state.activeSessionName = saved.activeSessionName || null;
   state.totalSessionMs = saved.totalSessionMs || 0;
-  state.timerView = saved.timerView === 'session' ? 'session' : 'task';
+  if (saved.timerView === 'earnings') {
+    state.timerView = 'earnings';
+  } else if (saved.timerView === 'session') {
+    state.timerView = 'session';
+  } else {
+    state.timerView = 'task';
+  }
+  if (state.timerView === 'earnings' && !canShowSessionEarnings()) {
+    state.timerView = 'task';
+  }
   state.limitExpired = saved.limitExpiredKind === 'task' ? !!saved.limitExpired : false;
   state.limitExpiredKind = saved.limitExpiredKind === 'task' && saved.limitExpired ? 'task' : null;
   state.taskOvertimeMode = !!saved.taskOvertimeMode;
@@ -3132,6 +3549,7 @@ function applySavedData(saved) {
     ? saved.listTemplates.map(normalizeListTemplate)
     : [];
   migrateLegacyTaskTemplates(saved.taskTemplates);
+  window.slashItSounds.setEnabled(saved.soundEffectsEnabled !== false);
 
   if (saved.timerBarSize === 'hidden') {
     state.timerBarSize = state.timerBarSizeBeforeHide;
@@ -3377,6 +3795,7 @@ function startEditingTask(li, listId, index) {
 function isEditShortcutBlocked() {
   if (!clearSessionModal.classList.contains('hidden')) return true;
   if (!deleteSessionModal.classList.contains('hidden')) return true;
+  if (!billableModal.classList.contains('hidden')) return true;
   if (isSettingsUiOpen()) return true;
   return false;
 }
@@ -3529,7 +3948,13 @@ function stopTimer() {
 }
 
 function toggleTimerView() {
-  state.timerView = state.timerView === 'task' ? 'session' : 'task';
+  if (state.timerView === 'task') {
+    state.timerView = 'session';
+  } else if (state.timerView === 'session') {
+    state.timerView = canShowSessionEarnings() ? 'earnings' : 'task';
+  } else {
+    state.timerView = 'task';
+  }
   updateTimerDisplay();
   persist();
 }
@@ -3729,10 +4154,13 @@ settingsDataBtn.addEventListener('click', openDataModal);
 settingsTemplatesBtn.addEventListener('click', openTemplatesModal);
 settingsHistoryBtn.addEventListener('click', () => openHistoryModal());
 settingsShortcutsBtn.addEventListener('click', openShortcutsModal);
+settingsSoundEffectsBtn.addEventListener('click', toggleSoundEffects);
 shortcutsCloseBtn.addEventListener('click', closeShortcutsModal);
 dataCloseBtn.addEventListener('click', closeDataModal);
 historyCloseBtn.addEventListener('click', closeHistoryModal);
 historyList.addEventListener('click', handleHistoryListClick);
+historyList.addEventListener('blur', handleHistoryDurationInput, true);
+historyList.addEventListener('keydown', handleHistoryDurationInput, true);
 templatesCloseBtn.addEventListener('click', closeTemplatesModal);
 templatesModalBody.addEventListener('click', handleTemplatesModalClick);
 templatesModal.addEventListener('click', (e) => {
@@ -3770,6 +4198,38 @@ deleteSessionConfirmBtn.addEventListener('click', confirmDeletePlannedSession);
 deleteSessionCancelBtn.addEventListener('click', closeDeleteSessionModal);
 deleteSessionModal.addEventListener('click', (e) => {
   if (e.target === deleteSessionModal) closeDeleteSessionModal();
+});
+
+billableToggleBtn.addEventListener('click', () => {
+  const session = getPlannedSession(pendingBillableSessionId);
+  if (!session) return;
+  session.hourlyRateEnabled = !session.hourlyRateEnabled;
+  updateBillableModalUI(session);
+  if (session.hourlyRateEnabled) {
+    requestAnimationFrame(() => {
+      billableRateInput.focus();
+      billableRateInput.select();
+    });
+  }
+});
+
+billableRoundOptions.addEventListener('click', (e) => {
+  const btn = e.target.closest('.billable-round-option');
+  if (!btn) return;
+  const value = btn.dataset.roundMinutes;
+  setBillableRoundMinutes(value === '' ? null : Number(value));
+});
+
+billableDoneBtn.addEventListener('click', saveBillableModal);
+billableCancelBtn.addEventListener('click', () => closeBillableModal(true));
+billableModal.addEventListener('click', (e) => {
+  if (e.target === billableModal) closeBillableModal(true);
+});
+billableRateInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    saveBillableModal();
+  }
 });
 
 taskContextDuplicateBtn.addEventListener('click', () => {
@@ -3856,6 +4316,10 @@ document.addEventListener('keydown', (e) => {
     }
     if (!deleteSessionModal.classList.contains('hidden')) {
       closeDeleteSessionModal();
+      return;
+    }
+    if (!billableModal.classList.contains('hidden')) {
+      closeBillableModal(true);
       return;
     }
     if (!clearSessionModal.classList.contains('hidden')) {

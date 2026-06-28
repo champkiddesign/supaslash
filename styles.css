@@ -360,16 +360,23 @@ body.mode-edit #edit-view.view {
   max-height: min(520px, calc(100vh - 48px));
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.history-modal-card .clear-session-modal-title {
+  flex-shrink: 0;
 }
 
 .history-list {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   margin: calc(16px * var(--edit-scale)) 0;
-  display: flex;
-  flex-direction: column;
-  gap: calc(8px * var(--edit-scale));
+}
+
+.history-entry + .history-entry {
+  margin-top: calc(8px * var(--edit-scale));
 }
 
 .history-empty {
@@ -382,6 +389,7 @@ body.mode-edit #edit-view.view {
 }
 
 .history-entry {
+  min-height: min-content;
   border: 1px solid var(--border);
   border-radius: calc(8px * var(--edit-scale));
   background: rgba(255, 255, 255, 0.02);
@@ -452,6 +460,11 @@ body.mode-edit #edit-view.view {
   border-color: rgba(232, 168, 124, 0.4);
 }
 
+.history-status-badge--billable {
+  color: #30d158;
+  border-color: rgba(48, 209, 88, 0.35);
+}
+
 .history-entry-meta {
   margin-top: calc(4px * var(--edit-scale));
   font-family: var(--mono);
@@ -491,12 +504,67 @@ body.mode-edit #edit-view.view {
 
 .history-task-item {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: calc(8px * var(--edit-scale));
   font-family: var(--mono);
   font-size: var(--font-xs);
   color: var(--text);
+}
+
+.history-task-meta {
+  display: flex;
+  align-items: center;
+  gap: calc(8px * var(--edit-scale));
+  flex-shrink: 0;
+}
+
+.history-task-duration-input {
+  width: calc(52px * var(--edit-scale));
+  padding: calc(2px * var(--edit-scale)) calc(4px * var(--edit-scale));
+  font-family: var(--mono);
+  font-size: var(--font-xs);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: calc(4px * var(--edit-scale));
+  outline: none;
+  text-align: right;
+  user-select: text;
+}
+
+.history-task-duration-input:focus {
+  border-color: var(--accent);
+}
+
+.history-task-earnings {
+  flex-shrink: 0;
+  color: #30d158;
+  min-width: calc(56px * var(--edit-scale));
+  text-align: right;
+}
+
+.history-entry-billable-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(8px * var(--edit-scale));
+  margin-top: calc(12px * var(--edit-scale));
+  padding-top: calc(10px * var(--edit-scale));
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--mono);
+  font-size: var(--font-xs);
+}
+
+.history-entry-billable-label {
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.history-entry-billable-amount {
+  color: #30d158;
+  font-weight: 600;
 }
 
 .history-task-item--skipped {
@@ -514,11 +582,6 @@ body.mode-edit #edit-view.view {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.history-task-duration {
-  flex-shrink: 0;
-  color: var(--text-secondary);
 }
 
 .history-entry-actions {
@@ -837,6 +900,42 @@ body.mode-edit #edit-view.view {
 .session-send-to-queue-btn:disabled {
   opacity: 0.25;
   cursor: not-allowed;
+}
+
+.session-billable-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: calc(20px * var(--edit-scale));
+  height: calc(20px * var(--edit-scale));
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1;
+  color: var(--edit-muted);
+  transition: color 0.15s, opacity 0.15s;
+  -webkit-app-region: no-drag;
+}
+
+.session-billable-btn:hover {
+  color: var(--text);
+}
+
+.session-billable-btn--active {
+  color: var(--accent);
+}
+
+.session-earnings-badge {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: #30d158;
+  white-space: nowrap;
 }
 
 .planned-session-header-actions {
@@ -1576,6 +1675,137 @@ body.mode-edit #edit-view.view {
   display: none;
 }
 
+.billable-modal-card {
+  width: min(420px, calc(100vw - 32px));
+}
+
+.billable-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(16px * var(--edit-scale));
+  margin-bottom: calc(24px * var(--edit-scale));
+}
+
+.billable-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: calc(var(--radius) - 2px);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: var(--font-sm);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--text);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.billable-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.billable-toggle-status {
+  font-size: 12px;
+  color: var(--edit-muted);
+}
+
+.billable-toggle-status--on {
+  color: var(--accent);
+}
+
+.billable-rate-row,
+.billable-round-row {
+  display: flex;
+  flex-direction: column;
+  gap: calc(8px * var(--edit-scale));
+}
+
+.billable-rate-row.hidden,
+.billable-round-row.hidden {
+  display: none;
+}
+
+.billable-field-label {
+  font-family: var(--sans);
+  font-size: 12px;
+  line-height: calc(18px * var(--edit-scale));
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--edit-muted);
+}
+
+.billable-rate-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: calc(8px * var(--edit-scale));
+}
+
+.billable-rate-input {
+  width: 100%;
+  max-width: 120px;
+  padding: calc(6px * var(--edit-scale)) calc(8px * var(--edit-scale));
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: calc(21px * var(--edit-scale));
+  letter-spacing: 0.02em;
+  color: var(--edit-task-text);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: calc(var(--radius) - 4px);
+  outline: none;
+  user-select: text;
+}
+
+.billable-rate-input:focus {
+  border-color: var(--accent);
+}
+
+.billable-rate-suffix {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--edit-muted);
+}
+
+.billable-round-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(6px * var(--edit-scale));
+}
+
+.billable-round-option {
+  padding: calc(6px * var(--edit-scale)) calc(10px * var(--edit-scale));
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: calc(var(--radius) - 4px);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--edit-muted);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.billable-round-option:hover {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.billable-round-option--selected {
+  color: var(--accent);
+  border-color: rgba(48, 209, 88, 0.35);
+  background: rgba(48, 209, 88, 0.08);
+}
+
 .templates-modal-card {
   width: min(460px, calc(100% - 48px));
   max-height: min(560px, calc(100vh - 48px));
@@ -2140,6 +2370,10 @@ body.mode-edit #edit-view.view {
 
 .timer-mode-label--session {
   color: #ffd60a;
+}
+
+.timer-mode-label--earnings {
+  color: #30d158;
 }
 
 .timer-display {

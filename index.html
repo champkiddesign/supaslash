@@ -75,11 +75,48 @@
       </div>
     </div>
 
+    <div id="billable-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="billable-modal-title">
+      <div class="clear-session-modal-card billable-modal-card">
+        <h3 id="billable-modal-title" class="clear-session-modal-title">Billable</h3>
+        <div class="billable-modal-body">
+          <button type="button" id="billable-toggle-btn" class="billable-toggle-btn" role="menuitemcheckbox" aria-checked="false">
+            <span>Billable</span>
+            <span id="billable-toggle-status" class="billable-toggle-status">Off</span>
+          </button>
+          <div id="billable-rate-row" class="billable-rate-row hidden">
+            <label for="billable-rate-input" class="billable-field-label">Hourly rate</label>
+            <div class="billable-rate-input-wrap">
+              <input id="billable-rate-input" type="text" class="billable-rate-input" placeholder="75" autocomplete="off" />
+              <span class="billable-rate-suffix">/hr</span>
+            </div>
+          </div>
+          <div id="billable-round-row" class="billable-round-row hidden">
+            <span class="billable-field-label">Round up to nearest</span>
+            <div id="billable-round-options" class="billable-round-options" role="radiogroup" aria-label="Round up time">
+              <button type="button" class="billable-round-option" data-round-minutes="" role="radio" aria-checked="true">None</button>
+              <button type="button" class="billable-round-option" data-round-minutes="10" role="radio" aria-checked="false">10m</button>
+              <button type="button" class="billable-round-option" data-round-minutes="15" role="radio" aria-checked="false">15m</button>
+              <button type="button" class="billable-round-option" data-round-minutes="20" role="radio" aria-checked="false">20m</button>
+              <button type="button" class="billable-round-option" data-round-minutes="30" role="radio" aria-checked="false">30m</button>
+            </div>
+          </div>
+        </div>
+        <div class="clear-session-modal-actions">
+          <button id="billable-done-btn" class="clear-session-modal-btn" type="button">Done</button>
+          <button id="billable-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <div id="settings-menu" class="settings-menu hidden" role="menu" aria-label="Settings">
       <button type="button" id="settings-templates-btn" class="settings-menu-item" role="menuitem">Templates</button>
       <button type="button" id="settings-history-btn" class="settings-menu-item" role="menuitem">Session history</button>
       <button type="button" id="settings-data-btn" class="settings-menu-item" role="menuitem">Data &amp; backup</button>
       <button type="button" id="settings-shortcuts-btn" class="settings-menu-item" role="menuitem">Keyboard shortcuts</button>
+      <button type="button" id="settings-sound-effects-btn" class="settings-menu-item" role="menuitemcheckbox" aria-checked="true">
+        <span>Sound effects</span>
+        <span id="settings-sound-effects-status" class="settings-menu-item-note">On</span>
+      </button>
     </div>
 
     <div id="shortcuts-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-title">
@@ -168,7 +205,7 @@
         </div>
         <div class="timer-stack">
           <span id="timer-mode-label" class="timer-mode-label">TASK</span>
-          <button id="timer-display" class="timer-display" type="button" title="Switch between task and session timer">0:00</button>
+          <button id="timer-display" class="timer-display" type="button" title="Switch between task, session, and earnings">0:00</button>
         </div>
       <div class="timer-task-zone" id="timer-task-zone">
         <div class="fullscreen-task-header">
