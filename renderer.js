@@ -32,6 +32,11 @@ const state = {
   activeSessionStartedAt: null,
   listTemplates: [],
   fullscreenTaskPanelOpen: false,
+  invoiceSettings: {
+    businessName: '',
+    email: '',
+    address: '',
+  },
 };
 
 const editView = document.getElementById('edit-view');
@@ -41,6 +46,7 @@ const settingsShortcutsBtn = document.getElementById('settings-shortcuts-btn');
 const settingsSoundEffectsBtn = document.getElementById('settings-sound-effects-btn');
 const settingsSoundEffectsStatus = document.getElementById('settings-sound-effects-status');
 const settingsDataBtn = document.getElementById('settings-data-btn');
+const settingsInvoiceBtn = document.getElementById('settings-invoice-btn');
 const settingsHistoryBtn = document.getElementById('settings-history-btn');
 const settingsTemplatesBtn = document.getElementById('settings-templates-btn');
 const shortcutsModal = document.getElementById('shortcuts-modal');
@@ -51,6 +57,12 @@ const dataBackupNowBtn = document.getElementById('data-backup-now-btn');
 const dataRestoreBtn = document.getElementById('data-restore-btn');
 const dataOpenFolderBtn = document.getElementById('data-open-folder-btn');
 const dataCloseBtn = document.getElementById('data-close-btn');
+const invoiceSettingsModal = document.getElementById('invoice-settings-modal');
+const invoiceSettingsBusinessNameInput = document.getElementById('invoice-settings-business-name');
+const invoiceSettingsEmailInput = document.getElementById('invoice-settings-email');
+const invoiceSettingsAddressInput = document.getElementById('invoice-settings-address');
+const invoiceSettingsDoneBtn = document.getElementById('invoice-settings-done-btn');
+const invoiceSettingsCancelBtn = document.getElementById('invoice-settings-cancel-btn');
 const focusView = document.getElementById('focus-view');
 const doneView = document.getElementById('done-view');
 const plannedSessionsList = document.getElementById('planned-sessions-list');
@@ -67,6 +79,10 @@ const deleteSessionModal = document.getElementById('delete-session-modal');
 const deleteSessionMessage = document.getElementById('delete-session-message');
 const deleteSessionConfirmBtn = document.getElementById('delete-session-confirm-btn');
 const deleteSessionCancelBtn = document.getElementById('delete-session-cancel-btn');
+const deleteHistoryModal = document.getElementById('delete-history-modal');
+const deleteHistoryMessage = document.getElementById('delete-history-message');
+const deleteHistoryConfirmBtn = document.getElementById('delete-history-confirm-btn');
+const deleteHistoryCancelBtn = document.getElementById('delete-history-cancel-btn');
 const billableModal = document.getElementById('billable-modal');
 const billableModalTitle = document.getElementById('billable-modal-title');
 const billableToggleBtn = document.getElementById('billable-toggle-btn');
@@ -106,6 +122,25 @@ const viewHistoryBtn = document.getElementById('view-history-btn');
 const historyModal = document.getElementById('history-modal');
 const historyList = document.getElementById('history-list');
 const historyCloseBtn = document.getElementById('history-close-btn');
+const historyTabSessionsBtn = document.getElementById('history-tab-sessions-btn');
+const historyTabReportBtn = document.getElementById('history-tab-report-btn');
+const historySessionsPanel = document.getElementById('history-sessions-panel');
+const historyReportPanel = document.getElementById('history-report-panel');
+const historyReportStartInput = document.getElementById('history-report-start');
+const historyReportEndInput = document.getElementById('history-report-end');
+const historyReportSessionSelectWrap = document.getElementById('history-report-session-select-wrap');
+const historyReportSessionTrigger = document.getElementById('history-report-session-trigger');
+const historyReportSessionValue = document.getElementById('history-report-session-value');
+const historyReportSessionMenu = document.getElementById('history-report-session-menu');
+const historyReportSummary = document.getElementById('history-report-summary');
+const historyReportDailyChart = document.getElementById('history-report-daily-chart');
+const historyReportSessionChart = document.getElementById('history-report-session-chart');
+const historyReportTableBody = document.getElementById('history-report-table-body');
+const historyReportTableFoot = document.getElementById('history-report-table-foot');
+const historyReportFootnote = document.getElementById('history-report-footnote');
+const historyReportEmpty = document.getElementById('history-report-empty');
+const historyExportPdfBtn = document.getElementById('history-export-pdf-btn');
+const historyExportInvoiceBtn = document.getElementById('history-export-invoice-btn');
 const taskContextMenu = document.getElementById('task-context-menu');
 const taskContextDuplicateBtn = document.getElementById('task-context-duplicate');
 const taskContextDeleteBtn = document.getElementById('task-context-delete');
@@ -126,6 +161,7 @@ const templatesCloseBtn = document.getElementById('templates-close-btn');
 let taskContextMenuTarget = null;
 let sessionContextMenuTarget = null;
 let pendingDeleteSessionId = null;
+let pendingDeleteHistoryEntryId = null;
 let pendingBillableSessionId = null;
 let billableSnapshot = null;
 let pendingSaveTemplate = null;
@@ -140,6 +176,9 @@ let focusBarWidthCache = null;
 let isInitializing = true;
 let expandedHistoryEntryIds = new Set();
 let historyHighlightRunId = null;
+let historyModalTab = 'sessions';
+let historyReportSessionFilter = '';
+let historyReportSessionMenuOpen = false;
 
 const SESSION_HISTORY_MAX = 200;
 
@@ -712,6 +751,60 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 
 function formatCurrency(amount) {
   return currencyFormatter.format(amount || 0);
+}
+
+const reportDateFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+
+const reportDayFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+});
+
+function formatReportDate(timestamp) {
+  if (!timestamp) return '—';
+  return reportDateFormatter.format(new Date(timestamp));
+}
+
+function formatReportDay(timestamp) {
+  if (!timestamp) return '—';
+  return reportDayFormatter.format(new Date(timestamp));
+}
+
+function formatDateInputValue(ms) {
+  const date = new Date(ms);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateInputToStartMs(dateStr) {
+  if (!dateStr) return null;
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day, 0, 0, 0, 0).getTime();
+}
+
+function parseDateInputToEndMs(dateStr) {
+  if (!dateStr) return null;
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day, 23, 59, 59, 999).getTime();
+}
+
+function getLocalDateKey(timestamp) {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatHourlyRate(rate) {
+  if (rate == null) return '—';
+  return `${formatCurrency(rate)}/hr`;
 }
 
 function limitUnitToMs(value, unit) {
@@ -1681,7 +1774,17 @@ function persist() {
     activeSessionStartedAt: state.activeSessionStartedAt,
     listTemplates: state.listTemplates,
     soundEffectsEnabled: window.slashItSounds.isEnabled(),
+    invoiceSettings: state.invoiceSettings,
   });
+}
+
+function normalizeInvoiceSettings(settings) {
+  const source = settings && typeof settings === 'object' ? settings : {};
+  return {
+    businessName: typeof source.businessName === 'string' ? source.businessName.trim() : '',
+    email: typeof source.email === 'string' ? source.email.trim() : '',
+    address: typeof source.address === 'string' ? source.address.trim() : '',
+  };
 }
 
 function showView(mode) {
@@ -1920,9 +2023,349 @@ function getHistoryEntryEarnings(entry) {
   return entry.tasks.reduce((sum, task) => sum + getHistoryTaskEarnings(task), 0);
 }
 
+function getHistoryEntryTotalMs(entry) {
+  if (!entry?.tasks?.length) return entry?.totalMs || 0;
+
+  let hasTaskDuration = false;
+  const taskTotal = entry.tasks.reduce((sum, task) => {
+    if (task.durationMs == null || task.durationMs <= 0) return sum;
+    hasTaskDuration = true;
+    return sum + task.durationMs;
+  }, 0);
+
+  if (hasTaskDuration) return taskTotal;
+  return entry.totalMs || 0;
+}
+
+function getEffectiveHourlyRate(entry) {
+  if (!entry.billable) return null;
+  const durationMs = getHistoryEntryTotalMs(entry);
+  if (!durationMs || durationMs <= 0) return null;
+  const earnings = getHistoryEntryEarnings(entry);
+  if (!earnings) return null;
+  return earnings / (durationMs / 3600000);
+}
+
+function sessionHasMixedRates(entry) {
+  if (!entry.billable) return false;
+  const rates = new Set(
+    entry.tasks
+      .filter((task) => task.hourlyRateEnabled && task.hourlyRate)
+      .map((task) => task.hourlyRate),
+  );
+  return rates.size > 1;
+}
+
+function filterSessionHistoryByRange(history, startMs, endMs) {
+  return history.filter((entry) => {
+    const endedAt = entry.endedAt;
+    if (!endedAt) return false;
+    return endedAt >= startMs && endedAt <= endMs;
+  });
+}
+
+function getHistoryEntryName(entry) {
+  return (entry.name || 'Session').trim() || 'Session';
+}
+
+function getReportSessionNameOptions() {
+  const names = new Set();
+
+  for (const entry of state.sessionHistory) {
+    names.add(getHistoryEntryName(entry));
+  }
+
+  for (const session of state.plannedSessions) {
+    const name = (session.name || '').trim();
+    if (name) names.add(name);
+  }
+
+  return Array.from(names).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+}
+
+function filterSessionHistoryByName(history, sessionName) {
+  const trimmed = (sessionName || '').trim();
+  if (!trimmed) return history;
+  const normalized = trimmed.toLowerCase();
+  return history.filter((entry) => getHistoryEntryName(entry).toLowerCase() === normalized);
+}
+
+function populateHistoryReportSessionFilter() {
+  const options = getReportSessionNameOptions();
+  if (historyReportSessionFilter && !options.some((name) => name === historyReportSessionFilter)) {
+    historyReportSessionFilter = '';
+  }
+  renderHistoryReportSessionMenuOptions();
+  updateHistoryReportSessionTriggerLabel();
+}
+
+function renderHistoryReportSessionMenuOptions() {
+  if (!historyReportSessionMenu) return;
+
+  const options = getReportSessionNameOptions();
+  const selected = historyReportSessionFilter;
+  const items = [{ value: '', label: 'All sessions' }, ...options.map((name) => ({ value: name, label: name }))];
+
+  historyReportSessionMenu.innerHTML = items.map((item) => {
+    const isSelected = selected === item.value;
+    return `
+      <button
+        type="button"
+        class="history-report-session-option${isSelected ? ' history-report-session-option--selected' : ''}"
+        role="option"
+        aria-selected="${isSelected}"
+        data-session-filter="${escapeHtml(item.value)}"
+      >
+        <span class="history-report-session-option-check" aria-hidden="true">${isSelected ? '✓' : ''}</span>
+        <span class="history-report-session-option-label">${escapeHtml(item.label)}</span>
+      </button>
+    `;
+  }).join('');
+}
+
+function updateHistoryReportSessionTriggerLabel() {
+  if (!historyReportSessionValue) return;
+  historyReportSessionValue.textContent = historyReportSessionFilter || 'All sessions';
+}
+
+function positionHistoryReportSessionMenu() {
+  if (!historyReportSessionTrigger || !historyReportSessionMenu) return;
+
+  const rect = historyReportSessionTrigger.getBoundingClientRect();
+  historyReportSessionMenu.style.top = `${rect.bottom + 4}px`;
+  historyReportSessionMenu.style.left = `${rect.left}px`;
+  historyReportSessionMenu.style.width = `${rect.width}px`;
+}
+
+function openHistoryReportSessionMenu() {
+  if (!historyReportSessionMenu || !historyReportSessionTrigger) return;
+
+  positionHistoryReportSessionMenu();
+  historyReportSessionMenu.classList.remove('hidden');
+  historyReportSessionTrigger.setAttribute('aria-expanded', 'true');
+  historyReportSessionMenuOpen = true;
+  requestAnimationFrame(() => {
+    document.addEventListener('click', handleHistoryReportSessionOutsideClick, true);
+  });
+}
+
+function closeHistoryReportSessionMenu() {
+  if (!historyReportSessionMenu || !historyReportSessionTrigger) return;
+
+  historyReportSessionMenu.classList.add('hidden');
+  historyReportSessionTrigger.setAttribute('aria-expanded', 'false');
+  historyReportSessionMenuOpen = false;
+  document.removeEventListener('click', handleHistoryReportSessionOutsideClick, true);
+}
+
+function handleHistoryReportSessionOutsideClick(event) {
+  if (historyReportSessionSelectWrap?.contains(event.target)) return;
+  closeHistoryReportSessionMenu();
+}
+
+function handleHistoryReportSessionTriggerClick(event) {
+  event.stopPropagation();
+  if (historyReportSessionMenuOpen) {
+    closeHistoryReportSessionMenu();
+    return;
+  }
+
+  populateHistoryReportSessionFilter();
+  openHistoryReportSessionMenu();
+}
+
+function handleHistoryReportSessionOptionClick(event) {
+  const option = event.target.closest('.history-report-session-option');
+  if (!option) return;
+
+  event.stopPropagation();
+  historyReportSessionFilter = option.getAttribute('data-session-filter') ?? '';
+  closeHistoryReportSessionMenu();
+  updateHistoryReportSessionTriggerLabel();
+  renderHistoryReportPanel();
+}
+
+function getHistoryReportEmptyMessage(range, sessionName) {
+  if (!range) return 'Choose a valid date range.';
+  if (sessionName) return `No runs for "${sessionName}" in this range.`;
+  return 'No sessions in this range.';
+}
+
+function sanitizeFileNamePart(value) {
+  return (value || '').replace(/[/\\?%*:|"<>]/g, '-').trim();
+}
+
+function formatInvoiceNumberDate(ms) {
+  const date = new Date(ms);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const year = String(date.getFullYear()).slice(-2);
+  return `${month}${day}${year}`;
+}
+
+function sessionNameToInvoicePrefix(name) {
+  const prefix = (name || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return prefix || 'SESSION';
+}
+
+function generateInvoiceNumber(sessionName, invoiceDateMs) {
+  const datePart = formatInvoiceNumberDate(invoiceDateMs);
+  const trimmed = (sessionName || '').trim();
+  if (!trimmed) return datePart;
+  return `${sessionNameToInvoicePrefix(trimmed)}-${datePart}`;
+}
+
+function formatInvoiceHours(durationMs) {
+  if (!durationMs || durationMs <= 0) return '0.00';
+  return (durationMs / 3600000).toFixed(2);
+}
+
+function getInvoiceBillableLines(report) {
+  if (!report?.sessions?.length) return [];
+  return report.sessions.filter((session) => session.billable && (session.earnings || 0) > 0);
+}
+
+function getInvoiceBillableTotal(report) {
+  return getInvoiceBillableLines(report).reduce((sum, session) => sum + (session.earnings || 0), 0);
+}
+
+function groupEarningsByDay(entries) {
+  const buckets = new Map();
+
+  for (const entry of entries) {
+    const dateKey = getLocalDateKey(entry.endedAt);
+    const earnings = entry.billable ? getHistoryEntryEarnings(entry) : 0;
+    const existing = buckets.get(dateKey) || {
+      dateKey,
+      dateMs: parseDateInputToStartMs(dateKey),
+      earnings: 0,
+      totalMs: 0,
+      sessionCount: 0,
+    };
+
+    existing.earnings += earnings;
+    existing.totalMs += getHistoryEntryTotalMs(entry);
+    existing.sessionCount += 1;
+    buckets.set(dateKey, existing);
+  }
+
+  return Array.from(buckets.values()).sort((a, b) => a.dateMs - b.dateMs);
+}
+
+function buildEarningsReportData(entries, range) {
+  const sessions = entries.map((entry) => ({
+    id: entry.id,
+    date: entry.endedAt,
+    name: entry.name || 'Session',
+    durationMs: getHistoryEntryTotalMs(entry),
+    earnings: entry.billable ? getHistoryEntryEarnings(entry) : null,
+    effectiveRate: getEffectiveHourlyRate(entry),
+    hasMixedRates: sessionHasMixedRates(entry),
+    status: entry.status === 'abandoned' ? 'Abandoned' : 'Completed',
+    billable: !!entry.billable,
+  }));
+
+  const dailyBars = groupEarningsByDay(entries).map((day) => ({
+    label: formatReportDay(day.dateMs),
+    dateKey: day.dateKey,
+    value: day.earnings,
+    sessionCount: day.sessionCount,
+  }));
+
+  const sessionBars = sessions
+    .filter((session) => session.billable)
+    .map((session) => ({
+      label: `${session.name} · ${formatReportDay(session.date)}`,
+      value: session.earnings || 0,
+    }));
+
+  const billableSessions = sessions.filter((session) => session.billable);
+  const totalEarnings = billableSessions.reduce((sum, session) => sum + (session.earnings || 0), 0);
+  const totalMs = entries.reduce((sum, entry) => sum + getHistoryEntryTotalMs(entry), 0);
+  const billableMs = billableSessions.reduce((sum, session) => sum + (session.durationMs || 0), 0);
+  const blendedRate = billableMs > 0 && totalEarnings > 0
+    ? totalEarnings / (billableMs / 3600000)
+    : null;
+
+  return {
+    range,
+    totals: {
+      sessionCount: entries.length,
+      totalMs,
+      totalEarnings,
+      blendedRate,
+      billableSessionCount: billableSessions.length,
+    },
+    dailyBars,
+    sessionBars,
+    sessions,
+    hasMixedRatesNote: sessions.some((session) => session.hasMixedRates),
+  };
+}
+
+function getReportRangePreset(preset) {
+  const now = new Date();
+  const endMs = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    23,
+    59,
+    59,
+    999,
+  ).getTime();
+  let startMs;
+
+  if (preset === 'week') {
+    const start = new Date(now);
+    start.setDate(now.getDate() - now.getDay());
+    start.setHours(0, 0, 0, 0);
+    startMs = start.getTime();
+  } else if (preset === 'month') {
+    startMs = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0).getTime();
+  } else {
+    const start = new Date(now);
+    start.setDate(now.getDate() - 29);
+    start.setHours(0, 0, 0, 0);
+    startMs = start.getTime();
+  }
+
+  return { startMs, endMs };
+}
+
+function getCurrentReportRange() {
+  const startMs = parseDateInputToStartMs(historyReportStartInput?.value);
+  const endMs = parseDateInputToEndMs(historyReportEndInput?.value);
+  if (startMs == null || endMs == null || startMs > endMs) return null;
+  return {
+    startMs,
+    endMs,
+    startLabel: formatReportDate(startMs),
+    endLabel: formatReportDate(endMs),
+  };
+}
+
+function getFilteredReportEntries() {
+  const range = getCurrentReportRange();
+  if (!range) return { range: null, entries: [], report: null };
+
+  const sessionName = historyReportSessionFilter?.trim() || '';
+  let entries = filterSessionHistoryByRange(state.sessionHistory, range.startMs, range.endMs);
+  entries = filterSessionHistoryByName(entries, sessionName);
+
+  const reportRange = sessionName ? { ...range, sessionName } : range;
+
+  return {
+    range: reportRange,
+    entries,
+    report: buildEarningsReportData(entries, reportRange),
+  };
+}
+
 function recalculateHistoryEntryBillable(entry) {
   if (!entry.billable) {
     entry.totalEarnings = null;
+    entry.totalMs = getHistoryEntryTotalMs(entry);
     return;
   }
 
@@ -1933,6 +2376,7 @@ function recalculateHistoryEntryBillable(entry) {
     }
     return sum;
   }, 0);
+  entry.totalMs = getHistoryEntryTotalMs(entry);
 }
 
 function normalizeSessionHistoryEntry(entry) {
@@ -1955,6 +2399,7 @@ function normalizeSessionHistoryEntry(entry) {
   normalized.totalEarnings = billable
     ? (entry.totalEarnings ?? getHistoryEntryEarnings(normalized))
     : null;
+  normalized.totalMs = getHistoryEntryTotalMs(normalized);
 
   return normalized;
 }
@@ -1968,6 +2413,9 @@ function updateHistoryTaskDuration(entryId, taskIndex, durationMs) {
   recalculateHistoryEntryBillable(entry);
   persist();
   renderHistoryModal();
+  if (historyModalTab === 'report') {
+    renderHistoryReportPanel();
+  }
 }
 
 function archiveCurrentSession(status) {
@@ -2987,6 +3435,7 @@ function isSettingsUiOpen() {
   return !settingsMenu.classList.contains('hidden')
     || !shortcutsModal.classList.contains('hidden')
     || !dataModal.classList.contains('hidden')
+    || !invoiceSettingsModal.classList.contains('hidden')
     || !historyModal.classList.contains('hidden')
     || !templatesModal.classList.contains('hidden')
     || !saveTemplateModal.classList.contains('hidden')
@@ -3019,6 +3468,39 @@ function openDataModal() {
 
 function closeDataModal() {
   dataModal.classList.add('hidden');
+}
+
+function populateInvoiceSettingsForm() {
+  if (invoiceSettingsBusinessNameInput) {
+    invoiceSettingsBusinessNameInput.value = state.invoiceSettings.businessName || '';
+  }
+  if (invoiceSettingsEmailInput) {
+    invoiceSettingsEmailInput.value = state.invoiceSettings.email || '';
+  }
+  if (invoiceSettingsAddressInput) {
+    invoiceSettingsAddressInput.value = state.invoiceSettings.address || '';
+  }
+}
+
+function openInvoiceSettingsModal() {
+  hideSettingsMenu();
+  populateInvoiceSettingsForm();
+  invoiceSettingsModal.classList.remove('hidden');
+  invoiceSettingsBusinessNameInput?.focus();
+}
+
+function closeInvoiceSettingsModal() {
+  invoiceSettingsModal.classList.add('hidden');
+}
+
+function saveInvoiceSettingsModal() {
+  state.invoiceSettings = normalizeInvoiceSettings({
+    businessName: invoiceSettingsBusinessNameInput?.value || '',
+    email: invoiceSettingsEmailInput?.value || '',
+    address: invoiceSettingsAddressInput?.value || '',
+  });
+  persist();
+  closeInvoiceSettingsModal();
 }
 
 async function handleBackupNow() {
@@ -3145,6 +3627,558 @@ function renderHistoryTaskItem(task, entryId, taskIndex) {
   `;
 }
 
+function renderReportBarChart(bars, emptyMessage) {
+  if (!bars.length) {
+    return `<p class="history-report-chart-empty">${escapeHtml(emptyMessage)}</p>`;
+  }
+
+  const maxValue = Math.max(...bars.map((bar) => bar.value), 1);
+
+  return bars.map((bar) => {
+    const width = maxValue > 0 ? (bar.value / maxValue) * 100 : 0;
+    return `
+      <div class="report-bar-row">
+        <span class="report-bar-label" title="${escapeHtml(bar.label)}">${escapeHtml(bar.label)}</span>
+        <div class="report-bar-track"><div class="report-bar-fill" style="width: ${width}%"></div></div>
+        <span class="report-bar-value">${escapeHtml(formatCurrency(bar.value))}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderReportSummary(report) {
+  if (!report) return '';
+
+  const { totals } = report;
+  return `
+    <span class="history-report-summary-item"><strong>${totals.sessionCount}</strong> session${totals.sessionCount === 1 ? '' : 's'}</span>
+    <span class="history-report-summary-item"><strong>${escapeHtml(formatTime(totals.totalMs))}</strong> tracked</span>
+    <span class="history-report-summary-item history-report-summary-item--earnings"><strong>${escapeHtml(formatCurrency(totals.totalEarnings))}</strong> earned</span>
+    ${totals.blendedRate != null ? `<span class="history-report-summary-item"><strong>${escapeHtml(formatHourlyRate(totals.blendedRate))}</strong> blended rate</span>` : ''}
+  `;
+}
+
+function renderReportTable(report) {
+  if (!report || !report.sessions.length) {
+    historyReportTableBody.innerHTML = '';
+    historyReportTableFoot.innerHTML = '';
+    return;
+  }
+
+  historyReportTableBody.innerHTML = report.sessions.map((session) => `
+    <tr>
+      <td>${escapeHtml(formatReportDate(session.date))}</td>
+      <td>${escapeHtml(session.name)}</td>
+      <td>${escapeHtml(formatTime(session.durationMs))}</td>
+      <td class="history-report-earnings">${session.billable ? escapeHtml(formatCurrency(session.earnings || 0)) : '—'}</td>
+      <td>${session.billable ? escapeHtml(formatHourlyRate(session.effectiveRate)) : '—'}</td>
+      <td>${escapeHtml(session.status)}</td>
+    </tr>
+  `).join('');
+
+  historyReportTableFoot.innerHTML = `
+    <tr>
+      <td colspan="2">Range total</td>
+      <td>${escapeHtml(formatTime(report.totals.totalMs))}</td>
+      <td class="history-report-earnings">${escapeHtml(formatCurrency(report.totals.totalEarnings))}</td>
+      <td>${report.totals.blendedRate != null ? escapeHtml(formatHourlyRate(report.totals.blendedRate)) : '—'}</td>
+      <td>${report.totals.sessionCount} session${report.totals.sessionCount === 1 ? '' : 's'}</td>
+    </tr>
+  `;
+}
+
+function renderHistoryReportPanel() {
+  if (!historyReportPanel) return;
+
+  populateHistoryReportSessionFilter();
+
+  const { range, report } = getFilteredReportEntries();
+  const sessionName = historyReportSessionFilter?.trim() || '';
+  const hasSessions = !!report?.sessions.length;
+
+  if (historyReportSummary) {
+    historyReportSummary.innerHTML = range && report ? renderReportSummary(report) : '';
+  }
+
+  if (historyReportDailyChart) {
+    historyReportDailyChart.innerHTML = hasSessions
+      ? renderReportBarChart(report.dailyBars, 'No billable earnings in this range.')
+      : '';
+  }
+
+  if (historyReportSessionChart) {
+    historyReportSessionChart.innerHTML = hasSessions
+      ? renderReportBarChart(report.sessionBars, 'No billable sessions in this range.')
+      : '';
+  }
+
+  renderReportTable(hasSessions ? report : null);
+
+  if (historyReportFootnote) {
+    historyReportFootnote.classList.toggle('hidden', !(hasSessions && report.hasMixedRatesNote));
+  }
+
+  if (historyReportEmpty) {
+    historyReportEmpty.textContent = getHistoryReportEmptyMessage(range, sessionName);
+    historyReportEmpty.classList.toggle('hidden', hasSessions || !range);
+  }
+
+  if (historyExportPdfBtn) {
+    historyExportPdfBtn.disabled = !hasSessions;
+    historyExportPdfBtn.classList.toggle('hidden', historyModalTab !== 'report');
+  }
+
+  const hasBillableInvoiceLines = !!report && getInvoiceBillableLines(report).length > 0;
+  if (historyExportInvoiceBtn) {
+    historyExportInvoiceBtn.disabled = !hasBillableInvoiceLines;
+    historyExportInvoiceBtn.classList.toggle('hidden', historyModalTab !== 'report');
+  }
+}
+
+function setHistoryModalTab(tab) {
+  historyModalTab = tab === 'report' ? 'report' : 'sessions';
+  closeHistoryReportSessionMenu();
+
+  historyTabSessionsBtn?.classList.toggle('history-modal-tab--active', historyModalTab === 'sessions');
+  historyTabReportBtn?.classList.toggle('history-modal-tab--active', historyModalTab === 'report');
+  historyTabSessionsBtn?.setAttribute('aria-selected', historyModalTab === 'sessions' ? 'true' : 'false');
+  historyTabReportBtn?.setAttribute('aria-selected', historyModalTab === 'report' ? 'true' : 'false');
+  historySessionsPanel?.classList.toggle('hidden', historyModalTab !== 'sessions');
+  historyReportPanel?.classList.toggle('hidden', historyModalTab !== 'report');
+  historyExportPdfBtn?.classList.toggle('hidden', historyModalTab !== 'report');
+  historyExportInvoiceBtn?.classList.toggle('hidden', historyModalTab !== 'report');
+
+  if (historyModalTab === 'report') {
+    renderHistoryReportPanel();
+  }
+}
+
+function initializeHistoryReportRange(preset = 'month') {
+  const range = getReportRangePreset(preset);
+  if (historyReportStartInput) historyReportStartInput.value = formatDateInputValue(range.startMs);
+  if (historyReportEndInput) historyReportEndInput.value = formatDateInputValue(range.endMs);
+}
+
+function buildEarningsReportHtml(report) {
+  const dailyChart = renderReportBarChart(
+    report.dailyBars,
+    'No billable earnings in this range.',
+  );
+  const sessionChart = renderReportBarChart(
+    report.sessionBars,
+    'No billable sessions in this range.',
+  );
+  const tableRows = report.sessions.map((session) => `
+    <tr>
+      <td>${escapeHtml(formatReportDate(session.date))}</td>
+      <td>${escapeHtml(session.name)}</td>
+      <td>${escapeHtml(formatTime(session.durationMs))}</td>
+      <td class="earnings">${session.billable ? escapeHtml(formatCurrency(session.earnings || 0)) : '—'}</td>
+      <td>${session.billable ? escapeHtml(formatHourlyRate(session.effectiveRate)) : '—'}</td>
+      <td>${escapeHtml(session.status)}</td>
+    </tr>
+  `).join('');
+
+  const footnote = report.hasMixedRatesNote
+    ? '<p class="footnote">Effective hourly rates blend task rates when a session uses mixed billing rates.</p>'
+    : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Slash It Earnings Report</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #111;
+      background: #fff;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    h1 {
+      margin: 0 0 4px;
+      font-size: 22px;
+      font-weight: 700;
+    }
+    .subtitle {
+      margin: 0 0 20px;
+      color: #666;
+      font-size: 13px;
+    }
+    .summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 20px;
+      margin-bottom: 24px;
+      padding: 12px 14px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: #fafafa;
+    }
+    .summary strong { color: #111; }
+    .summary .earnings strong { color: #15803d; }
+    h2 {
+      margin: 0 0 8px;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #666;
+    }
+    .section {
+      margin-bottom: 20px;
+      break-inside: avoid;
+    }
+    .report-bar-row {
+      display: grid;
+      grid-template-columns: 96px 1fr 72px;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .report-bar-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #555;
+    }
+    .report-bar-track {
+      height: 10px;
+      border-radius: 4px;
+      background: #ececec;
+      overflow: hidden;
+    }
+    .report-bar-fill {
+      height: 100%;
+      min-width: 2px;
+      border-radius: 4px;
+      background: #30d158;
+    }
+    .report-bar-value {
+      text-align: right;
+      color: #15803d;
+      font-weight: 600;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+    th, td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #e5e5e5;
+      text-align: left;
+    }
+    th {
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #666;
+    }
+    td:nth-child(3), td:nth-child(4), td:nth-child(5) { text-align: right; }
+    .earnings { color: #15803d; font-weight: 600; }
+    tfoot td {
+      font-weight: 700;
+      border-top: 1px solid #bbb;
+      border-bottom: none;
+    }
+    tr { break-inside: avoid; }
+    .footnote {
+      margin-top: 12px;
+      color: #666;
+      font-size: 11px;
+    }
+    .history-report-chart-empty {
+      margin: 0;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <h1>Slash It Earnings Report</h1>
+  <p class="subtitle">${escapeHtml(report.range.startLabel)} – ${escapeHtml(report.range.endLabel)}${report.range.sessionName ? `<br />Session: ${escapeHtml(report.range.sessionName)}` : ''}</p>
+  <div class="summary">
+    <span><strong>${report.totals.sessionCount}</strong> session${report.totals.sessionCount === 1 ? '' : 's'}</span>
+    <span><strong>${escapeHtml(formatTime(report.totals.totalMs))}</strong> tracked</span>
+    <span class="earnings"><strong>${escapeHtml(formatCurrency(report.totals.totalEarnings))}</strong> earned</span>
+    ${report.totals.blendedRate != null ? `<span><strong>${escapeHtml(formatHourlyRate(report.totals.blendedRate))}</strong> blended rate</span>` : ''}
+  </div>
+  <div class="section">
+    <h2>Daily earnings</h2>
+    ${dailyChart}
+  </div>
+  <div class="section">
+    <h2>Earnings by session</h2>
+    ${sessionChart}
+  </div>
+  <div class="section">
+    <h2>Sessions</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Session</th>
+          <th>Duration</th>
+          <th>Earnings</th>
+          <th>Hourly rate</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>${tableRows}</tbody>
+      <tfoot>
+        <tr>
+          <td colspan="2">Range total</td>
+          <td>${escapeHtml(formatTime(report.totals.totalMs))}</td>
+          <td class="earnings">${escapeHtml(formatCurrency(report.totals.totalEarnings))}</td>
+          <td>${report.totals.blendedRate != null ? escapeHtml(formatHourlyRate(report.totals.blendedRate)) : '—'}</td>
+          <td>${report.totals.sessionCount} session${report.totals.sessionCount === 1 ? '' : 's'}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  ${footnote}
+</body>
+</html>`;
+}
+
+function buildInvoiceFromBlock(invoiceSettings) {
+  const parts = [];
+  if (invoiceSettings.businessName) parts.push(escapeHtml(invoiceSettings.businessName));
+  if (invoiceSettings.email) parts.push(escapeHtml(invoiceSettings.email));
+  if (invoiceSettings.address) {
+    parts.push(escapeHtml(invoiceSettings.address).replace(/\n/g, '<br />'));
+  }
+  if (!parts.length) return '—';
+  return parts.join('<br />');
+}
+
+function buildInvoiceHtml(report, invoiceSettings) {
+  const invoiceDateMs = Date.now();
+  const invoiceNumber = generateInvoiceNumber(report.range.sessionName, invoiceDateMs);
+  const billableLines = getInvoiceBillableLines(report);
+  const totalDue = getInvoiceBillableTotal(report);
+  const billTo = (report.range.sessionName || '').trim() || 'Multiple sessions';
+  const hasMixedRatesNote = billableLines.some((session) => session.hasMixedRates);
+
+  const lineRows = billableLines.map((session) => `
+    <tr>
+      <td>${escapeHtml(formatReportDate(session.date))}</td>
+      <td>${escapeHtml(session.name)}</td>
+      <td>${escapeHtml(formatInvoiceHours(session.durationMs))}</td>
+      <td>${session.effectiveRate != null ? escapeHtml(formatHourlyRate(session.effectiveRate)) : '—'}</td>
+      <td class="amount">${escapeHtml(formatCurrency(session.earnings || 0))}</td>
+    </tr>
+  `).join('');
+
+  const footnote = hasMixedRatesNote
+    ? '<p class="footnote">Effective hourly rates blend task rates when a session uses mixed billing rates.</p>'
+    : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Invoice ${escapeHtml(invoiceNumber)}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #111;
+      background: #fff;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    h1 {
+      margin: 0 0 24px;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-bottom: 28px;
+    }
+    .meta-block h2 {
+      margin: 0 0 8px;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #666;
+      font-weight: 600;
+    }
+    .meta-block p {
+      margin: 0;
+      color: #111;
+      white-space: pre-line;
+    }
+    .invoice-details {
+      text-align: right;
+    }
+    .invoice-details p {
+      margin: 0 0 4px;
+      color: #333;
+    }
+    .invoice-details strong {
+      color: #111;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+    th, td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #e5e5e5;
+      text-align: left;
+    }
+    th {
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #666;
+      font-weight: 600;
+    }
+    td:nth-child(3), td:nth-child(4), td:nth-child(5) { text-align: right; }
+    th:nth-child(3), th:nth-child(4), th:nth-child(5) { text-align: right; }
+    .amount { font-weight: 600; }
+    tfoot td {
+      font-weight: 700;
+      border-top: 2px solid #111;
+      border-bottom: none;
+      font-size: 13px;
+    }
+    .footnote {
+      margin-top: 16px;
+      color: #666;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Invoice</h1>
+  <div class="meta-grid">
+    <div class="meta-block">
+      <h2>Bill From</h2>
+      <p>${buildInvoiceFromBlock(invoiceSettings)}</p>
+    </div>
+    <div class="meta-block invoice-details">
+      <p><strong>Invoice #</strong> ${escapeHtml(invoiceNumber)}</p>
+      <p><strong>Date</strong> ${escapeHtml(formatReportDate(invoiceDateMs))}</p>
+      <p><strong>Service period</strong> ${escapeHtml(report.range.startLabel)} – ${escapeHtml(report.range.endLabel)}</p>
+    </div>
+  </div>
+  <div class="meta-block">
+    <h2>Bill To</h2>
+    <p>${escapeHtml(billTo)}</p>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Description</th>
+        <th>Hours</th>
+        <th>Rate</th>
+        <th>Amount</th>
+      </tr>
+    </thead>
+    <tbody>${lineRows}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="4">Total due</td>
+        <td class="amount">${escapeHtml(formatCurrency(totalDue))}</td>
+      </tr>
+    </tfoot>
+  </table>
+  ${footnote}
+</body>
+</html>`;
+}
+
+async function handleExportEarningsReportPdf() {
+  const { report } = getFilteredReportEntries();
+  if (!report?.sessions.length) return;
+
+  const defaultFileName = report.range.sessionName
+    ? `Slash It Earnings ${sanitizeFileNamePart(report.range.sessionName)} ${formatDateInputValue(report.range.startMs)} to ${formatDateInputValue(report.range.endMs)}.pdf`
+    : `Slash It Earnings ${formatDateInputValue(report.range.startMs)} to ${formatDateInputValue(report.range.endMs)}.pdf`;
+  const html = buildEarningsReportHtml(report);
+
+  historyExportPdfBtn.disabled = true;
+  try {
+    const result = await window.slashIt.exportEarningsReportPdf({ html, defaultFileName });
+    if (result.error) {
+      window.alert(result.error);
+    }
+  } finally {
+    const { report: latestReport } = getFilteredReportEntries();
+    historyExportPdfBtn.disabled = !latestReport?.sessions.length;
+  }
+}
+
+async function handleExportInvoicePdf() {
+  const { report } = getFilteredReportEntries();
+  const billableLines = report ? getInvoiceBillableLines(report) : [];
+  if (!billableLines.length) return;
+
+  const invoiceDateMs = Date.now();
+  const defaultFileName = report.range.sessionName
+    ? `Slash It Invoice ${sanitizeFileNamePart(sessionNameToInvoicePrefix(report.range.sessionName))} ${formatInvoiceNumberDate(invoiceDateMs)}.pdf`
+    : `Slash It Invoice ${formatInvoiceNumberDate(invoiceDateMs)}.pdf`;
+  const html = buildInvoiceHtml(report, state.invoiceSettings);
+
+  historyExportInvoiceBtn.disabled = true;
+  try {
+    const result = await window.slashIt.exportEarningsReportPdf({
+      html,
+      defaultFileName,
+      dialogTitle: 'Export invoice',
+    });
+    if (result.error) {
+      window.alert(result.error);
+    }
+  } finally {
+    const { report: latestReport } = getFilteredReportEntries();
+    historyExportInvoiceBtn.disabled = !getInvoiceBillableLines(latestReport).length;
+  }
+}
+
+function handleHistoryReportPresetClick(event) {
+  const preset = event.target.closest('[data-report-preset]')?.dataset.reportPreset;
+  if (!preset) return;
+  closeHistoryReportSessionMenu();
+  initializeHistoryReportRange(preset);
+  renderHistoryReportPanel();
+}
+
+function handleHistoryReportDateChange() {
+  closeHistoryReportSessionMenu();
+  renderHistoryReportPanel();
+}
+
+function handleHistoryReportDateIconClick(event) {
+  const btn = event.target.closest('.history-report-date-icon-btn');
+  if (!btn) return;
+  event.preventDefault();
+
+  const input = document.getElementById(btn.dataset.dateTarget);
+  if (!input) return;
+
+  if (typeof input.showPicker === 'function') {
+    input.showPicker();
+    return;
+  }
+
+  input.focus();
+  input.click();
+}
+
 function renderHistoryEntry(entry) {
   const isExpanded = expandedHistoryEntryIds.has(entry.id);
   const isHighlighted = historyHighlightRunId && entry.runId === historyHighlightRunId;
@@ -3167,7 +4201,7 @@ function renderHistoryEntry(entry) {
             ${entry.billable ? '<span class="history-status-badge history-status-badge--billable">Billable</span>' : ''}
           </div>
           <div class="history-entry-meta">
-            ${escapeHtml(formatRelativeBackupTime(entry.endedAt))} · ${escapeHtml(formatTime(entry.totalMs))} · ${escapeHtml(taskSummary)}${escapeHtml(earningsSummary)}
+            ${escapeHtml(formatRelativeBackupTime(entry.endedAt))} · ${escapeHtml(formatTime(getHistoryEntryTotalMs(entry)))} · ${escapeHtml(taskSummary)}${escapeHtml(earningsSummary)}
           </div>
         </div>
         <span class="history-entry-chevron" aria-hidden="true">›</span>
@@ -3215,26 +4249,65 @@ function openHistoryModal(highlightRunId = null) {
       expandedHistoryEntryIds.clear();
       expandedHistoryEntryIds.add(entry.id);
     }
+    setHistoryModalTab('sessions');
   }
+
+  if (!historyReportStartInput?.value) {
+    initializeHistoryReportRange('month');
+  }
+
   renderHistoryModal();
+  if (historyModalTab === 'report') {
+    renderHistoryReportPanel();
+  }
   historyModal.classList.remove('hidden');
 }
 
 function closeHistoryModal() {
+  closeHistoryReportSessionMenu();
+  if (!deleteHistoryModal.classList.contains('hidden')) {
+    closeDeleteHistoryModal();
+  }
   historyModal.classList.add('hidden');
   historyHighlightRunId = null;
 }
 
-function deleteHistoryEntry(entryId) {
+function openDeleteHistoryModal(entryId) {
   const entry = state.sessionHistory.find((item) => item.id === entryId);
   if (!entry) return;
+
+  pendingDeleteHistoryEntryId = entryId;
   const label = entry.name || 'this session';
-  if (!window.confirm(`Delete "${label}" from session history?`)) return;
+  deleteHistoryMessage.textContent = `Delete ${label} from session history? This cannot be undone.`;
+  deleteHistoryModal.classList.remove('hidden');
+}
+
+function closeDeleteHistoryModal() {
+  pendingDeleteHistoryEntryId = null;
+  deleteHistoryModal.classList.add('hidden');
+}
+
+function confirmDeleteHistoryEntry() {
+  if (!pendingDeleteHistoryEntryId) return;
+  performDeleteHistoryEntry(pendingDeleteHistoryEntryId);
+  closeDeleteHistoryModal();
+}
+
+function performDeleteHistoryEntry(entryId) {
+  const entry = state.sessionHistory.find((item) => item.id === entryId);
+  if (!entry) return;
 
   state.sessionHistory = state.sessionHistory.filter((item) => item.id !== entryId);
   expandedHistoryEntryIds.delete(entryId);
   persist();
   renderHistoryModal();
+  if (historyModalTab === 'report') {
+    renderHistoryReportPanel();
+  }
+}
+
+function deleteHistoryEntry(entryId) {
+  openDeleteHistoryModal(entryId);
 }
 
 function handleHistoryListClick(event) {
@@ -3562,6 +4635,7 @@ function applySavedData(saved) {
     : [];
   migrateLegacyTaskTemplates(saved.taskTemplates);
   window.slashItSounds.setEnabled(saved.soundEffectsEnabled !== false);
+  state.invoiceSettings = normalizeInvoiceSettings(saved.invoiceSettings);
 
   if (saved.timerBarSize === 'hidden') {
     state.timerBarSize = state.timerBarSizeBeforeHide;
@@ -4164,13 +5238,29 @@ settingsBtn.addEventListener('click', (e) => {
   toggleSettingsMenu();
 });
 settingsDataBtn.addEventListener('click', openDataModal);
+settingsInvoiceBtn.addEventListener('click', openInvoiceSettingsModal);
 settingsTemplatesBtn.addEventListener('click', openTemplatesModal);
 settingsHistoryBtn.addEventListener('click', () => openHistoryModal());
 settingsShortcutsBtn.addEventListener('click', openShortcutsModal);
 settingsSoundEffectsBtn.addEventListener('click', toggleSoundEffects);
 shortcutsCloseBtn.addEventListener('click', closeShortcutsModal);
 dataCloseBtn.addEventListener('click', closeDataModal);
+invoiceSettingsDoneBtn.addEventListener('click', saveInvoiceSettingsModal);
+invoiceSettingsCancelBtn.addEventListener('click', closeInvoiceSettingsModal);
+invoiceSettingsModal.addEventListener('click', (e) => {
+  if (e.target === invoiceSettingsModal) closeInvoiceSettingsModal();
+});
 historyCloseBtn.addEventListener('click', closeHistoryModal);
+historyTabSessionsBtn?.addEventListener('click', () => setHistoryModalTab('sessions'));
+historyTabReportBtn?.addEventListener('click', () => setHistoryModalTab('report'));
+historyReportPanel?.addEventListener('click', handleHistoryReportPresetClick);
+historyReportPanel?.addEventListener('click', handleHistoryReportDateIconClick);
+historyReportStartInput?.addEventListener('change', handleHistoryReportDateChange);
+historyReportEndInput?.addEventListener('change', handleHistoryReportDateChange);
+historyReportSessionTrigger?.addEventListener('click', handleHistoryReportSessionTriggerClick);
+historyReportSessionMenu?.addEventListener('click', handleHistoryReportSessionOptionClick);
+historyExportInvoiceBtn?.addEventListener('click', handleExportInvoicePdf);
+historyExportPdfBtn?.addEventListener('click', handleExportEarningsReportPdf);
 historyList.addEventListener('click', handleHistoryListClick);
 historyList.addEventListener('blur', handleHistoryDurationInput, true);
 historyList.addEventListener('keydown', handleHistoryDurationInput, true);
@@ -4211,6 +5301,11 @@ deleteSessionConfirmBtn.addEventListener('click', confirmDeletePlannedSession);
 deleteSessionCancelBtn.addEventListener('click', closeDeleteSessionModal);
 deleteSessionModal.addEventListener('click', (e) => {
   if (e.target === deleteSessionModal) closeDeleteSessionModal();
+});
+deleteHistoryConfirmBtn.addEventListener('click', confirmDeleteHistoryEntry);
+deleteHistoryCancelBtn.addEventListener('click', closeDeleteHistoryModal);
+deleteHistoryModal.addEventListener('click', (e) => {
+  if (e.target === deleteHistoryModal) closeDeleteHistoryModal();
 });
 
 billableToggleBtn.addEventListener('click', () => {
@@ -4317,6 +5412,18 @@ document.addEventListener('keydown', (e) => {
     }
     if (!dataModal.classList.contains('hidden')) {
       closeDataModal();
+      return;
+    }
+    if (!invoiceSettingsModal.classList.contains('hidden')) {
+      closeInvoiceSettingsModal();
+      return;
+    }
+    if (!deleteHistoryModal.classList.contains('hidden')) {
+      closeDeleteHistoryModal();
+      return;
+    }
+    if (historyReportSessionMenuOpen) {
+      closeHistoryReportSessionMenu();
       return;
     }
     if (!historyModal.classList.contains('hidden')) {

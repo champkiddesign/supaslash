@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('slashIt', {
   backupDataNow: () => ipcRenderer.invoke('backup-data-now'),
   openDocumentsDataFolder: () => ipcRenderer.invoke('open-documents-data-folder'),
   restoreDataFromFile: () => ipcRenderer.invoke('restore-data-from-file'),
+  exportEarningsReportPdf: (payload) => ipcRenderer.invoke('export-earnings-report-pdf', payload),
   setWindowMode: (mode, options) => ipcRenderer.invoke('set-window-mode', mode, options),
   setFocusWidth: (contentWidth) => ipcRenderer.invoke('set-focus-width', contentWidth),
   setFocusDimensions: (dimensions) => ipcRenderer.invoke('set-focus-dimensions', dimensions),

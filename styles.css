@@ -356,12 +356,494 @@ body.mode-edit #edit-view.view {
 }
 
 .history-modal-card {
-  width: min(420px, calc(100% - 48px));
-  max-height: min(520px, calc(100vh - 48px));
+  width: min(560px, calc(100% - 48px));
+  max-height: min(680px, calc(100vh - 48px));
   display: flex;
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
+}
+
+.history-modal-tabs {
+  display: flex;
+  gap: calc(4px * var(--edit-scale));
+  flex-shrink: 0;
+  margin-top: calc(8px * var(--edit-scale));
+  padding: calc(3px * var(--edit-scale));
+  border: 1px solid var(--border);
+  border-radius: calc(8px * var(--edit-scale));
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.history-modal-tab {
+  flex: 1;
+  padding: calc(6px * var(--edit-scale)) calc(10px * var(--edit-scale));
+  border: none;
+  border-radius: calc(6px * var(--edit-scale));
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--mono);
+  font-size: var(--font-sm);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.history-modal-tab:hover {
+  color: var(--text);
+}
+
+.history-modal-tab--active {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.history-modal-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.history-modal-panel.hidden {
+  display: none;
+}
+
+.history-report-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(10px * var(--edit-scale));
+  margin-top: calc(12px * var(--edit-scale));
+}
+
+.history-report-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(6px * var(--edit-scale));
+}
+
+.history-report-preset-btn {
+  padding: calc(4px * var(--edit-scale)) calc(8px * var(--edit-scale));
+  border: 1px solid var(--border);
+  border-radius: calc(6px * var(--edit-scale));
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--mono);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.history-report-preset-btn:hover {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.history-report-dates {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: calc(10px * var(--edit-scale));
+}
+
+.history-report-date-field {
+  display: flex;
+  flex-direction: column;
+  gap: calc(4px * var(--edit-scale));
+  min-width: 0;
+}
+
+.history-report-date-label {
+  font-family: var(--mono);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.history-report-date-input-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.history-report-date-input {
+  width: 100%;
+  min-width: 0;
+  padding: calc(4px * var(--edit-scale)) calc(28px * var(--edit-scale)) calc(4px * var(--edit-scale)) calc(6px * var(--edit-scale));
+  border: 1px solid var(--border);
+  border-radius: calc(6px * var(--edit-scale));
+  background-color: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--font-sm);
+  color-scheme: dark;
+  -webkit-app-region: no-drag;
+}
+
+.history-report-date-input::-webkit-calendar-picker-indicator {
+  display: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.history-report-date-icon-btn {
+  position: absolute;
+  top: 50%;
+  right: calc(6px * var(--edit-scale));
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(16px * var(--edit-scale));
+  height: calc(16px * var(--edit-scale));
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.history-report-date-icon-btn:hover {
+  color: var(--text);
+}
+
+.history-report-date-icon-btn svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.history-report-session-filter {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: calc(8px * var(--edit-scale));
+}
+
+.history-report-session-select-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.history-report-session-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(8px * var(--edit-scale));
+  width: 100%;
+  min-width: 0;
+  padding: calc(4px * var(--edit-scale)) calc(8px * var(--edit-scale));
+  border: 1px solid var(--border);
+  border-radius: calc(6px * var(--edit-scale));
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--font-sm);
+  text-align: left;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.history-report-session-trigger:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.history-report-session-trigger[aria-expanded="true"] {
+  border-color: var(--accent);
+}
+
+.history-report-session-trigger-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-report-session-trigger-chevron {
+  flex-shrink: 0;
+  font-size: calc(10px * var(--edit-scale));
+  color: var(--text-secondary);
+  line-height: 1;
+}
+
+.history-report-session-menu {
+  position: fixed;
+  z-index: 220;
+  max-height: calc(220px * var(--edit-scale));
+  overflow-y: auto;
+  padding: calc(4px * var(--edit-scale));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: calc(8px * var(--edit-scale));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  -webkit-app-region: no-drag;
+}
+
+.history-report-session-menu.hidden {
+  display: none;
+}
+
+.history-report-session-option {
+  display: flex;
+  align-items: center;
+  gap: calc(8px * var(--edit-scale));
+  width: 100%;
+  padding: calc(8px * var(--edit-scale)) calc(10px * var(--edit-scale));
+  border: none;
+  border-radius: calc(6px * var(--edit-scale));
+  background: transparent;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--font-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.history-report-session-option:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.history-report-session-option--selected {
+  color: var(--accent);
+}
+
+.history-report-session-option-check {
+  flex-shrink: 0;
+  width: calc(10px * var(--edit-scale));
+  font-size: var(--font-xs);
+  color: var(--accent);
+  text-align: center;
+}
+
+.history-report-session-option-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-report-summary {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(8px * var(--edit-scale)) calc(16px * var(--edit-scale));
+  margin-top: calc(12px * var(--edit-scale));
+  padding: calc(10px * var(--edit-scale)) calc(12px * var(--edit-scale));
+  border: 1px solid var(--border);
+  border-radius: calc(8px * var(--edit-scale));
+  background: rgba(255, 255, 255, 0.02);
+  font-family: var(--mono);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.history-report-summary-item strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.history-report-summary-item--earnings strong {
+  color: #30d158;
+}
+
+.history-report-charts {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(12px * var(--edit-scale));
+  margin-top: calc(12px * var(--edit-scale));
+  max-height: calc(280px * var(--edit-scale));
+  overflow-y: auto;
+}
+
+.history-report-chart-section {
+  min-width: 0;
+}
+
+.history-report-chart-title {
+  margin: 0 0 calc(6px * var(--edit-scale));
+  font-family: var(--mono);
+  font-size: var(--font-sm);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.history-report-bar-chart {
+  display: flex;
+  flex-direction: column;
+  gap: calc(4px * var(--edit-scale));
+}
+
+.report-bar-row,
+.history-report-bar-chart .report-bar-row {
+  display: grid;
+  grid-template-columns: minmax(84px, 104px) 1fr minmax(72px, 88px);
+  align-items: center;
+  gap: calc(8px * var(--edit-scale));
+}
+
+.report-bar-label,
+.history-report-bar-chart .report-bar-label {
+  font-family: var(--mono);
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-bar-track,
+.history-report-bar-chart .report-bar-track {
+  height: calc(12px * var(--edit-scale));
+  border-radius: calc(4px * var(--edit-scale));
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.report-bar-fill,
+.history-report-bar-chart .report-bar-fill {
+  height: 100%;
+  min-width: 2px;
+  border-radius: calc(4px * var(--edit-scale));
+  background: linear-gradient(90deg, rgba(48, 209, 88, 0.65), #30d158);
+}
+
+.report-bar-value,
+.history-report-bar-chart .report-bar-value {
+  font-family: var(--mono);
+  font-size: var(--font-xs);
+  color: #30d158;
+  text-align: right;
+}
+
+.report-chart-empty,
+.history-report-chart-empty {
+  font-family: var(--mono);
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.history-report-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  margin-top: calc(12px * var(--edit-scale));
+  border: 1px solid var(--border);
+  border-radius: calc(8px * var(--edit-scale));
+}
+
+.history-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: var(--font-xs);
+}
+
+.history-report-table th,
+.history-report-table td {
+  padding: calc(6px * var(--edit-scale)) calc(8px * var(--edit-scale));
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+}
+
+.history-report-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 600;
+  z-index: 1;
+}
+
+.history-report-table td:nth-child(3),
+.history-report-table td:nth-child(4),
+.history-report-table td:nth-child(5) {
+  text-align: right;
+}
+
+.history-report-table .history-report-earnings {
+  color: #30d158;
+}
+
+.history-report-table tfoot td {
+  font-weight: 600;
+  color: var(--text);
+  border-top: 1px solid var(--border);
+  border-bottom: none;
+}
+
+.history-report-footnote {
+  flex-shrink: 0;
+  margin: calc(8px * var(--edit-scale)) 0 0;
+  font-family: var(--mono);
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.history-report-empty {
+  flex-shrink: 0;
+  margin: calc(12px * var(--edit-scale)) 0 0;
+  font-family: var(--mono);
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.history-modal-actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(8px * var(--edit-scale));
+  justify-content: flex-end;
+}
+
+.history-modal-actions .clear-session-modal-btn:not(.clear-session-modal-btn--cancel) {
+  margin-right: auto;
+}
+
+.history-modal-actions .clear-session-modal-btn.hidden {
+  display: none;
+}
+
+.invoice-settings-modal-card {
+  width: min(420px, calc(100% - 48px));
+}
+
+.invoice-settings-body {
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: calc(21px * var(--edit-scale));
+  color: var(--edit-muted);
+  text-align: center;
+  margin-bottom: calc(16px * var(--edit-scale));
+}
+
+.invoice-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: calc(10px * var(--edit-scale));
+  margin-bottom: calc(20px * var(--edit-scale));
+}
+
+.invoice-settings-input,
+.invoice-settings-textarea {
+  width: 100%;
+}
+
+.invoice-settings-textarea {
+  min-height: calc(72px * var(--edit-scale));
+  resize: vertical;
 }
 
 .history-modal-card .clear-session-modal-title {
@@ -372,7 +854,7 @@ body.mode-edit #edit-view.view {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  margin: calc(16px * var(--edit-scale)) 0;
+  margin: calc(16px * var(--edit-scale)) 0 0;
 }
 
 .history-entry + .history-entry {
@@ -607,10 +1089,6 @@ body.mode-edit #edit-view.view {
 .history-delete-btn:hover {
   color: #e57373;
   border-color: rgba(229, 115, 115, 0.4);
-}
-
-.history-modal-actions {
-  flex-shrink: 0;
 }
 
 .edit-columns {
@@ -1106,6 +1584,10 @@ body.mode-edit #edit-view.view {
   justify-content: center;
   background: rgba(0, 0, 0, 0.65);
   -webkit-app-region: no-drag;
+}
+
+.clear-session-modal--stacked {
+  z-index: 210;
 }
 
 .clear-session-modal.hidden {

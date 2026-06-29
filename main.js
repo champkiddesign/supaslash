@@ -717,6 +717,62 @@ ipcMain.handle('open-documents-data-folder', async () => {
   return { ok: !errorMessage, errorMessage };
 });
 
+ipcMain.handle('export-earnings-report-pdf', async (event, { html, defaultFileName, dialogTitle }) => {
+  const parentWindow = BrowserWindow.fromWebContents(event.sender);
+  let reportWindow;
+
+  try {
+    reportWindow = new BrowserWindow({
+      show: false,
+      width: 800,
+      height: 600,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+      },
+    });
+
+    await reportWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(resolve, 500);
+      reportWindow.webContents.once('did-finish-load', () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+      reportWindow.webContents.once('did-fail-load', (_event, _code, description) => {
+        clearTimeout(timeout);
+        reject(new Error(description));
+      });
+    });
+
+    const pdfBuffer = await reportWindow.webContents.printToPDF({
+      printBackground: true,
+      marginsType: 1,
+      pageSize: 'Letter',
+    });
+
+    const { canceled, filePath } = await dialog.showSaveDialog(parentWindow, {
+      title: dialogTitle || 'Export earnings report',
+      defaultPath: defaultFileName,
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+
+    if (canceled || !filePath) {
+      return { canceled: true };
+    }
+
+    await fs.promises.writeFile(filePath, pdfBuffer);
+    return { canceled: false, filePath };
+  } catch (err) {
+    console.error('Failed to export earnings report PDF:', err);
+    return { canceled: false, error: 'Could not export the earnings report.' };
+  } finally {
+    if (reportWindow && !reportWindow.isDestroyed()) {
+      reportWindow.destroy();
+    }
+  }
+});
+
 ipcMain.handle('restore-data-from-file', async (event) => {
   const parentWindow = BrowserWindow.fromWebContents(event.sender);
   const { canceled, filePaths } = await dialog.showOpenDialog(parentWindow, {
