@@ -91,7 +91,8 @@ const whooshSound = createSoundPool('assets/sounds/whoosh.m4a');
 const popSound = createSoundPool('assets/sounds/pop2.m4a', 0.25);
 const doubleSound = createSoundPool('assets/sounds/double.m4a', 0.55);
 const alarmSound = createSoundPool('assets/sounds/alarm.m4a');
-const completeSound = createSoundPool('assets/sounds/complete.m4a');
+const completeSound = createSoundPool('assets/sounds/complete.m4a', 0.35);
+const tasksCompleteSound = createSoundPool('assets/sounds/tasks-complete.m4a');
 
 let warmedUp = false;
 
@@ -104,6 +105,7 @@ function warmUpSounds() {
   doubleSound.warmUp();
   alarmSound.warmUp();
   completeSound.warmUp();
+  tasksCompleteSound.warmUp();
 }
 
 function playClickSound() {
@@ -128,6 +130,10 @@ function playAlarmSound() {
 
 function playCompleteSound() {
   completeSound.play();
+}
+
+function playTasksCompleteSound() {
+  tasksCompleteSound.play();
 }
 
 const HOVER_CLICK_SOUND_SELECTORS = [

@@ -2473,7 +2473,7 @@ body.mode-edit #edit-view.view {
 }
 
 .timer-task-zone:hover .timer-actions,
-.timer-task-zone:focus-within .timer-actions {
+.timer-task-zone:has(.timer-actions :focus-visible) .timer-actions {
   visibility: visible;
   opacity: 1;
   pointer-events: auto;
@@ -2857,7 +2857,7 @@ body.mode-focus.timer-bar-size-fullscreen .timer-actions::after {
 }
 
 body.mode-focus.timer-bar-size-fullscreen .timer-bar:hover .timer-actions,
-body.mode-focus.timer-bar-size-fullscreen .timer-task-zone:focus-within .timer-actions {
+body.mode-focus.timer-bar-size-fullscreen .timer-bar:has(.timer-actions :focus-visible) .timer-actions {
   opacity: 1;
 }
 

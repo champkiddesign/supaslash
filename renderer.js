@@ -669,9 +669,21 @@ function handleFocusStackMouseEnter() {
   openSessionDrawer();
 }
 
+function blurTimerZoneMouseFocus(container) {
+  const active = document.activeElement;
+  if (!active || !container.contains(active) || active.matches(':focus-visible')) return;
+  active.blur();
+}
+
 function handleFocusHoverMouseLeave(e) {
   if (isLeavingTaskZoneUpward(e)) return;
   scheduleCloseSessionDrawer();
+  blurTimerZoneMouseFocus(timerTaskZone);
+}
+
+function handleTimerBarMouseLeave(e) {
+  if (e.relatedTarget && timerBar.contains(e.relatedTarget)) return;
+  blurTimerZoneMouseFocus(timerTaskZone);
 }
 
 function handleFocusViewMouseLeave(e) {
@@ -3881,7 +3893,7 @@ function renderFocusView() {
 
   if (!current) {
     stopTimer();
-    showDoneView();
+    showDoneView({ playSound: true });
     return;
   }
 
@@ -3893,11 +3905,12 @@ function renderFocusView() {
   updateFullscreenTaskPanel();
 }
 
-function showDoneView() {
+function showDoneView({ playSound = false } = {}) {
   archiveCurrentSession('completed');
   doneSummary.textContent = `You completed ${getCompletedCount()} task${getCompletedCount() === 1 ? '' : 's'}.`;
   doneTime.textContent = formatTime(state.totalSessionMs);
   showView('done');
+  if (playSound) playTasksCompleteSound();
 }
 
 function launchCelebration() {
@@ -4375,6 +4388,7 @@ window.slashIt.onFocusWindowRestoreRequest(() => {
 });
 timerTaskZone.addEventListener('mouseenter', handleFocusStackMouseEnter);
 timerTaskZone.addEventListener('mouseleave', handleFocusHoverMouseLeave);
+timerBar.addEventListener('mouseleave', handleTimerBarMouseLeave);
 focusView.addEventListener('mouseleave', handleFocusViewMouseLeave);
 window.slashIt.onDrawerPointerEnter(() => {
   clearTimeout(drawerCloseTimer);
