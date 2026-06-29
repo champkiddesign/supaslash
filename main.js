@@ -752,7 +752,7 @@ ipcMain.handle('export-earnings-report-pdf', async (event, { html, defaultFileNa
     });
 
     const { canceled, filePath } = await dialog.showSaveDialog(parentWindow, {
-      title: dialogTitle || 'Export earnings report',
+      title: dialogTitle || 'Create report',
       defaultPath: defaultFileName,
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
     });

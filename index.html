@@ -15,8 +15,8 @@
     <header class="edit-header">
       <div class="edit-header-row">
         <div class="edit-header-actions">
-          <button id="plan-session-btn" class="plan-session-btn plan-session-btn--header" type="button">+ Create New Session</button>
-          <button id="settings-btn" class="settings-btn icon-btn" type="button" aria-label="Menu" aria-haspopup="true" aria-expanded="false">
+          <button id="plan-session-btn" class="plan-session-btn plan-session-btn--header" type="button" data-tutorial="create-session">+ Create New Session</button>
+          <button id="settings-btn" class="settings-btn icon-btn" type="button" data-tutorial="settings-menu" aria-label="Menu" aria-haspopup="true" aria-expanded="false">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
             <line x1="4" y1="7" x2="20" y2="7"/>
             <line x1="4" y1="12" x2="20" y2="12"/>
@@ -32,17 +32,17 @@
 
       <section class="task-section task-section--planned">
         <div class="section-header">
-          <h2 class="section-label section-label--bright">Sessions:</h2>
+          <h2 class="section-label section-label--bright" data-tutorial="sessions-panel">Sessions:</h2>
         </div>
         <div id="planned-sessions-list" class="planned-sessions-list"></div>
       </section>
 
       <section class="task-section task-section--session">
         <div class="section-header">
-          <h2 class="section-label section-label--bright">Queue:</h2>
+          <h2 class="section-label section-label--bright" data-tutorial="queue-panel">Queue:</h2>
           <div class="section-header-actions">
-            <button id="move-back-to-list-btn" class="section-action-btn" type="button" disabled>Move back to list</button>
-            <button id="clear-session-btn" class="section-action-btn" type="button" disabled>Clear tasks</button>
+            <button id="move-back-to-list-btn" class="section-action-btn" type="button" data-tutorial="move-back" disabled>Move back to list</button>
+            <button id="clear-session-btn" class="section-action-btn" type="button" data-tutorial="clear-tasks" disabled>Clear tasks</button>
           </div>
         </div>
         <ul id="session-list" class="task-list" data-list="session"></ul>
@@ -50,7 +50,7 @@
     </div>
 
     <footer class="edit-footer">
-      <button id="start-btn" class="start-session-btn" disabled>Start Session</button>
+      <button id="start-btn" class="start-session-btn" data-tutorial="start-session" disabled>Start Session</button>
     </footer>
 
     <div id="clear-session-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="clear-session-title">
@@ -122,13 +122,16 @@
     <div id="settings-menu" class="settings-menu hidden" role="menu" aria-label="Settings">
       <button type="button" id="settings-templates-btn" class="settings-menu-item" role="menuitem">Templates</button>
       <button type="button" id="settings-history-btn" class="settings-menu-item" role="menuitem">Session history</button>
-      <button type="button" id="settings-invoice-btn" class="settings-menu-item" role="menuitem">Invoice details</button>
-      <button type="button" id="settings-data-btn" class="settings-menu-item" role="menuitem">Data &amp; backup</button>
+      <button type="button" id="settings-invoice-btn" class="settings-menu-item" role="menuitem">Personal Profile</button>
       <button type="button" id="settings-shortcuts-btn" class="settings-menu-item" role="menuitem">Keyboard shortcuts</button>
+      <div class="settings-menu-divider" role="separator"></div>
       <button type="button" id="settings-sound-effects-btn" class="settings-menu-item" role="menuitemcheckbox" aria-checked="true">
         <span>Sound effects</span>
         <span id="settings-sound-effects-status" class="settings-menu-item-note">On</span>
       </button>
+      <button type="button" id="settings-data-btn" class="settings-menu-item" role="menuitem">Data &amp; backup</button>
+      <div class="settings-menu-divider" role="separator"></div>
+      <button type="button" id="settings-tutorial-btn" class="settings-menu-item" role="menuitem">Tutorial</button>
     </div>
 
     <div id="shortcuts-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-title">
@@ -202,8 +205,8 @@
 
     <div id="invoice-settings-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="invoice-settings-title">
       <div class="clear-session-modal-card invoice-settings-modal-card">
-        <h3 id="invoice-settings-title" class="clear-session-modal-title">Invoice details</h3>
-        <p class="invoice-settings-body">Shown as Bill From on exported invoices.</p>
+        <h3 id="invoice-settings-title" class="clear-session-modal-title">Personal Profile</h3>
+        <p class="invoice-settings-body">For personalization and invoice details.</p>
         <div class="invoice-settings-form">
           <label class="billable-field-label" for="invoice-settings-business-name">Business name</label>
           <input id="invoice-settings-business-name" class="template-editor-input invoice-settings-input" type="text" autocomplete="organization" />
@@ -217,6 +220,16 @@
           <button id="invoice-settings-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
         </div>
       </div>
+    </div>
+
+    <div id="tutorial-overlay" class="tutorial-overlay hidden" aria-hidden="true">
+      <div class="tutorial-backdrop"></div>
+      <div id="tutorial-dots" class="tutorial-dots"></div>
+      <div id="tutorial-tooltip" class="tutorial-tooltip hidden" role="dialog" aria-live="polite">
+        <h4 id="tutorial-tooltip-title" class="tutorial-tooltip-title"></h4>
+        <p id="tutorial-tooltip-body" class="tutorial-tooltip-body"></p>
+      </div>
+      <button type="button" id="tutorial-done-btn" class="tutorial-exit-link">EXIT TUTORIAL</button>
     </div>
   </div>
 
@@ -450,12 +463,10 @@
             <tfoot id="history-report-table-foot"></tfoot>
           </table>
         </div>
-        <p id="history-report-footnote" class="history-report-footnote hidden">Effective hourly rates blend task rates when a session uses mixed billing rates.</p>
-        <p id="history-report-empty" class="history-report-empty hidden">No sessions in this range.</p>
       </div>
       <div class="history-modal-actions">
-        <button id="history-export-invoice-btn" class="clear-session-modal-btn hidden" type="button">Export invoice PDF</button>
-        <button id="history-export-pdf-btn" class="clear-session-modal-btn hidden" type="button">Export PDF</button>
+        <button id="history-export-invoice-btn" class="clear-session-modal-btn hidden" type="button">Create Invoice</button>
+        <button id="history-export-pdf-btn" class="clear-session-modal-btn hidden" type="button">Create Report</button>
         <button id="history-close-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Close</button>
       </div>
     </div>

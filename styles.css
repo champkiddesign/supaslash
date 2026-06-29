@@ -94,6 +94,7 @@ body.mode-focus {
   background: transparent;
   overflow: hidden;
   --timer-bar-scale: 1;
+  --timer-actions-width: calc(188px * var(--timer-bar-scale, 1));
 }
 
 body.mode-focus.timer-bar-size-small {
@@ -275,6 +276,183 @@ body.mode-edit #edit-view.view {
   color: var(--edit-input-muted);
 }
 
+.settings-menu-divider {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border);
+}
+
+.tutorial-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+.tutorial-overlay.hidden {
+  display: none;
+}
+
+.tutorial-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.tutorial-dots {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 251;
+}
+
+.tutorial-arrow {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: default;
+  pointer-events: auto;
+  z-index: 252;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 0 6px rgba(255, 85, 0, 0.5));
+  transition: opacity 0.15s, filter 0.15s;
+}
+
+.tutorial-arrow-icon {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  animation: tutorial-arrow-pulse 1.8s ease-in-out infinite;
+}
+
+.tutorial-arrow svg {
+  width: 100%;
+  height: 100%;
+}
+
+.tutorial-arrow--right {
+  transform: translate(-50%, -50%);
+}
+
+.tutorial-arrow--left {
+  transform: translate(-50%, -50%) rotate(180deg);
+}
+
+.tutorial-arrow--down {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.tutorial-arrow--up {
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+
+.tutorial-arrow--visited {
+  opacity: 0.55;
+  filter: drop-shadow(0 0 3px rgba(255, 85, 0, 0.2));
+}
+
+.tutorial-arrow--visited .tutorial-arrow-icon {
+  animation: none;
+}
+
+.tutorial-arrow:hover {
+  filter: drop-shadow(0 0 10px rgba(255, 85, 0, 0.8));
+}
+
+.tutorial-arrow:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+@keyframes tutorial-arrow-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.82;
+  }
+}
+
+.tutorial-tooltip {
+  position: fixed;
+  z-index: 253;
+  max-width: min(320px, calc(100vw - 32px));
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+}
+
+.tutorial-tooltip.hidden {
+  display: none;
+}
+
+.tutorial-tooltip-title {
+  margin: 0 0 8px;
+  font-family: var(--mono);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.tutorial-tooltip-body {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.tutorial-tooltip-body strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.tutorial-exit-link {
+  position: fixed;
+  right: 16px;
+  bottom: 12px;
+  z-index: 254;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: var(--font-xs);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  color: var(--accent);
+  transition: color 0.15s;
+  -webkit-app-region: no-drag;
+}
+
+.tutorial-exit-link:hover {
+  color: var(--accent-hover);
+}
+
+.tutorial-exit-link:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .shortcuts-modal-card {
   width: min(420px, calc(100% - 48px));
 }
@@ -356,7 +534,7 @@ body.mode-edit #edit-view.view {
 }
 
 .history-modal-card {
-  width: min(560px, calc(100% - 48px));
+  width: min(640px, calc(100% - 48px));
   max-height: min(680px, calc(100vh - 48px));
   display: flex;
   flex-direction: column;
@@ -651,12 +829,12 @@ body.mode-edit #edit-view.view {
 }
 
 .history-report-charts {
-  flex-shrink: 0;
+  flex: 0 1 auto;
   display: flex;
   flex-direction: column;
   gap: calc(12px * var(--edit-scale));
   margin-top: calc(12px * var(--edit-scale));
-  max-height: calc(280px * var(--edit-scale));
+  max-height: calc(180px * var(--edit-scale));
   overflow-y: auto;
 }
 
@@ -731,8 +909,8 @@ body.mode-edit #edit-view.view {
 }
 
 .history-report-table-wrap {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 1 1 0;
+  min-height: calc(160px * var(--edit-scale));
   overflow: auto;
   margin-top: calc(12px * var(--edit-scale));
   border: 1px solid var(--border);
@@ -782,34 +960,23 @@ body.mode-edit #edit-view.view {
   border-bottom: none;
 }
 
-.history-report-footnote {
-  flex-shrink: 0;
-  margin: calc(8px * var(--edit-scale)) 0 0;
-  font-family: var(--mono);
-  font-size: var(--font-xs);
-  color: var(--text-secondary);
-  line-height: 1.4;
-}
-
-.history-report-empty {
-  flex-shrink: 0;
-  margin: calc(12px * var(--edit-scale)) 0 0;
-  font-family: var(--mono);
-  font-size: var(--font-base);
-  color: var(--text-secondary);
-  text-align: center;
-}
-
 .history-modal-actions {
   flex-shrink: 0;
   display: flex;
-  flex-wrap: wrap;
-  gap: calc(8px * var(--edit-scale));
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: calc(6px * var(--edit-scale));
   justify-content: flex-end;
+  margin-top: calc(10px * var(--edit-scale));
 }
 
-.history-modal-actions .clear-session-modal-btn:not(.clear-session-modal-btn--cancel) {
-  margin-right: auto;
+.history-modal-actions .clear-session-modal-btn {
+  width: auto;
+  flex: 0 0 auto;
+  padding: calc(7px * var(--edit-scale)) calc(12px * var(--edit-scale));
+  font-size: var(--font-xs);
+  border-radius: calc(8px * var(--edit-scale));
+  white-space: nowrap;
 }
 
 .history-modal-actions .clear-session-modal-btn.hidden {
@@ -2661,7 +2828,8 @@ body.mode-edit #edit-view.view {
   -webkit-app-region: no-drag;
 }
 
-.focus-stack.focus-stack--expanded {
+.focus-stack.focus-stack--expanded,
+.focus-stack:has(.timer-bar--earnings-split) {
   max-width: none;
 }
 
@@ -2798,7 +2966,8 @@ body.mode-edit #edit-view.view {
   border-radius: var(--window-radius);
 }
 
-.timer-bar.timer-bar--expanded {
+.timer-bar.timer-bar--expanded,
+.timer-bar.timer-bar--earnings-split {
   max-width: none;
 }
 
@@ -2858,6 +3027,25 @@ body.mode-edit #edit-view.view {
   color: #30d158;
 }
 
+.timer-display--earnings-split {
+  font-size: calc(var(--font-lg) * var(--timer-bar-scale, 1));
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.timer-earnings-live {
+  color: var(--text);
+}
+
+.timer-earnings-sep {
+  color: var(--edit-muted);
+  font-weight: 400;
+}
+
+.timer-earnings-billed-val {
+  color: #30d158;
+}
+
 .timer-display {
   flex-shrink: 0;
   font-family: var(--mono);
@@ -2885,7 +3073,6 @@ body.mode-edit #edit-view.view {
 }
 
 .timer-task-zone {
-  position: relative;
   display: flex;
   align-items: center;
   flex: 1 1 auto;
@@ -2916,8 +3103,11 @@ body.mode-edit #edit-view.view {
 
 .timer-actions {
   position: absolute;
-  inset: 0;
-  z-index: 2;
+  top: 0;
+  right: calc(12px * var(--timer-bar-scale, 1));
+  bottom: 0;
+  z-index: 3;
+  width: var(--timer-actions-width);
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -2934,28 +3124,22 @@ body.mode-edit #edit-view.view {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: var(--bg);
+  background-color: var(--bg);
   pointer-events: none;
 }
 
 .timer-actions::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 0;
+  display: none;
+}
+
+.timer-bar.is-running .timer-actions::before {
   background-image: var(--grain-image);
   background-repeat: repeat;
   background-size: var(--grain-size);
-  opacity: 0.4;
-  pointer-events: none;
 }
 
-.timer-bar.is-running .timer-actions::after {
-  opacity: 0.58;
-}
-
-.timer-task-zone:hover .timer-actions,
-.timer-task-zone:has(.timer-actions :focus-visible) .timer-actions {
+.timer-bar:hover .timer-actions,
+.timer-bar:has(.timer-actions :focus-visible) .timer-actions {
   visibility: visible;
   opacity: 1;
   pointer-events: auto;
@@ -3272,6 +3456,10 @@ body.mode-focus.timer-bar-size-fullscreen .timer-display {
   font-size: clamp(90px, 15vw, 180px);
   min-width: 0;
   line-height: 1;
+}
+
+body.mode-focus.timer-bar-size-fullscreen .timer-display--earnings-split {
+  font-size: clamp(48px, 8vw, 120px);
 }
 
 body.mode-focus.timer-bar-size-fullscreen .timer-task-zone {

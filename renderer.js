@@ -49,6 +49,13 @@ const settingsDataBtn = document.getElementById('settings-data-btn');
 const settingsInvoiceBtn = document.getElementById('settings-invoice-btn');
 const settingsHistoryBtn = document.getElementById('settings-history-btn');
 const settingsTemplatesBtn = document.getElementById('settings-templates-btn');
+const settingsTutorialBtn = document.getElementById('settings-tutorial-btn');
+const tutorialOverlay = document.getElementById('tutorial-overlay');
+const tutorialDots = document.getElementById('tutorial-dots');
+const tutorialTooltip = document.getElementById('tutorial-tooltip');
+const tutorialTooltipTitle = document.getElementById('tutorial-tooltip-title');
+const tutorialTooltipBody = document.getElementById('tutorial-tooltip-body');
+const tutorialDoneBtn = document.getElementById('tutorial-done-btn');
 const shortcutsModal = document.getElementById('shortcuts-modal');
 const shortcutsCloseBtn = document.getElementById('shortcuts-close-btn');
 const dataModal = document.getElementById('data-modal');
@@ -137,8 +144,6 @@ const historyReportDailyChart = document.getElementById('history-report-daily-ch
 const historyReportSessionChart = document.getElementById('history-report-session-chart');
 const historyReportTableBody = document.getElementById('history-report-table-body');
 const historyReportTableFoot = document.getElementById('history-report-table-foot');
-const historyReportFootnote = document.getElementById('history-report-footnote');
-const historyReportEmpty = document.getElementById('history-report-empty');
 const historyExportPdfBtn = document.getElementById('history-export-pdf-btn');
 const historyExportInvoiceBtn = document.getElementById('history-export-invoice-btn');
 const taskContextMenu = document.getElementById('task-context-menu');
@@ -173,6 +178,7 @@ let drawerCloseTimer = null;
 let sessionExpandTimer = null;
 let timerBarHideTimeout = null;
 let focusBarWidthCache = null;
+let lastEarningsSplitDisplayText = '';
 let isInitializing = true;
 let expandedHistoryEntryIds = new Set();
 let historyHighlightRunId = null;
@@ -374,9 +380,16 @@ function isTimerBarExpandedLayout() {
   return state.limitExpired;
 }
 
+function isTimerBarWideLayout() {
+  return isTimerBarExpandedLayout()
+    || (state.mode === 'focus'
+      && state.timerView === 'earnings'
+      && shouldShowEarningsRoundingDisplay());
+}
+
 function clampBarWidth(width, scale = getTimerBarScale()) {
   const minWidth = Math.round(FOCUS_BAR_BASE_MIN_WIDTH * scale);
-  if (isTimerBarExpandedLayout()) {
+  if (isTimerBarWideLayout()) {
     return Math.max(minWidth, width);
   }
   const maxWidth = Math.round(FOCUS_BAR_BASE_MAX_WIDTH * scale);
@@ -1395,6 +1408,65 @@ function getSessionEarnings() {
   );
 }
 
+function getRawTaskEarnings(task, isCurrentTask) {
+  const { enabled, rate } = getPlannedSessionRateSettings(task.sourceSessionId);
+  if (!enabled || !rate) return 0;
+  const ms = getTaskEarningsMs(task, isCurrentTask);
+  if (!ms || ms <= 0) return 0;
+  return (ms / 3600000) * rate;
+}
+
+function getSessionEarningsLive() {
+  saveCurrentTaskProgress();
+  const currentIndex = state.focusTaskIndex;
+  return state.sessionTasks.reduce(
+    (sum, task, index) => sum + (
+      index === currentIndex
+        ? getRawTaskEarnings(task, true)
+        : getTaskEarnings(task, false)
+    ),
+    0,
+  );
+}
+
+function getCurrentTaskRoundMinutes() {
+  const task = getCurrentTask();
+  if (!task) return null;
+  const { roundMinutes } = getPlannedSessionRateSettings(task.sourceSessionId);
+  return roundMinutes || null;
+}
+
+function shouldShowEarningsRoundingDisplay() {
+  if (!canShowSessionEarnings()) return false;
+  const roundMinutes = getCurrentTaskRoundMinutes();
+  if (!roundMinutes) return false;
+  const task = getCurrentTask();
+  if (!task) return false;
+  const { enabled, rate } = getPlannedSessionRateSettings(task.sourceSessionId);
+  return enabled && rate > 0;
+}
+
+function formatBillableRoundLabel(roundMinutes) {
+  return `${roundMinutes}M`;
+}
+
+function formatEarningsSplitDisplay(live, billed) {
+  return `${formatCurrency(live)} / ${formatCurrency(billed)}`;
+}
+
+function renderEarningsSplitDisplay(live, billed) {
+  timerDisplay.innerHTML = `
+    <span class="timer-earnings-live">${escapeHtml(formatCurrency(live))}</span><span class="timer-earnings-sep"> / </span><span class="timer-earnings-billed-val">${escapeHtml(formatCurrency(billed))}</span>
+  `;
+}
+
+function syncEarningsSplitBarWidth(displayText) {
+  if (displayText === lastEarningsSplitDisplayText) return;
+  lastEarningsSplitDisplayText = displayText;
+  invalidateFocusBarWidthCache();
+  scheduleFocusDimensionsUpdate();
+}
+
 function canShowSessionEarnings() {
   return state.sessionTasks.some((task) => {
     const { enabled, rate } = getPlannedSessionRateSettings(task.sourceSessionId);
@@ -1629,14 +1701,16 @@ function setBillableRoundMinutes(roundMinutes) {
   updateBillableModalUI(session);
 }
 
-function renderSessionBillableButton(session) {
+function renderSessionBillableButton(session, tutorialAnchor) {
   const enabled = !!session.hourlyRateEnabled;
   const label = `Billable settings for ${session.name}`;
+  const tutorialAttr = tutorialAnchor ? ` data-tutorial="${tutorialAnchor}"` : '';
   return `
     <button
       type="button"
       class="session-billable-btn${enabled ? ' session-billable-btn--active' : ''}"
       data-session-id="${escapeHtml(session.id)}"
+      ${tutorialAttr}
       title="${escapeHtml(label)}"
       aria-label="${escapeHtml(label)}"
     >$</button>
@@ -2185,12 +2259,6 @@ function handleHistoryReportSessionOptionClick(event) {
   renderHistoryReportPanel();
 }
 
-function getHistoryReportEmptyMessage(range, sessionName) {
-  if (!range) return 'Choose a valid date range.';
-  if (sessionName) return `No runs for "${sessionName}" in this range.`;
-  return 'No sessions in this range.';
-}
-
 function sanitizeFileNamePart(value) {
   return (value || '').replace(/[/\\?%*:|"<>]/g, '-').trim();
 }
@@ -2508,20 +2576,53 @@ function updateTimerDisplay() {
   }
 
   const current = getCurrentTask();
+  const showEarningsRounding = state.timerView === 'earnings' && shouldShowEarningsRoundingDisplay();
+  const roundMinutes = showEarningsRounding ? getCurrentTaskRoundMinutes() : null;
+
   if (timerModeLabel) {
-    timerModeLabel.textContent = state.timerView === 'task'
-      ? 'TASK'
-      : state.timerView === 'session'
-        ? 'SESSION'
-        : 'EARNINGS';
+    if (state.timerView === 'task') {
+      timerModeLabel.textContent = 'TASK';
+    } else if (state.timerView === 'session') {
+      timerModeLabel.textContent = 'SESSION';
+    } else if (showEarningsRounding && roundMinutes) {
+      timerModeLabel.textContent = `EARNINGS · ${formatBillableRoundLabel(roundMinutes)}`;
+    } else {
+      timerModeLabel.textContent = 'EARNINGS';
+    }
     timerModeLabel.classList.toggle('timer-mode-label--session', state.timerView === 'session');
     timerModeLabel.classList.toggle('timer-mode-label--earnings', state.timerView === 'earnings');
   }
 
   if (state.timerView === 'earnings') {
-    timerDisplay.textContent = formatCurrency(getSessionEarnings());
+    timerBar.classList.toggle('timer-bar--earnings-split', showEarningsRounding);
+    timerDisplay.classList.toggle('timer-display--earnings-split', showEarningsRounding);
+
+    if (showEarningsRounding) {
+      const live = getSessionEarningsLive();
+      const billed = getSessionEarnings();
+      const displayText = formatEarningsSplitDisplay(live, billed);
+      renderEarningsSplitDisplay(live, billed);
+      timerDisplay.title = `Live meter: ${formatCurrency(live)}. Billed if you stop now: ${formatCurrency(billed)}.`;
+      syncEarningsSplitBarWidth(displayText);
+    } else {
+      if (lastEarningsSplitDisplayText !== '') {
+        lastEarningsSplitDisplayText = '';
+        invalidateFocusBarWidthCache();
+        scheduleFocusDimensionsUpdate();
+      }
+      timerDisplay.textContent = formatCurrency(getSessionEarnings());
+      timerDisplay.title = 'Switch between task, session, and earnings';
+    }
     timerDisplay.classList.remove('paused', 'expired');
   } else {
+    if (lastEarningsSplitDisplayText !== '') {
+      lastEarningsSplitDisplayText = '';
+      invalidateFocusBarWidthCache();
+      scheduleFocusDimensionsUpdate();
+    }
+    timerBar.classList.remove('timer-bar--earnings-split');
+    timerDisplay.classList.remove('timer-display--earnings-split');
+    timerDisplay.title = 'Switch between task, session, and earnings';
     const displayMs = state.timerView === 'session'
       ? getSessionDisplayMs()
       : getTaskDisplayMs(current);
@@ -3170,9 +3271,10 @@ function renderPlannedSessionDeleteButton(session) {
 
 function renderSessionAddTask(session) {
   const isOpen = state.activeAddSessionIds.has(session.id);
+  const tutorialAttr = session.id === BRAINDUMP_SESSION_ID ? ' data-tutorial="new-task"' : '';
   if (!isOpen) {
     return `
-      <button type="button" class="session-add-task-trigger" data-session-id="${escapeHtml(session.id)}">
+      <button type="button" class="session-add-task-trigger" data-session-id="${escapeHtml(session.id)}"${tutorialAttr}>
         <span class="session-add-task-trigger-icon" aria-hidden="true">+</span>
         <span>NEW TASK</span>
       </button>
@@ -3180,7 +3282,7 @@ function renderSessionAddTask(session) {
   }
 
   return `
-    <form class="session-add-task-form" data-session-id="${escapeHtml(session.id)}">
+    <form class="session-add-task-form" data-session-id="${escapeHtml(session.id)}"${tutorialAttr}>
       <input
         type="text"
         class="session-add-task-input"
@@ -3298,13 +3400,14 @@ function setupSessionAddTask(block, session) {
 function renderPlannedSessions() {
   plannedSessionsList.innerHTML = '';
 
-  state.plannedSessions.forEach((session) => {
+  state.plannedSessions.forEach((session, sessionIndex) => {
     const isExpanded = isSessionExpanded(session.id);
     const listId = listIdForSession(session.id);
     const block = document.createElement('div');
     block.className = `planned-session ${isExpanded ? 'planned-session--expanded' : 'planned-session--collapsed'}`;
     block.dataset.sessionId = session.id;
     const sendLabel = `Send all tasks from ${session.name} to Queue`;
+    const sendTutorialAttr = sessionIndex === 0 ? ' data-tutorial="send-all-queue"' : '';
 
     block.innerHTML = `
       <div class="planned-session-header">
@@ -3315,11 +3418,12 @@ function renderPlannedSessions() {
         ${renderSessionEarningsBadge(session)}
         <div class="planned-session-header-actions">
           ${renderPlannedSessionDeleteButton(session)}
-          ${renderSessionBillableButton(session)}
+          ${renderSessionBillableButton(session, sessionIndex === 0 ? 'billable' : null)}
           <button
             type="button"
             class="session-send-to-queue-btn"
             data-session-id="${escapeHtml(session.id)}"
+            ${sendTutorialAttr}
             ${session.tasks.length === 0 ? 'disabled' : ''}
             title="${escapeHtml(sendLabel)}"
             aria-label="${escapeHtml(sendLabel)}"
@@ -3582,6 +3686,279 @@ function toggleSettingsMenu() {
   }
 }
 
+const TUTORIAL_STEPS = [
+  {
+    id: 'create-session',
+    selector: '[data-tutorial="create-session"]',
+    title: 'Spin up a new session!',
+    body: 'Got a client project? A side hustle? A "finally organize the garage" vibe? Hit <strong>+ Create New Session</strong> and give your chaos a name. Future-you will send a thank-you note.',
+  },
+  {
+    id: 'settings-menu',
+    selector: '[data-tutorial="settings-menu"]',
+    arrowPlacement: 'above-heading',
+    title: 'Your command center',
+    body: 'Tap the <strong>menu</strong> anytime for the good stuff: <strong>Templates</strong> for reusable task lists, <strong>Session history</strong> for past work and invoices, <strong>Personal Profile</strong> for your business info, <strong>Keyboard shortcuts</strong> for speed, <strong>Sound effects</strong> on/off, and <strong>Data &amp; backup</strong> to protect your progress. Replay this tour anytime from <strong>Tutorial</strong> at the bottom. More power features are landing soon — watch this space!',
+  },
+  {
+    id: 'sessions-panel',
+    selector: '[data-tutorial="sessions-panel"]',
+    arrowPlacement: 'above-heading',
+    title: 'Your idea parking lot',
+    body: 'This is <strong>Sessions</strong> — Braindump lives here by default. Dump every task, thought, and "I should probably…" without overthinking order. Collect now, curate later!',
+  },
+  {
+    id: 'new-task',
+    selector: '[data-tutorial="new-task"]',
+    title: 'Capture tasks FAST',
+    body: 'Click <strong>+ NEW TASK</strong>, type what you need to do, optionally add a time cap like <strong>20m</strong> — or use natural language right in the task name, like <strong>Write proposal for 45 minutes</strong>. Then smash <strong>Enter</strong>. Pro move: type <strong>/</strong> for templates, or <strong>⌘ Enter</strong> to send the task straight into the Queue!',
+  },
+  {
+    id: 'send-all-queue',
+    selector: '[data-tutorial="send-all-queue"]',
+    title: 'Bulk or cherry-pick — your call!',
+    body: 'Ready to load up the Queue? Hit the <strong>→</strong> on a session header to move <strong>ALL</strong> its tasks at once (<strong>⌘ ⇧ Enter</strong> works too!). Only want one? Click the <strong>→</strong> on any individual task instead. Bulk blast or surgical strike — you pick.',
+  },
+  {
+    id: 'billable',
+    selector: '[data-tutorial="billable"]',
+    title: 'Billable = get paid vibes',
+    body: 'Freelancer mode: activate! Tap the <strong>$</strong> on any session to turn on billable tracking, set your <strong>hourly rate</strong>, and pick how to <strong>round up</strong> task time (10m, 15m, 30m — your call). Slash through tasks and watch earnings stack up. Export invoices later from <strong>Session history</strong>!',
+  },
+  {
+    id: 'queue-panel',
+    selector: '[data-tutorial="queue-panel"]',
+    arrowPlacement: 'above-heading',
+    title: 'Your launch lineup',
+    body: 'The <strong>Queue</strong> is your ordered hit list — drag to reorder, double-click to rename, right-click for duplicate/delete. What\'s on top is what you slash through first when you start.',
+  },
+  {
+    id: 'move-back',
+    selector: '[data-tutorial="move-back"]',
+    title: 'Oops? Send it back!',
+    body: 'Queue feeling wrong? <strong>Move back to list</strong> returns everything to where it came from (Braindump or its session). No shame — just a quick undo button for your planning brain.',
+  },
+  {
+    id: 'start-session',
+    selector: '[data-tutorial="start-session"]',
+    title: 'GO TIME — Start Session',
+    body: 'Queue locked in? Hit <strong>Start Session</strong> (or <strong>⇧ Enter</strong>) and watch the timer bar take over. One task at a time. Pure focus. Let\'s slash it!',
+  },
+  {
+    id: 'clear-tasks',
+    selector: '[data-tutorial="clear-tasks"]',
+    title: 'Clean slate energy',
+    body: 'Finished or need a reset? <strong>Clear tasks</strong> wipes completed items or the whole Queue. Declutter so the next session starts fresh.',
+  },
+];
+
+let tutorialActiveStepId = null;
+let tutorialVisitedSteps = new Set();
+let tutorialTooltipHideTimeout = null;
+
+const TUTORIAL_ARROW_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h12"/><path d="M13 6l6 6-6 6"/></svg>';
+const TUTORIAL_ARROW_OFFSET = 10;
+
+function getTutorialArrowJitter(stepId, maxPx) {
+  let hash = 0;
+  for (let i = 0; i < stepId.length; i += 1) {
+    hash += stepId.charCodeAt(i);
+  }
+  return ((hash % 100) / 100 - 0.5) * 2 * maxPx;
+}
+
+function getTutorialArrowPlacement(rect, step) {
+  const stepId = step.id;
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+
+  if (step.arrowPlacement === 'above-heading') {
+    return {
+      x: cx,
+      y: rect.top - TUTORIAL_ARROW_OFFSET,
+      direction: 'down',
+      targetX: cx,
+      targetY: cy,
+    };
+  }
+
+  const padding = 20;
+  const space = {
+    top: cy - padding,
+    bottom: window.innerHeight - cy - padding,
+    left: cx - padding,
+    right: window.innerWidth - cx - padding,
+  };
+  const bestSide = Object.entries(space).sort((a, b) => b[1] - a[1])[0][0];
+
+  let x;
+  let y;
+  let direction;
+
+  switch (bestSide) {
+    case 'top':
+      x = cx + getTutorialArrowJitter(stepId, 8);
+      y = rect.top - TUTORIAL_ARROW_OFFSET;
+      direction = 'down';
+      break;
+    case 'bottom':
+      x = cx + getTutorialArrowJitter(stepId, 8);
+      y = rect.bottom + TUTORIAL_ARROW_OFFSET;
+      direction = 'up';
+      break;
+    case 'left':
+      x = rect.left - TUTORIAL_ARROW_OFFSET;
+      y = cy + getTutorialArrowJitter(stepId, 6);
+      direction = 'right';
+      break;
+    default:
+      x = rect.right + TUTORIAL_ARROW_OFFSET;
+      y = cy + getTutorialArrowJitter(stepId, 6);
+      direction = 'left';
+      break;
+  }
+
+  return {
+    x,
+    y,
+    direction,
+    targetX: cx,
+    targetY: cy,
+  };
+}
+
+function isTutorialActive() {
+  return tutorialOverlay && !tutorialOverlay.classList.contains('hidden');
+}
+
+function getTutorialTarget(step) {
+  return document.querySelector(step.selector);
+}
+
+function hideTutorialTooltip() {
+  clearTimeout(tutorialTooltipHideTimeout);
+  tutorialTooltipHideTimeout = null;
+  tutorialTooltip.classList.add('hidden');
+  tutorialActiveStepId = null;
+}
+
+function scheduleHideTutorialTooltip() {
+  clearTimeout(tutorialTooltipHideTimeout);
+  tutorialTooltipHideTimeout = setTimeout(hideTutorialTooltip, 120);
+}
+
+function cancelHideTutorialTooltip() {
+  clearTimeout(tutorialTooltipHideTimeout);
+  tutorialTooltipHideTimeout = null;
+}
+
+function positionTutorialTooltip(anchorX, anchorY) {
+  tutorialTooltip.classList.remove('hidden');
+  tutorialTooltip.style.left = '0px';
+  tutorialTooltip.style.top = '0px';
+  const padding = 12;
+  const gap = 16;
+  const tooltipRect = tutorialTooltip.getBoundingClientRect();
+  let left = anchorX - tooltipRect.width / 2;
+  let top = anchorY + gap;
+
+  if (left < padding) left = padding;
+  if (left + tooltipRect.width > window.innerWidth - padding) {
+    left = window.innerWidth - tooltipRect.width - padding;
+  }
+  if (top + tooltipRect.height > window.innerHeight - padding - 28) {
+    top = anchorY - tooltipRect.height - gap;
+  }
+  if (top < padding) top = padding;
+
+  tutorialTooltip.style.left = `${left}px`;
+  tutorialTooltip.style.top = `${top}px`;
+}
+
+function refreshTutorialTooltipPosition() {
+  if (!tutorialActiveStepId || tutorialTooltip.classList.contains('hidden')) return;
+  const step = TUTORIAL_STEPS.find((s) => s.id === tutorialActiveStepId);
+  if (!step) return;
+  const target = getTutorialTarget(step);
+  if (!target) return;
+  const rect = target.getBoundingClientRect();
+  positionTutorialTooltip(rect.left + rect.width / 2, rect.top + rect.height / 2);
+}
+
+function showTutorialTooltip(stepId, anchorX, anchorY) {
+  const step = TUTORIAL_STEPS.find((s) => s.id === stepId);
+  if (!step) return;
+  tutorialActiveStepId = stepId;
+  tutorialVisitedSteps.add(stepId);
+  tutorialTooltipTitle.textContent = step.title;
+  tutorialTooltipBody.innerHTML = step.body;
+  positionTutorialTooltip(anchorX, anchorY);
+  tutorialDots.querySelectorAll('.tutorial-arrow').forEach((arrow) => {
+    arrow.classList.toggle('tutorial-arrow--visited', tutorialVisitedSteps.has(arrow.dataset.tutorialStep));
+  });
+}
+
+function positionTutorialDots() {
+  if (!isTutorialActive()) return;
+
+  tutorialDots.innerHTML = '';
+
+  TUTORIAL_STEPS.forEach((step) => {
+    const target = getTutorialTarget(step);
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return;
+
+    const { x, y, direction, targetX, targetY } = getTutorialArrowPlacement(rect, step);
+
+    const arrow = document.createElement('div');
+    arrow.className = `tutorial-arrow tutorial-arrow--${direction}`;
+    if (tutorialVisitedSteps.has(step.id)) {
+      arrow.classList.add('tutorial-arrow--visited');
+    }
+    arrow.dataset.tutorialStep = step.id;
+    arrow.setAttribute('role', 'note');
+    arrow.setAttribute('aria-label', step.title);
+    arrow.style.left = `${x}px`;
+    arrow.style.top = `${y}px`;
+    arrow.innerHTML = `<span class="tutorial-arrow-icon">${TUTORIAL_ARROW_SVG}</span>`;
+    arrow.addEventListener('mouseenter', () => {
+      cancelHideTutorialTooltip();
+      showTutorialTooltip(step.id, targetX, targetY);
+    });
+    arrow.addEventListener('mouseleave', scheduleHideTutorialTooltip);
+    tutorialDots.appendChild(arrow);
+  });
+
+  refreshTutorialTooltipPosition();
+}
+
+function stopTutorial() {
+  if (!tutorialOverlay) return;
+  tutorialOverlay.classList.add('hidden');
+  tutorialOverlay.setAttribute('aria-hidden', 'true');
+  hideTutorialTooltip();
+  tutorialVisitedSteps = new Set();
+  tutorialDots.innerHTML = '';
+  window.removeEventListener('resize', positionTutorialDots);
+}
+
+function startTutorial() {
+  hideSettingsMenu();
+  if (!state.expandedSessionIds.has(BRAINDUMP_SESSION_ID)) {
+    state.expandedSessionIds.add(BRAINDUMP_SESSION_ID);
+  }
+  state.activeAddSessionIds.delete(BRAINDUMP_SESSION_ID);
+  tutorialActiveStepId = null;
+  tutorialVisitedSteps = new Set();
+  hideTutorialTooltip();
+  renderEditView();
+  tutorialOverlay.classList.remove('hidden');
+  tutorialOverlay.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => positionTutorialDots());
+  window.addEventListener('resize', positionTutorialDots);
+}
+
 function openShortcutsModal() {
   hideSettingsMenu();
   shortcutsModal.classList.remove('hidden');
@@ -3693,7 +4070,6 @@ function renderHistoryReportPanel() {
   populateHistoryReportSessionFilter();
 
   const { range, report } = getFilteredReportEntries();
-  const sessionName = historyReportSessionFilter?.trim() || '';
   const hasSessions = !!report?.sessions.length;
 
   if (historyReportSummary) {
@@ -3713,15 +4089,6 @@ function renderHistoryReportPanel() {
   }
 
   renderReportTable(hasSessions ? report : null);
-
-  if (historyReportFootnote) {
-    historyReportFootnote.classList.toggle('hidden', !(hasSessions && report.hasMixedRatesNote));
-  }
-
-  if (historyReportEmpty) {
-    historyReportEmpty.textContent = getHistoryReportEmptyMessage(range, sessionName);
-    historyReportEmpty.classList.toggle('hidden', hasSessions || !range);
-  }
 
   if (historyExportPdfBtn) {
     historyExportPdfBtn.disabled = !hasSessions;
@@ -3759,7 +4126,218 @@ function initializeHistoryReportRange(preset = 'month') {
   if (historyReportEndInput) historyReportEndInput.value = formatDateInputValue(range.endMs);
 }
 
-function buildEarningsReportHtml(report) {
+function wrapPdfHtml(title, styles, bodyHtml) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(title)}</title>
+  <style>${styles}</style>
+</head>
+<body>${bodyHtml}</body>
+</html>`;
+}
+
+const PDF_BASE_STYLES = `
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #111;
+    background: #fff;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+`;
+
+const EARNINGS_REPORT_PDF_STYLES = `
+  ${PDF_BASE_STYLES}
+  h1 {
+    margin: 0 0 4px;
+    font-size: 22px;
+    font-weight: 700;
+  }
+  .subtitle {
+    margin: 0 0 20px;
+    color: #666;
+    font-size: 13px;
+  }
+  .summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    margin-bottom: 24px;
+    padding: 12px 14px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fafafa;
+  }
+  .summary strong { color: #111; }
+  .summary .earnings strong { color: #15803d; }
+  h2 {
+    margin: 0 0 8px;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #666;
+  }
+  .section {
+    margin-bottom: 20px;
+    break-inside: avoid;
+  }
+  .report-bar-row {
+    display: grid;
+    grid-template-columns: 96px 1fr 72px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .report-bar-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #555;
+  }
+  .report-bar-track {
+    height: 10px;
+    border-radius: 4px;
+    background: #ececec;
+    overflow: hidden;
+  }
+  .report-bar-fill {
+    height: 100%;
+    min-width: 2px;
+    border-radius: 4px;
+    background: #30d158;
+  }
+  .report-bar-value {
+    text-align: right;
+    color: #15803d;
+    font-weight: 600;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+  }
+  th, td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #e5e5e5;
+    text-align: left;
+  }
+  th {
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #666;
+  }
+  td:nth-child(3), td:nth-child(4), td:nth-child(5) { text-align: right; }
+  .earnings { color: #15803d; font-weight: 600; }
+  tfoot td {
+    font-weight: 700;
+    border-top: 1px solid #bbb;
+    border-bottom: none;
+  }
+  tr { break-inside: avoid; }
+  .footnote {
+    margin-top: 12px;
+    color: #666;
+    font-size: 11px;
+  }
+  .history-report-chart-empty {
+    margin: 0;
+    color: #666;
+  }
+`;
+
+const EARNINGS_REPORT_SCOPED_PDF_STYLES = EARNINGS_REPORT_PDF_STYLES
+  .replace(/(^|\n)([^{}\n][^{]*)\{/g, (match, prefix, selector) => {
+    if (selector.trim().startsWith('*') || selector.trim().startsWith('body')) {
+      return match;
+    }
+    return `${prefix}.report-page ${selector.trim()} {`;
+  });
+
+const INVOICE_PDF_STYLES = `
+  ${PDF_BASE_STYLES}
+  body { line-height: 1.5; }
+  h1 {
+    margin: 0 0 24px;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 28px;
+  }
+  .meta-block h2 {
+    margin: 0 0 8px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #666;
+    font-weight: 600;
+  }
+  .meta-block p {
+    margin: 0;
+    color: #111;
+    white-space: pre-line;
+  }
+  .invoice-details {
+    text-align: right;
+  }
+  .invoice-details p {
+    margin: 0 0 4px;
+    color: #333;
+  }
+  .invoice-details strong {
+    color: #111;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+  }
+  th, td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #e5e5e5;
+    text-align: left;
+  }
+  th {
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #666;
+    font-weight: 600;
+  }
+  td:nth-child(3), td:nth-child(4), td:nth-child(5) { text-align: right; }
+  th:nth-child(3), th:nth-child(4), th:nth-child(5) { text-align: right; }
+  .amount { font-weight: 600; }
+  tfoot td {
+    font-weight: 700;
+    border-top: 2px solid #111;
+    border-bottom: none;
+    font-size: 13px;
+  }
+  .footnote {
+    margin-top: 16px;
+    color: #666;
+    font-size: 11px;
+  }
+`;
+
+const PDF_PAGE_BREAK_STYLES = `
+  .pdf-page-break {
+    page-break-after: always;
+    break-after: page;
+  }
+`;
+
+function buildEarningsReportContent(report) {
   const dailyChart = renderReportBarChart(
     report.dailyBars,
     'No billable earnings in this range.',
@@ -3783,122 +4361,8 @@ function buildEarningsReportHtml(report) {
     ? '<p class="footnote">Effective hourly rates blend task rates when a session uses mixed billing rates.</p>'
     : '';
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>Slash It Earnings Report</title>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      padding: 32px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color: #111;
-      background: #fff;
-      font-size: 12px;
-      line-height: 1.4;
-    }
-    h1 {
-      margin: 0 0 4px;
-      font-size: 22px;
-      font-weight: 700;
-    }
-    .subtitle {
-      margin: 0 0 20px;
-      color: #666;
-      font-size: 13px;
-    }
-    .summary {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px 20px;
-      margin-bottom: 24px;
-      padding: 12px 14px;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      background: #fafafa;
-    }
-    .summary strong { color: #111; }
-    .summary .earnings strong { color: #15803d; }
-    h2 {
-      margin: 0 0 8px;
-      font-size: 11px;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: #666;
-    }
-    .section {
-      margin-bottom: 20px;
-      break-inside: avoid;
-    }
-    .report-bar-row {
-      display: grid;
-      grid-template-columns: 96px 1fr 72px;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 4px;
-    }
-    .report-bar-label {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      color: #555;
-    }
-    .report-bar-track {
-      height: 10px;
-      border-radius: 4px;
-      background: #ececec;
-      overflow: hidden;
-    }
-    .report-bar-fill {
-      height: 100%;
-      min-width: 2px;
-      border-radius: 4px;
-      background: #30d158;
-    }
-    .report-bar-value {
-      text-align: right;
-      color: #15803d;
-      font-weight: 600;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 8px;
-    }
-    th, td {
-      padding: 6px 8px;
-      border-bottom: 1px solid #e5e5e5;
-      text-align: left;
-    }
-    th {
-      font-size: 10px;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: #666;
-    }
-    td:nth-child(3), td:nth-child(4), td:nth-child(5) { text-align: right; }
-    .earnings { color: #15803d; font-weight: 600; }
-    tfoot td {
-      font-weight: 700;
-      border-top: 1px solid #bbb;
-      border-bottom: none;
-    }
-    tr { break-inside: avoid; }
-    .footnote {
-      margin-top: 12px;
-      color: #666;
-      font-size: 11px;
-    }
-    .history-report-chart-empty {
-      margin: 0;
-      color: #666;
-    }
-  </style>
-</head>
-<body>
-  <h1>Slash It Earnings Report</h1>
+  return `
+  <h1>Earnings Report</h1>
   <p class="subtitle">${escapeHtml(report.range.startLabel)} – ${escapeHtml(report.range.endLabel)}${report.range.sessionName ? `<br />Session: ${escapeHtml(report.range.sessionName)}` : ''}</p>
   <div class="summary">
     <span><strong>${report.totals.sessionCount}</strong> session${report.totals.sessionCount === 1 ? '' : 's'}</span>
@@ -3939,9 +4403,15 @@ function buildEarningsReportHtml(report) {
       </tfoot>
     </table>
   </div>
-  ${footnote}
-</body>
-</html>`;
+  ${footnote}`;
+}
+
+function buildEarningsReportHtml(report) {
+  return wrapPdfHtml(
+    'Earnings Report',
+    EARNINGS_REPORT_PDF_STYLES,
+    buildEarningsReportContent(report),
+  );
 }
 
 function buildInvoiceFromBlock(invoiceSettings) {
@@ -3955,8 +4425,7 @@ function buildInvoiceFromBlock(invoiceSettings) {
   return parts.join('<br />');
 }
 
-function buildInvoiceHtml(report, invoiceSettings) {
-  const invoiceDateMs = Date.now();
+function buildInvoiceContent(report, invoiceSettings, invoiceDateMs = Date.now()) {
   const invoiceNumber = generateInvoiceNumber(report.range.sessionName, invoiceDateMs);
   const billableLines = getInvoiceBillableLines(report);
   const totalDue = getInvoiceBillableTotal(report);
@@ -3977,91 +4446,7 @@ function buildInvoiceHtml(report, invoiceSettings) {
     ? '<p class="footnote">Effective hourly rates blend task rates when a session uses mixed billing rates.</p>'
     : '';
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>Invoice ${escapeHtml(invoiceNumber)}</title>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      padding: 32px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color: #111;
-      background: #fff;
-      font-size: 12px;
-      line-height: 1.5;
-    }
-    h1 {
-      margin: 0 0 24px;
-      font-size: 28px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-    }
-    .meta-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 24px;
-      margin-bottom: 28px;
-    }
-    .meta-block h2 {
-      margin: 0 0 8px;
-      font-size: 10px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: #666;
-      font-weight: 600;
-    }
-    .meta-block p {
-      margin: 0;
-      color: #111;
-      white-space: pre-line;
-    }
-    .invoice-details {
-      text-align: right;
-    }
-    .invoice-details p {
-      margin: 0 0 4px;
-      color: #333;
-    }
-    .invoice-details strong {
-      color: #111;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 8px;
-    }
-    th, td {
-      padding: 8px 10px;
-      border-bottom: 1px solid #e5e5e5;
-      text-align: left;
-    }
-    th {
-      font-size: 10px;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: #666;
-      font-weight: 600;
-    }
-    td:nth-child(3), td:nth-child(4), td:nth-child(5) { text-align: right; }
-    th:nth-child(3), th:nth-child(4), th:nth-child(5) { text-align: right; }
-    .amount { font-weight: 600; }
-    tfoot td {
-      font-weight: 700;
-      border-top: 2px solid #111;
-      border-bottom: none;
-      font-size: 13px;
-    }
-    .footnote {
-      margin-top: 16px;
-      color: #666;
-      font-size: 11px;
-    }
-  </style>
-</head>
-<body>
+  return `
   <h1>Invoice</h1>
   <div class="meta-grid">
     <div class="meta-block">
@@ -4096,9 +4481,32 @@ function buildInvoiceHtml(report, invoiceSettings) {
       </tr>
     </tfoot>
   </table>
-  ${footnote}
-</body>
-</html>`;
+  ${footnote}`;
+}
+
+function buildInvoiceHtml(report, invoiceSettings) {
+  const invoiceDateMs = Date.now();
+  const invoiceNumber = generateInvoiceNumber(report.range.sessionName, invoiceDateMs);
+  return wrapPdfHtml(
+    `Invoice ${invoiceNumber}`,
+    INVOICE_PDF_STYLES,
+    buildInvoiceContent(report, invoiceSettings, invoiceDateMs),
+  );
+}
+
+function buildInvoiceWithReportHtml(report, invoiceSettings) {
+  const invoiceDateMs = Date.now();
+  const invoiceNumber = generateInvoiceNumber(report.range.sessionName, invoiceDateMs);
+  const styles = `${INVOICE_PDF_STYLES}${PDF_PAGE_BREAK_STYLES}${EARNINGS_REPORT_SCOPED_PDF_STYLES}`;
+  const bodyHtml = `
+    <div class="invoice-page pdf-page-break">
+      ${buildInvoiceContent(report, invoiceSettings, invoiceDateMs)}
+    </div>
+    <div class="report-page">
+      ${buildEarningsReportContent(report)}
+    </div>
+  `;
+  return wrapPdfHtml(`Invoice ${invoiceNumber}`, styles, bodyHtml);
 }
 
 async function handleExportEarningsReportPdf() {
@@ -4106,13 +4514,17 @@ async function handleExportEarningsReportPdf() {
   if (!report?.sessions.length) return;
 
   const defaultFileName = report.range.sessionName
-    ? `Slash It Earnings ${sanitizeFileNamePart(report.range.sessionName)} ${formatDateInputValue(report.range.startMs)} to ${formatDateInputValue(report.range.endMs)}.pdf`
-    : `Slash It Earnings ${formatDateInputValue(report.range.startMs)} to ${formatDateInputValue(report.range.endMs)}.pdf`;
+    ? `Earnings Report ${sanitizeFileNamePart(report.range.sessionName)} ${formatDateInputValue(report.range.startMs)} to ${formatDateInputValue(report.range.endMs)}.pdf`
+    : `Earnings Report ${formatDateInputValue(report.range.startMs)} to ${formatDateInputValue(report.range.endMs)}.pdf`;
   const html = buildEarningsReportHtml(report);
 
   historyExportPdfBtn.disabled = true;
   try {
-    const result = await window.slashIt.exportEarningsReportPdf({ html, defaultFileName });
+    const result = await window.slashIt.exportEarningsReportPdf({
+      html,
+      defaultFileName,
+      dialogTitle: 'Create report',
+    });
     if (result.error) {
       window.alert(result.error);
     }
@@ -4129,16 +4541,16 @@ async function handleExportInvoicePdf() {
 
   const invoiceDateMs = Date.now();
   const defaultFileName = report.range.sessionName
-    ? `Slash It Invoice ${sanitizeFileNamePart(sessionNameToInvoicePrefix(report.range.sessionName))} ${formatInvoiceNumberDate(invoiceDateMs)}.pdf`
-    : `Slash It Invoice ${formatInvoiceNumberDate(invoiceDateMs)}.pdf`;
-  const html = buildInvoiceHtml(report, state.invoiceSettings);
+    ? `Invoice ${sanitizeFileNamePart(sessionNameToInvoicePrefix(report.range.sessionName))} ${formatInvoiceNumberDate(invoiceDateMs)}.pdf`
+    : `Invoice ${formatInvoiceNumberDate(invoiceDateMs)}.pdf`;
+  const html = buildInvoiceWithReportHtml(report, state.invoiceSettings);
 
   historyExportInvoiceBtn.disabled = true;
   try {
     const result = await window.slashIt.exportEarningsReportPdf({
       html,
       defaultFileName,
-      dialogTitle: 'Export invoice',
+      dialogTitle: 'Create invoice',
     });
     if (result.error) {
       window.alert(result.error);
@@ -4694,6 +5106,9 @@ function renderEditView() {
   clearSessionBtn.disabled = state.sessionTasks.length === 0;
   moveBackToListBtn.disabled = state.sessionTasks.length === 0;
   clearSessionCompletedBtn.disabled = getCompletedCount() === 0;
+  if (isTutorialActive()) {
+    requestAnimationFrame(() => positionTutorialDots());
+  }
 }
 
 function refreshDrawerIfOpen() {
@@ -5242,6 +5657,7 @@ settingsInvoiceBtn.addEventListener('click', openInvoiceSettingsModal);
 settingsTemplatesBtn.addEventListener('click', openTemplatesModal);
 settingsHistoryBtn.addEventListener('click', () => openHistoryModal());
 settingsShortcutsBtn.addEventListener('click', openShortcutsModal);
+settingsTutorialBtn.addEventListener('click', startTutorial);
 settingsSoundEffectsBtn.addEventListener('click', toggleSoundEffects);
 shortcutsCloseBtn.addEventListener('click', closeShortcutsModal);
 dataCloseBtn.addEventListener('click', closeDataModal);
@@ -5296,6 +5712,10 @@ clearSessionCancelBtn.addEventListener('click', closeClearSessionModal);
 clearSessionModal.addEventListener('click', (e) => {
   if (e.target === clearSessionModal) closeClearSessionModal();
 });
+
+tutorialDoneBtn.addEventListener('click', stopTutorial);
+tutorialTooltip.addEventListener('mouseenter', cancelHideTutorialTooltip);
+tutorialTooltip.addEventListener('mouseleave', scheduleHideTutorialTooltip);
 
 deleteSessionConfirmBtn.addEventListener('click', confirmDeletePlannedSession);
 deleteSessionCancelBtn.addEventListener('click', closeDeleteSessionModal);
@@ -5428,6 +5848,12 @@ document.addEventListener('keydown', (e) => {
     }
     if (!historyModal.classList.contains('hidden')) {
       closeHistoryModal();
+      return;
+    }
+    if (isTutorialActive()) {
+      if (!tutorialTooltip.classList.contains('hidden')) {
+        hideTutorialTooltip();
+      }
       return;
     }
     if (!settingsMenu.classList.contains('hidden')) {
