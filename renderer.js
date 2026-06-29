@@ -121,6 +121,7 @@ const extendPanel = document.getElementById('extend-panel');
 const extendInput = document.getElementById('extend-input');
 const extendConfirmBtn = document.getElementById('extend-confirm-btn');
 const extendCancelBtn = document.getElementById('extend-cancel-btn');
+const doneHeadline = document.getElementById('done-headline');
 const doneSummary = document.getElementById('done-summary');
 const doneTime = document.getElementById('done-time');
 const celebrateBtn = document.getElementById('celebrate-btn');
@@ -133,6 +134,7 @@ const historyTabSessionsBtn = document.getElementById('history-tab-sessions-btn'
 const historyTabReportBtn = document.getElementById('history-tab-report-btn');
 const historySessionsPanel = document.getElementById('history-sessions-panel');
 const historyReportPanel = document.getElementById('history-report-panel');
+const historyDateToolbar = document.getElementById('history-date-toolbar');
 const historyReportStartInput = document.getElementById('history-report-start');
 const historyReportEndInput = document.getElementById('history-report-end');
 const historyReportSessionSelectWrap = document.getElementById('history-report-session-select-wrap');
@@ -299,6 +301,43 @@ const FUN_SESSION_NAMES = [
   'Draft a Constitution for Chairs',
   'Organize a Convention of Shadows',
 ];
+
+const DONE_HEADLINES = [
+  'You rock!',
+  'Slayed it!',
+  'Nailed it!',
+  'Crushed it!',
+  'Look at you go!',
+  'Mission complete!',
+  'Absolute legend!',
+  "Chef's kiss!",
+  'On fire today!',
+  'Mic drop!',
+  'Peak performance!',
+  'No notes!',
+  "That's a wrap!",
+  'Unstoppable!',
+  'Main character energy!',
+  'Zero left behind!',
+  'Fully slashed!',
+  'All gas, no brakes!',
+  'You showed up!',
+  'Gold star energy!',
+  'Done and dusted!',
+  "That's the move!",
+  'Beast mode!',
+  'Big win energy!',
+  'Consider it handled!',
+  'Hat tip to you!',
+];
+
+let doneHeadlineIndex = Math.floor(Math.random() * DONE_HEADLINES.length);
+
+function getNextDoneHeadline() {
+  const headline = DONE_HEADLINES[doneHeadlineIndex];
+  doneHeadlineIndex = (doneHeadlineIndex + 1) % DONE_HEADLINES.length;
+  return headline;
+}
 
 function getRandomFunSessionName() {
   return FUN_SESSION_NAMES[Math.floor(Math.random() * FUN_SESSION_NAMES.length)];
@@ -2413,6 +2452,12 @@ function getCurrentReportRange() {
   };
 }
 
+function getFilteredSessionHistoryEntries() {
+  const range = getCurrentReportRange();
+  if (!range) return [];
+  return filterSessionHistoryByRange(state.sessionHistory, range.startMs, range.endMs);
+}
+
 function getFilteredReportEntries() {
   const range = getCurrentReportRange();
   if (!range) return { range: null, entries: [], report: null };
@@ -3327,6 +3372,7 @@ function setupSessionAddTask(block, session) {
     const meta = e.metaKey || e.ctrlKey || e.getModifierState('Meta') || e.getModifierState('Control');
     const shift = e.shiftKey || e.getModifierState('Shift');
     if (shift && meta) return;
+    if (shift && !meta) return;
 
     if (isSlashInput(textInput.value)) {
       e.preventDefault();
@@ -4117,10 +4163,19 @@ function setHistoryModalTab(tab) {
 
   if (historyModalTab === 'report') {
     renderHistoryReportPanel();
+  } else {
+    renderHistoryModal();
   }
 }
 
-function initializeHistoryReportRange(preset = 'month') {
+function refreshHistoryModalPanels() {
+  renderHistoryModal();
+  if (historyModalTab === 'report') {
+    renderHistoryReportPanel();
+  }
+}
+
+function initializeHistoryReportRange(preset = 'last30') {
   const range = getReportRangePreset(preset);
   if (historyReportStartInput) historyReportStartInput.value = formatDateInputValue(range.startMs);
   if (historyReportEndInput) historyReportEndInput.value = formatDateInputValue(range.endMs);
@@ -4561,20 +4616,20 @@ async function handleExportInvoicePdf() {
   }
 }
 
-function handleHistoryReportPresetClick(event) {
+function handleHistoryDatePresetClick(event) {
   const preset = event.target.closest('[data-report-preset]')?.dataset.reportPreset;
   if (!preset) return;
   closeHistoryReportSessionMenu();
   initializeHistoryReportRange(preset);
-  renderHistoryReportPanel();
+  refreshHistoryModalPanels();
 }
 
-function handleHistoryReportDateChange() {
+function handleHistoryDateChange() {
   closeHistoryReportSessionMenu();
-  renderHistoryReportPanel();
+  refreshHistoryModalPanels();
 }
 
-function handleHistoryReportDateIconClick(event) {
+function handleHistoryDateIconClick(event) {
   const btn = event.target.closest('.history-report-date-icon-btn');
   if (!btn) return;
   event.preventDefault();
@@ -4644,7 +4699,13 @@ function renderHistoryModal() {
     return;
   }
 
-  historyList.innerHTML = state.sessionHistory.map(renderHistoryEntry).join('');
+  const entries = getFilteredSessionHistoryEntries();
+  if (entries.length === 0) {
+    historyList.innerHTML = '<p class="history-empty">No sessions in this date range.</p>';
+    return;
+  }
+
+  historyList.innerHTML = entries.map(renderHistoryEntry).join('');
 
   if (historyHighlightRunId) {
     const highlighted = historyList.querySelector('.history-entry--highlight');
@@ -4652,26 +4713,51 @@ function renderHistoryModal() {
   }
 }
 
+function ensureHistoryRangeIncludesEntry(entry) {
+  if (!entry?.endedAt || !historyReportStartInput || !historyReportEndInput) return;
+
+  const range = getCurrentReportRange();
+  if (!range) {
+    initializeHistoryReportRange('last30');
+    return;
+  }
+
+  if (entry.endedAt >= range.startMs && entry.endedAt <= range.endMs) return;
+
+  const entryDayStartMs = parseDateInputToStartMs(formatDateInputValue(entry.endedAt));
+  if (entryDayStartMs == null) return;
+
+  if (entry.endedAt < range.startMs) {
+    historyReportStartInput.value = formatDateInputValue(Math.min(entryDayStartMs, range.startMs));
+  }
+  if (entry.endedAt > range.endMs) {
+    historyReportEndInput.value = formatDateInputValue(entry.endedAt);
+  }
+}
+
 function openHistoryModal(highlightRunId = null) {
   hideSettingsMenu();
   historyHighlightRunId = highlightRunId;
+
+  if (!historyReportStartInput?.value) {
+    initializeHistoryReportRange('last30');
+  }
+
   if (highlightRunId) {
     const entry = state.sessionHistory.find((item) => item.runId === highlightRunId);
     if (entry) {
       expandedHistoryEntryIds.clear();
       expandedHistoryEntryIds.add(entry.id);
+      ensureHistoryRangeIncludesEntry(entry);
     }
+  }
+
+  if (highlightRunId) {
     setHistoryModalTab('sessions');
+  } else {
+    refreshHistoryModalPanels();
   }
 
-  if (!historyReportStartInput?.value) {
-    initializeHistoryReportRange('month');
-  }
-
-  renderHistoryModal();
-  if (historyModalTab === 'report') {
-    renderHistoryReportPanel();
-  }
   historyModal.classList.remove('hidden');
 }
 
@@ -5246,11 +5332,6 @@ function isTaskInputFocused() {
   return !!active?.matches('.task-text-input, .task-limit-input, .planned-session-name-input');
 }
 
-function isInlineTaskInputFocused() {
-  const active = document.activeElement;
-  return !!active?.matches('.task-text-input, .task-limit-input, .planned-session-name-input, .session-add-task-input, .session-add-limit-input');
-}
-
 function startEditingTask(li, listId, index) {
   const tasks = getTasksForList(listId);
   const textEl = li.querySelector('.task-text');
@@ -5324,7 +5405,6 @@ function handleEditModeEnterShortcuts(e) {
   if (shift && !meta) {
     if (isEditShortcutBlocked()) return;
     if (startBtn.disabled) return;
-    if (isInlineTaskInputFocused()) return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -5396,6 +5476,7 @@ function renderFocusView() {
 
 function showDoneView({ playSound = false } = {}) {
   archiveCurrentSession('completed');
+  if (doneHeadline) doneHeadline.textContent = getNextDoneHeadline();
   doneSummary.textContent = `You completed ${getCompletedCount()} task${getCompletedCount() === 1 ? '' : 's'}.`;
   doneTime.textContent = formatTime(state.totalSessionMs);
   showView('done');
@@ -5669,10 +5750,10 @@ invoiceSettingsModal.addEventListener('click', (e) => {
 historyCloseBtn.addEventListener('click', closeHistoryModal);
 historyTabSessionsBtn?.addEventListener('click', () => setHistoryModalTab('sessions'));
 historyTabReportBtn?.addEventListener('click', () => setHistoryModalTab('report'));
-historyReportPanel?.addEventListener('click', handleHistoryReportPresetClick);
-historyReportPanel?.addEventListener('click', handleHistoryReportDateIconClick);
-historyReportStartInput?.addEventListener('change', handleHistoryReportDateChange);
-historyReportEndInput?.addEventListener('change', handleHistoryReportDateChange);
+historyDateToolbar?.addEventListener('click', handleHistoryDatePresetClick);
+historyDateToolbar?.addEventListener('click', handleHistoryDateIconClick);
+historyReportStartInput?.addEventListener('change', handleHistoryDateChange);
+historyReportEndInput?.addEventListener('change', handleHistoryDateChange);
 historyReportSessionTrigger?.addEventListener('click', handleHistoryReportSessionTriggerClick);
 historyReportSessionMenu?.addEventListener('click', handleHistoryReportSessionOptionClick);
 historyExportInvoiceBtn?.addEventListener('click', handleExportInvoicePdf);

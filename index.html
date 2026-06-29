@@ -75,17 +75,6 @@
       </div>
     </div>
 
-    <div id="delete-history-modal" class="clear-session-modal clear-session-modal--stacked hidden" role="dialog" aria-modal="true" aria-labelledby="delete-history-title">
-      <div class="clear-session-modal-card">
-        <h3 id="delete-history-title" class="clear-session-modal-title">Delete from history</h3>
-        <p id="delete-history-message" class="delete-session-message"></p>
-        <div class="clear-session-modal-actions">
-          <button id="delete-history-confirm-btn" class="clear-session-modal-btn" type="button">Delete</button>
-          <button id="delete-history-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
-        </div>
-      </div>
-    </div>
-
     <div id="billable-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="billable-modal-title">
       <div class="clear-session-modal-card billable-modal-card">
         <h3 id="billable-modal-title" class="clear-session-modal-title">Billable</h3>
@@ -324,7 +313,7 @@
   <div id="done-view" class="view hidden">
     <div class="done-content">
       <div class="done-icon">✓</div>
-      <h2>All done</h2>
+      <h2 id="done-headline">You rock!</h2>
       <p id="done-summary" class="done-summary"></p>
       <p class="done-time" id="done-time"></p>
       <div class="done-actions">
@@ -388,6 +377,17 @@
     </div>
   </div>
 
+  <div id="delete-history-modal" class="clear-session-modal clear-session-modal--stacked hidden" role="dialog" aria-modal="true" aria-labelledby="delete-history-title">
+    <div class="clear-session-modal-card">
+      <h3 id="delete-history-title" class="clear-session-modal-title">Delete from history</h3>
+      <p id="delete-history-message" class="delete-session-message"></p>
+      <div class="clear-session-modal-actions">
+        <button id="delete-history-confirm-btn" class="clear-session-modal-btn" type="button">Delete</button>
+        <button id="delete-history-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div id="history-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="history-modal-title">
     <div class="clear-session-modal-card history-modal-card">
       <h3 id="history-modal-title" class="clear-session-modal-title">Session history</h3>
@@ -395,45 +395,45 @@
         <button id="history-tab-sessions-btn" class="history-modal-tab history-modal-tab--active" type="button" role="tab" aria-selected="true" aria-controls="history-sessions-panel">Sessions</button>
         <button id="history-tab-report-btn" class="history-modal-tab" type="button" role="tab" aria-selected="false" aria-controls="history-report-panel">Earnings report</button>
       </div>
+      <div id="history-date-toolbar" class="history-report-toolbar">
+        <div class="history-report-presets">
+          <button type="button" class="history-report-preset-btn" data-report-preset="week">This week</button>
+          <button type="button" class="history-report-preset-btn" data-report-preset="month">This month</button>
+          <button type="button" class="history-report-preset-btn" data-report-preset="last30">Last 30 days</button>
+        </div>
+        <div class="history-report-dates">
+          <div class="history-report-date-field">
+            <label class="history-report-date-label" for="history-report-start">From</label>
+            <div class="history-report-date-input-wrap">
+              <input id="history-report-start" class="history-report-date-input" type="date" />
+              <button type="button" class="history-report-date-icon-btn" data-date-target="history-report-start" aria-label="Choose start date">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3.25" width="12" height="10.75" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M2 6.75h12" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M5.25 2.25v2.25M10.75 2.25v2.25" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="history-report-date-field">
+            <label class="history-report-date-label" for="history-report-end">To</label>
+            <div class="history-report-date-input-wrap">
+              <input id="history-report-end" class="history-report-date-input" type="date" />
+              <button type="button" class="history-report-date-icon-btn" data-date-target="history-report-end" aria-label="Choose end date">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3.25" width="12" height="10.75" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M2 6.75h12" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M5.25 2.25v2.25M10.75 2.25v2.25" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
       <div id="history-sessions-panel" class="history-modal-panel" role="tabpanel">
         <div id="history-list" class="history-list"></div>
       </div>
       <div id="history-report-panel" class="history-modal-panel hidden" role="tabpanel">
-        <div class="history-report-toolbar">
-          <div class="history-report-presets">
-            <button type="button" class="history-report-preset-btn" data-report-preset="week">This week</button>
-            <button type="button" class="history-report-preset-btn" data-report-preset="month">This month</button>
-            <button type="button" class="history-report-preset-btn" data-report-preset="last30">Last 30 days</button>
-          </div>
-          <div class="history-report-dates">
-            <div class="history-report-date-field">
-              <label class="history-report-date-label" for="history-report-start">From</label>
-              <div class="history-report-date-input-wrap">
-                <input id="history-report-start" class="history-report-date-input" type="date" />
-                <button type="button" class="history-report-date-icon-btn" data-date-target="history-report-start" aria-label="Choose start date">
-                  <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3.25" width="12" height="10.75" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M2 6.75h12" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M5.25 2.25v2.25M10.75 2.25v2.25" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>
-                </button>
-              </div>
-            </div>
-            <div class="history-report-date-field">
-              <label class="history-report-date-label" for="history-report-end">To</label>
-              <div class="history-report-date-input-wrap">
-                <input id="history-report-end" class="history-report-date-input" type="date" />
-                <button type="button" class="history-report-date-icon-btn" data-date-target="history-report-end" aria-label="Choose end date">
-                  <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3.25" width="12" height="10.75" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M2 6.75h12" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M5.25 2.25v2.25M10.75 2.25v2.25" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>
-                </button>
-              </div>
-            </div>
-          </div>
-          <div class="history-report-session-filter">
-            <label class="history-report-date-label" id="history-report-session-label">Session</label>
-            <div id="history-report-session-select-wrap" class="history-report-session-select-wrap">
-              <button type="button" id="history-report-session-trigger" class="history-report-session-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="history-report-session-menu">
-                <span id="history-report-session-value" class="history-report-session-trigger-label">All sessions</span>
-                <span class="history-report-session-trigger-chevron" aria-hidden="true">▾</span>
-              </button>
-              <div id="history-report-session-menu" class="history-report-session-menu hidden" role="listbox" aria-labelledby="history-report-session-label"></div>
-            </div>
+        <div class="history-report-session-filter">
+          <label class="history-report-date-label" id="history-report-session-label">Session</label>
+          <div id="history-report-session-select-wrap" class="history-report-session-select-wrap">
+            <button type="button" id="history-report-session-trigger" class="history-report-session-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="history-report-session-menu">
+              <span id="history-report-session-value" class="history-report-session-trigger-label">All sessions</span>
+              <span class="history-report-session-trigger-chevron" aria-hidden="true">▾</span>
+            </button>
+            <div id="history-report-session-menu" class="history-report-session-menu hidden" role="listbox" aria-labelledby="history-report-session-label"></div>
           </div>
         </div>
         <div id="history-report-summary" class="history-report-summary"></div>

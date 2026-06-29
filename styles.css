@@ -597,6 +597,15 @@ body.mode-edit #edit-view.view {
   margin-top: calc(12px * var(--edit-scale));
 }
 
+#history-date-toolbar {
+  flex-shrink: 0;
+}
+
+.history-modal-panel .history-report-session-filter {
+  flex-shrink: 0;
+  margin-top: calc(12px * var(--edit-scale));
+}
+
 .history-report-presets {
   display: flex;
   flex-wrap: wrap;
@@ -1021,7 +1030,7 @@ body.mode-edit #edit-view.view {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  margin: calc(16px * var(--edit-scale)) 0 0;
+  margin-top: calc(12px * var(--edit-scale));
 }
 
 .history-entry + .history-entry {
@@ -2792,15 +2801,6 @@ body.mode-edit #edit-view.view {
   width: 100%;
 }
 
-.btn-celebrate {
-  background: linear-gradient(135deg, #9333ea, #ec4899);
-  color: #ffffff;
-}
-
-.btn-celebrate:hover:not(:disabled) {
-  background: linear-gradient(135deg, #a855f7, #f472b6);
-}
-
 .btn-celebrate:active:not(:disabled) {
   transform: scale(0.98);
 }
@@ -3646,4 +3646,75 @@ body.mode-focus.timer-bar-size-fullscreen .timer-bar.timer-bar--expanded {
   gap: 12px;
   width: 100%;
   flex-shrink: 0;
+}
+
+.done-actions .btn {
+  padding: 16px 16px;
+  color: var(--text);
+  background-color: #242424;
+  border: 1px solid var(--border);
+}
+
+.done-actions .btn-celebrate {
+  border-color: rgba(236, 72, 153, 0.22);
+  background: linear-gradient(
+    125deg,
+    rgba(236, 72, 153, 0.9) 0%,
+    rgba(236, 72, 153, 0.18) 5%,
+    #242424 16%
+  );
+}
+
+.done-actions .btn-celebrate:hover:not(:disabled) {
+  border-color: rgba(236, 72, 153, 0.35);
+  background: linear-gradient(
+    125deg,
+    rgba(236, 72, 153, 1) 0%,
+    rgba(236, 72, 153, 0.28) 5%,
+    #2a2a2a 16%
+  );
+}
+
+.done-actions .btn-secondary {
+  padding: 16px 16px;
+  border-color: rgba(48, 209, 88, 0.22);
+  background: linear-gradient(
+    125deg,
+    rgba(48, 209, 88, 0.9) 0%,
+    rgba(48, 209, 88, 0.18) 5%,
+    #242424 16%
+  );
+}
+
+.done-actions .btn-secondary:hover:not(:disabled) {
+  border-color: rgba(48, 209, 88, 0.35);
+  color: var(--text);
+  background: linear-gradient(
+    125deg,
+    rgba(48, 209, 88, 1) 0%,
+    rgba(48, 209, 88, 0.28) 5%,
+    #2a2a2a 16%
+  );
+}
+
+.done-actions .btn-primary {
+  color: var(--text);
+  border-color: rgba(255, 85, 0, 0.22);
+  background: linear-gradient(
+    125deg,
+    rgba(255, 85, 0, 0.9) 0%,
+    rgba(255, 85, 0, 0.18) 5%,
+    #242424 16%
+  );
+}
+
+.done-actions .btn-primary:hover:not(:disabled) {
+  color: var(--text);
+  border-color: rgba(255, 85, 0, 0.35);
+  background: linear-gradient(
+    125deg,
+    rgba(255, 85, 0, 1) 0%,
+    rgba(255, 85, 0, 0.28) 5%,
+    #2a2a2a 16%
+  );
 }
