@@ -98,6 +98,8 @@ const billableRateRow = document.getElementById('billable-rate-row');
 const billableRateInput = document.getElementById('billable-rate-input');
 const billableRoundRow = document.getElementById('billable-round-row');
 const billableRoundOptions = document.getElementById('billable-round-options');
+const billableRoundScopeRow = document.getElementById('billable-round-scope-row');
+const billableRoundScopeOptions = document.getElementById('billable-round-scope-options');
 const billableDoneBtn = document.getElementById('billable-done-btn');
 const billableCancelBtn = document.getElementById('billable-cancel-btn');
 const backToEditBtn = document.getElementById('back-to-edit-btn');
@@ -1012,6 +1014,9 @@ function normalizeSessionTask(task) {
     normalized.sourceSessionId = task.sourceSessionId;
     normalized.sourceSessionName = task.sourceSessionName || 'Session';
   }
+  if (task.billableDurationMs != null) {
+    normalized.billableDurationMs = task.billableDurationMs;
+  }
   return normalized;
 }
 
@@ -1040,6 +1045,10 @@ function normalizeBillableRoundMinutes(value) {
   return BILLABLE_ROUND_OPTIONS.includes(parsed) ? parsed : null;
 }
 
+function normalizeBillableRoundScope(value) {
+  return value === 'task' ? 'task' : 'session';
+}
+
 function roundUpBillableMs(ms, roundMinutes) {
   if (!roundMinutes || ms <= 0) return ms;
   const intervalMs = roundMinutes * 60000;
@@ -1052,6 +1061,21 @@ function calculateBillableEarnings(durationMs, rate, roundMinutes) {
   return (ms / 3600000) * rate;
 }
 
+function calculateBillableEarningsFromMs(ms, rate) {
+  if (!rate || ms == null || ms <= 0) return 0;
+  return (ms / 3600000) * rate;
+}
+
+function getTaskBillableDurationMs(task, durationMs, roundMinutes, roundScope) {
+  if (!durationMs || durationMs <= 0) return null;
+  if (roundScope === 'task') {
+    if (task.billableDurationMs != null) return task.billableDurationMs;
+    if (roundMinutes) return roundUpBillableMs(durationMs, roundMinutes);
+    return durationMs;
+  }
+  return roundUpBillableMs(durationMs, roundMinutes);
+}
+
 function normalizePlannedSession(session) {
   return {
     id: session.id || BRAINDUMP_SESSION_ID,
@@ -1060,6 +1084,7 @@ function normalizePlannedSession(session) {
     hourlyRateEnabled: !!session.hourlyRateEnabled,
     hourlyRate: parseHourlyRate(session.hourlyRate),
     billableRoundMinutes: normalizeBillableRoundMinutes(session.billableRoundMinutes),
+    billableRoundScope: normalizeBillableRoundScope(session.billableRoundScope),
   };
 }
 
@@ -1402,11 +1427,12 @@ function getPlannedSession(sessionId) {
 
 function getPlannedSessionRateSettings(sessionId) {
   const session = getPlannedSession(sessionId || BRAINDUMP_SESSION_ID);
-  if (!session) return { enabled: false, rate: null, roundMinutes: null };
+  if (!session) return { enabled: false, rate: null, roundMinutes: null, roundScope: 'session' };
   return {
     enabled: !!session.hourlyRateEnabled,
     rate: session.hourlyRate,
     roundMinutes: session.billableRoundMinutes,
+    roundScope: normalizeBillableRoundScope(session.billableRoundScope),
   };
 }
 
@@ -1418,9 +1444,20 @@ function getTaskEarningsMs(task, isCurrentTask) {
 }
 
 function getTaskEarnings(task, isCurrentTask) {
-  const { enabled, rate, roundMinutes } = getPlannedSessionRateSettings(task.sourceSessionId);
+  const { enabled, rate, roundMinutes, roundScope } = getPlannedSessionRateSettings(task.sourceSessionId);
   if (!enabled || !rate) return 0;
-  return calculateBillableEarnings(getTaskEarningsMs(task, isCurrentTask), rate, roundMinutes);
+  const ms = getTaskEarningsMs(task, isCurrentTask);
+  if (!ms || ms <= 0) return 0;
+
+  if (roundScope === 'task') {
+    if (task.completed) {
+      const billableMs = getTaskBillableDurationMs(task, ms, roundMinutes, roundScope);
+      return calculateBillableEarningsFromMs(billableMs, rate);
+    }
+    return calculateBillableEarningsFromMs(ms, rate);
+  }
+
+  return calculateBillableEarnings(ms, rate, roundMinutes);
 }
 
 function getPlannedSessionQueueEarnings(sessionId) {
@@ -1459,11 +1496,16 @@ function getSessionEarningsLive() {
   saveCurrentTaskProgress();
   const currentIndex = state.focusTaskIndex;
   return state.sessionTasks.reduce(
-    (sum, task, index) => sum + (
-      index === currentIndex
-        ? getRawTaskEarnings(task, true)
-        : getTaskEarnings(task, false)
-    ),
+    (sum, task, index) => {
+      if (index === currentIndex) {
+        return sum + getRawTaskEarnings(task, true);
+      }
+      const { roundScope } = getPlannedSessionRateSettings(task.sourceSessionId);
+      if (roundScope === 'task') {
+        return sum + getRawTaskEarnings(task, false);
+      }
+      return sum + getTaskEarnings(task, false);
+    },
     0,
   );
 }
@@ -1473,6 +1515,13 @@ function getCurrentTaskRoundMinutes() {
   if (!task) return null;
   const { roundMinutes } = getPlannedSessionRateSettings(task.sourceSessionId);
   return roundMinutes || null;
+}
+
+function getCurrentTaskRoundScope() {
+  const task = getCurrentTask();
+  if (!task) return 'session';
+  const { roundScope } = getPlannedSessionRateSettings(task.sourceSessionId);
+  return roundScope;
 }
 
 function shouldShowEarningsRoundingDisplay() {
@@ -1662,9 +1711,12 @@ function updateBillableModalUI(session) {
   billableToggleStatus.classList.toggle('billable-toggle-status--on', enabled);
   billableRateRow.classList.toggle('hidden', !enabled);
   billableRoundRow.classList.toggle('hidden', !enabled);
-  billableRateInput.value = formatHourlyRateField(session.hourlyRate);
 
   const roundMinutes = session.billableRoundMinutes;
+  const showRoundScope = enabled && roundMinutes != null;
+  billableRoundScopeRow.classList.toggle('hidden', !showRoundScope);
+  billableRateInput.value = formatHourlyRateField(session.hourlyRate);
+
   billableRoundOptions.querySelectorAll('.billable-round-option').forEach((btn) => {
     const value = btn.dataset.roundMinutes;
     const isSelected = value === ''
@@ -1672,6 +1724,13 @@ function updateBillableModalUI(session) {
       : Number(value) === roundMinutes;
     btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
     btn.classList.toggle('billable-round-option--selected', isSelected);
+  });
+
+  const roundScope = normalizeBillableRoundScope(session.billableRoundScope);
+  billableRoundScopeOptions.querySelectorAll('.billable-round-scope-option').forEach((btn) => {
+    const isSelected = btn.dataset.roundScope === roundScope;
+    btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+    btn.classList.toggle('billable-round-scope-option--selected', isSelected);
   });
 }
 
@@ -1684,6 +1743,7 @@ function openBillableModal(sessionId) {
     hourlyRateEnabled: session.hourlyRateEnabled,
     hourlyRate: session.hourlyRate,
     billableRoundMinutes: session.billableRoundMinutes,
+    billableRoundScope: session.billableRoundScope,
   };
 
   billableModalTitle.textContent = `Billable · ${session.name}`;
@@ -1705,6 +1765,7 @@ function closeBillableModal(revert = false) {
       session.hourlyRateEnabled = billableSnapshot.hourlyRateEnabled;
       session.hourlyRate = billableSnapshot.hourlyRate;
       session.billableRoundMinutes = billableSnapshot.billableRoundMinutes;
+      session.billableRoundScope = billableSnapshot.billableRoundScope;
     }
   }
 
@@ -1737,6 +1798,13 @@ function setBillableRoundMinutes(roundMinutes) {
   const session = getPlannedSession(pendingBillableSessionId);
   if (!session) return;
   session.billableRoundMinutes = normalizeBillableRoundMinutes(roundMinutes);
+  updateBillableModalUI(session);
+}
+
+function setBillableRoundScope(roundScope) {
+  const session = getPlannedSession(pendingBillableSessionId);
+  if (!session) return;
+  session.billableRoundScope = normalizeBillableRoundScope(roundScope);
   updateBillableModalUI(session);
 }
 
@@ -2066,7 +2134,7 @@ function buildHistoryTasks() {
   saveCurrentTaskProgress();
   return state.sessionTasks.map((task) => {
     const sessionId = task.sourceSessionId || BRAINDUMP_SESSION_ID;
-    const { enabled, rate, roundMinutes } = getPlannedSessionRateSettings(sessionId);
+    const { enabled, rate, roundMinutes, roundScope } = getPlannedSessionRateSettings(sessionId);
     const durationMs = task.completed
       ? (task.durationMs ?? null)
       : (task.elapsedMs > 0 ? task.elapsedMs : null);
@@ -2084,7 +2152,14 @@ function buildHistoryTasks() {
       entry.hourlyRateEnabled = true;
       entry.hourlyRate = rate;
       entry.billableRoundMinutes = roundMinutes;
-      entry.earnings = calculateBillableEarnings(durationMs, rate, roundMinutes);
+      entry.billableRoundScope = roundScope;
+      if (roundScope === 'task' && durationMs) {
+        entry.billableDurationMs = task.billableDurationMs
+          ?? roundUpBillableMs(durationMs, roundMinutes);
+        entry.earnings = calculateBillableEarningsFromMs(entry.billableDurationMs, rate);
+      } else {
+        entry.earnings = calculateBillableEarnings(durationMs, rate, roundMinutes);
+      }
     }
     return entry;
   });
@@ -2104,11 +2179,11 @@ function normalizeSessionHistoryTask(task) {
     normalized.hourlyRateEnabled = true;
     normalized.hourlyRate = parseHourlyRate(task.hourlyRate);
     normalized.billableRoundMinutes = normalizeBillableRoundMinutes(task.billableRoundMinutes);
-    normalized.earnings = task.earnings ?? calculateBillableEarnings(
-      normalized.durationMs,
-      normalized.hourlyRate,
-      normalized.billableRoundMinutes,
-    );
+    normalized.billableRoundScope = normalizeBillableRoundScope(task.billableRoundScope);
+    if (task.billableDurationMs != null) {
+      normalized.billableDurationMs = task.billableDurationMs;
+    }
+    normalized.earnings = task.earnings ?? getHistoryTaskEarnings(normalized);
   }
 
   return normalized;
@@ -2120,14 +2195,22 @@ function getHistoryTaskRateSettings(task) {
       enabled: true,
       rate: task.hourlyRate,
       roundMinutes: task.billableRoundMinutes ?? null,
+      roundScope: normalizeBillableRoundScope(task.billableRoundScope),
     };
   }
   return getPlannedSessionRateSettings(task.sourceSessionId);
 }
 
 function getHistoryTaskEarnings(task) {
-  const { enabled, rate, roundMinutes } = getHistoryTaskRateSettings(task);
+  const { enabled, rate, roundMinutes, roundScope } = getHistoryTaskRateSettings(task);
   if (!enabled || !rate) return 0;
+  if (!task.durationMs || task.durationMs <= 0) return 0;
+
+  if (roundScope === 'task') {
+    const billableMs = task.billableDurationMs ?? roundUpBillableMs(task.durationMs, roundMinutes);
+    return calculateBillableEarningsFromMs(billableMs, rate);
+  }
+
   return calculateBillableEarnings(task.durationMs, rate, roundMinutes);
 }
 
@@ -2150,13 +2233,56 @@ function getHistoryEntryTotalMs(entry) {
   return entry.totalMs || 0;
 }
 
-function getEffectiveHourlyRate(entry) {
+function getHistoryTaskBillableDurationMs(task) {
+  const { enabled, rate, roundMinutes, roundScope } = getHistoryTaskRateSettings(task);
+  if (!enabled || !rate || !task.durationMs || task.durationMs <= 0) return 0;
+  if (!roundMinutes) return task.durationMs;
+  if (roundScope === 'task') {
+    return task.billableDurationMs ?? roundUpBillableMs(task.durationMs, roundMinutes);
+  }
+  return roundUpBillableMs(task.durationMs, roundMinutes);
+}
+
+function getHistoryEntryBillableTotalMs(entry) {
+  if (!entry.billable) return getHistoryEntryTotalMs(entry);
+  if (!entry?.tasks?.length) return entry?.totalMs || 0;
+
+  let total = 0;
+  let hasDuration = false;
+  for (const task of entry.tasks) {
+    const ms = getHistoryTaskBillableDurationMs(task);
+    if (ms > 0) {
+      total += ms;
+      hasDuration = true;
+    }
+  }
+  return hasDuration ? total : getHistoryEntryTotalMs(entry);
+}
+
+function getHistoryEntryDisplayHourlyRate(entry) {
   if (!entry.billable) return null;
-  const durationMs = getHistoryEntryTotalMs(entry);
-  if (!durationMs || durationMs <= 0) return null;
-  const earnings = getHistoryEntryEarnings(entry);
-  if (!earnings) return null;
-  return earnings / (durationMs / 3600000);
+  if (sessionHasMixedRates(entry)) return null;
+  const task = entry.tasks.find((t) => t.hourlyRateEnabled && t.hourlyRate);
+  return task?.hourlyRate ?? null;
+}
+
+function formatReportHourlyRate(displayRate, hasMixedRates = false) {
+  if (hasMixedRates) return 'Mixed';
+  return formatHourlyRate(displayRate);
+}
+
+function getReportTotalsDisplayRate(billableSessions) {
+  if (!billableSessions.length) return null;
+
+  const rates = new Set();
+  for (const session of billableSessions) {
+    if (session.hasMixedRates) return null;
+    if (session.displayRate != null) rates.add(session.displayRate);
+  }
+
+  if (rates.size === 0) return null;
+  if (rates.size === 1) return [...rates][0];
+  return null;
 }
 
 function sessionHasMixedRates(entry) {
@@ -2364,9 +2490,11 @@ function buildEarningsReportData(entries, range) {
     id: entry.id,
     date: entry.endedAt,
     name: entry.name || 'Session',
-    durationMs: getHistoryEntryTotalMs(entry),
+    durationMs: entry.billable
+      ? getHistoryEntryBillableTotalMs(entry)
+      : getHistoryEntryTotalMs(entry),
     earnings: entry.billable ? getHistoryEntryEarnings(entry) : null,
-    effectiveRate: getEffectiveHourlyRate(entry),
+    displayRate: getHistoryEntryDisplayHourlyRate(entry),
     hasMixedRates: sessionHasMixedRates(entry),
     status: entry.status === 'abandoned' ? 'Abandoned' : 'Completed',
     billable: !!entry.billable,
@@ -2388,11 +2516,10 @@ function buildEarningsReportData(entries, range) {
 
   const billableSessions = sessions.filter((session) => session.billable);
   const totalEarnings = billableSessions.reduce((sum, session) => sum + (session.earnings || 0), 0);
-  const totalMs = entries.reduce((sum, entry) => sum + getHistoryEntryTotalMs(entry), 0);
-  const billableMs = billableSessions.reduce((sum, session) => sum + (session.durationMs || 0), 0);
-  const blendedRate = billableMs > 0 && totalEarnings > 0
-    ? totalEarnings / (billableMs / 3600000)
-    : null;
+  const totalMs = sessions.reduce((sum, session) => sum + (session.durationMs || 0), 0);
+  const reportDisplayRate = getReportTotalsDisplayRate(billableSessions);
+  const hasMixedReportRates = billableSessions.some((session) => session.hasMixedRates)
+    || (billableSessions.length > 0 && reportDisplayRate == null && totalEarnings > 0);
 
   return {
     range,
@@ -2400,7 +2527,8 @@ function buildEarningsReportData(entries, range) {
       sessionCount: entries.length,
       totalMs,
       totalEarnings,
-      blendedRate,
+      reportDisplayRate,
+      hasMixedReportRates,
       billableSessionCount: billableSessions.length,
     },
     dailyBars,
@@ -2484,6 +2612,12 @@ function recalculateHistoryEntryBillable(entry) {
 
   entry.totalEarnings = entry.tasks.reduce((sum, task) => {
     if (task.hourlyRateEnabled && task.hourlyRate) {
+      const roundScope = normalizeBillableRoundScope(task.billableRoundScope);
+      if (roundScope === 'task' && task.durationMs && task.billableRoundMinutes) {
+        task.billableDurationMs = roundUpBillableMs(task.durationMs, task.billableRoundMinutes);
+      } else {
+        delete task.billableDurationMs;
+      }
       task.earnings = getHistoryTaskEarnings(task);
       return sum + (task.earnings || 0);
     }
@@ -2525,6 +2659,34 @@ function updateHistoryTaskDuration(entryId, taskIndex, durationMs) {
   task.durationMs = durationMs;
   recalculateHistoryEntryBillable(entry);
   persist();
+  renderHistoryModal();
+  if (historyModalTab === 'report') {
+    renderHistoryReportPanel();
+  }
+}
+
+function applyDateToTimestamp(timestamp, dateStr) {
+  const dayStart = parseDateInputToStartMs(dateStr);
+  if (dayStart == null || !timestamp) return null;
+  const old = new Date(timestamp);
+  const next = new Date(dayStart);
+  next.setHours(old.getHours(), old.getMinutes(), old.getSeconds(), old.getMilliseconds());
+  return next.getTime();
+}
+
+function updateHistoryEntryDate(entryId, dateStr) {
+  const entry = state.sessionHistory.find((item) => item.id === entryId);
+  if (!entry || !dateStr) return;
+
+  const nextEndedAt = applyDateToTimestamp(entry.endedAt, dateStr);
+  if (nextEndedAt == null || nextEndedAt === entry.endedAt) return;
+
+  const delta = nextEndedAt - entry.endedAt;
+  entry.endedAt = nextEndedAt;
+  entry.startedAt = (entry.startedAt ?? entry.endedAt) + delta;
+
+  persist();
+  ensureHistoryRangeIncludesEntry(entry);
   renderHistoryModal();
   if (historyModalTab === 'report') {
     renderHistoryReportPanel();
@@ -2630,7 +2792,9 @@ function updateTimerDisplay() {
     } else if (state.timerView === 'session') {
       timerModeLabel.textContent = 'SESSION';
     } else if (showEarningsRounding && roundMinutes) {
-      timerModeLabel.textContent = `EARNINGS · ${formatBillableRoundLabel(roundMinutes)}`;
+      const roundScope = getCurrentTaskRoundScope();
+      const scopeLabel = roundScope === 'task' ? ' · TASK' : '';
+      timerModeLabel.textContent = `EARNINGS · ${formatBillableRoundLabel(roundMinutes)}${scopeLabel}`;
     } else {
       timerModeLabel.textContent = 'EARNINGS';
     }
@@ -3769,7 +3933,7 @@ const TUTORIAL_STEPS = [
     id: 'billable',
     selector: '[data-tutorial="billable"]',
     title: 'Billable = get paid vibes',
-    body: 'Freelancer mode: activate! Tap the <strong>$</strong> on any session to turn on billable tracking, set your <strong>hourly rate</strong>, and pick how to <strong>round up</strong> task time (10m, 15m, 30m — your call). Slash through tasks and watch earnings stack up. Export invoices later from <strong>Session history</strong>!',
+    body: 'Freelancer mode: activate! Tap the <strong>$</strong> on any session to turn on billable tracking, set your <strong>hourly rate</strong>, and pick how to <strong>round up</strong> task time (10m, 15m, 30m — your call). Choose <strong>Per session</strong> or <strong>Per task</strong> to control when rounding applies. Slash through tasks and watch earnings stack up. Export invoices later from <strong>Session history</strong>!',
   },
   {
     id: 'queue-panel',
@@ -4073,11 +4237,16 @@ function renderReportSummary(report) {
   if (!report) return '';
 
   const { totals } = report;
+  const rateSummary = totals.hasMixedReportRates
+    ? '<span class="history-report-summary-item"><strong>Mixed</strong> rates</span>'
+    : totals.reportDisplayRate != null
+      ? `<span class="history-report-summary-item"><strong>${escapeHtml(formatHourlyRate(totals.reportDisplayRate))}</strong> rate</span>`
+      : '';
   return `
     <span class="history-report-summary-item"><strong>${totals.sessionCount}</strong> session${totals.sessionCount === 1 ? '' : 's'}</span>
     <span class="history-report-summary-item"><strong>${escapeHtml(formatTime(totals.totalMs))}</strong> tracked</span>
     <span class="history-report-summary-item history-report-summary-item--earnings"><strong>${escapeHtml(formatCurrency(totals.totalEarnings))}</strong> earned</span>
-    ${totals.blendedRate != null ? `<span class="history-report-summary-item"><strong>${escapeHtml(formatHourlyRate(totals.blendedRate))}</strong> blended rate</span>` : ''}
+    ${rateSummary}
   `;
 }
 
@@ -4094,7 +4263,7 @@ function renderReportTable(report) {
       <td>${escapeHtml(session.name)}</td>
       <td>${escapeHtml(formatTime(session.durationMs))}</td>
       <td class="history-report-earnings">${session.billable ? escapeHtml(formatCurrency(session.earnings || 0)) : '—'}</td>
-      <td>${session.billable ? escapeHtml(formatHourlyRate(session.effectiveRate)) : '—'}</td>
+      <td>${session.billable ? escapeHtml(formatReportHourlyRate(session.displayRate, session.hasMixedRates)) : '—'}</td>
       <td>${escapeHtml(session.status)}</td>
     </tr>
   `).join('');
@@ -4104,7 +4273,11 @@ function renderReportTable(report) {
       <td colspan="2">Range total</td>
       <td>${escapeHtml(formatTime(report.totals.totalMs))}</td>
       <td class="history-report-earnings">${escapeHtml(formatCurrency(report.totals.totalEarnings))}</td>
-      <td>${report.totals.blendedRate != null ? escapeHtml(formatHourlyRate(report.totals.blendedRate)) : '—'}</td>
+      <td>${report.totals.hasMixedReportRates
+    ? 'Mixed'
+    : report.totals.reportDisplayRate != null
+      ? escapeHtml(formatHourlyRate(report.totals.reportDisplayRate))
+      : '—'}</td>
       <td>${report.totals.sessionCount} session${report.totals.sessionCount === 1 ? '' : 's'}</td>
     </tr>
   `;
@@ -4407,14 +4580,20 @@ function buildEarningsReportContent(report) {
       <td>${escapeHtml(session.name)}</td>
       <td>${escapeHtml(formatTime(session.durationMs))}</td>
       <td class="earnings">${session.billable ? escapeHtml(formatCurrency(session.earnings || 0)) : '—'}</td>
-      <td>${session.billable ? escapeHtml(formatHourlyRate(session.effectiveRate)) : '—'}</td>
+      <td>${session.billable ? escapeHtml(formatReportHourlyRate(session.displayRate, session.hasMixedRates)) : '—'}</td>
       <td>${escapeHtml(session.status)}</td>
     </tr>
   `).join('');
 
   const footnote = report.hasMixedRatesNote
-    ? '<p class="footnote">Effective hourly rates blend task rates when a session uses mixed billing rates.</p>'
+    ? '<p class="footnote">Sessions with mixed billing rates show "Mixed" in the hourly rate column.</p>'
     : '';
+
+  const rateSummary = report.totals.hasMixedReportRates
+    ? '<span><strong>Mixed</strong> rates</span>'
+    : report.totals.reportDisplayRate != null
+      ? `<span><strong>${escapeHtml(formatHourlyRate(report.totals.reportDisplayRate))}</strong> rate</span>`
+      : '';
 
   return `
   <h1>Earnings Report</h1>
@@ -4423,7 +4602,7 @@ function buildEarningsReportContent(report) {
     <span><strong>${report.totals.sessionCount}</strong> session${report.totals.sessionCount === 1 ? '' : 's'}</span>
     <span><strong>${escapeHtml(formatTime(report.totals.totalMs))}</strong> tracked</span>
     <span class="earnings"><strong>${escapeHtml(formatCurrency(report.totals.totalEarnings))}</strong> earned</span>
-    ${report.totals.blendedRate != null ? `<span><strong>${escapeHtml(formatHourlyRate(report.totals.blendedRate))}</strong> blended rate</span>` : ''}
+    ${rateSummary}
   </div>
   <div class="section">
     <h2>Daily earnings</h2>
@@ -4452,7 +4631,11 @@ function buildEarningsReportContent(report) {
           <td colspan="2">Range total</td>
           <td>${escapeHtml(formatTime(report.totals.totalMs))}</td>
           <td class="earnings">${escapeHtml(formatCurrency(report.totals.totalEarnings))}</td>
-          <td>${report.totals.blendedRate != null ? escapeHtml(formatHourlyRate(report.totals.blendedRate)) : '—'}</td>
+          <td>${report.totals.hasMixedReportRates
+    ? 'Mixed'
+    : report.totals.reportDisplayRate != null
+      ? escapeHtml(formatHourlyRate(report.totals.reportDisplayRate))
+      : '—'}</td>
           <td>${report.totals.sessionCount} session${report.totals.sessionCount === 1 ? '' : 's'}</td>
         </tr>
       </tfoot>
@@ -4492,13 +4675,13 @@ function buildInvoiceContent(report, invoiceSettings, invoiceDateMs = Date.now()
       <td>${escapeHtml(formatReportDate(session.date))}</td>
       <td>${escapeHtml(session.name)}</td>
       <td>${escapeHtml(formatInvoiceHours(session.durationMs))}</td>
-      <td>${session.effectiveRate != null ? escapeHtml(formatHourlyRate(session.effectiveRate)) : '—'}</td>
+      <td>${escapeHtml(formatReportHourlyRate(session.displayRate, session.hasMixedRates))}</td>
       <td class="amount">${escapeHtml(formatCurrency(session.earnings || 0))}</td>
     </tr>
   `).join('');
 
   const footnote = hasMixedRatesNote
-    ? '<p class="footnote">Effective hourly rates blend task rates when a session uses mixed billing rates.</p>'
+    ? '<p class="footnote">Sessions with mixed billing rates show "Mixed" in the rate column.</p>'
     : '';
 
   return `
@@ -4674,6 +4857,16 @@ function renderHistoryEntry(entry) {
         <span class="history-entry-chevron" aria-hidden="true">›</span>
       </button>
       <div class="history-entry-detail">
+        <div class="history-entry-date-row">
+          <label class="history-entry-date-label" for="history-entry-date-${escapeHtml(entry.id)}">Session date</label>
+          <input
+            id="history-entry-date-${escapeHtml(entry.id)}"
+            type="date"
+            class="history-entry-date-input"
+            value="${escapeHtml(formatDateInputValue(entry.endedAt))}"
+            title="Session date"
+          />
+        </div>
         <ul class="history-task-list">
           ${entry.tasks.map((task, taskIndex) => renderHistoryTaskItem(task, entry.id, taskIndex)).join('')}
         </ul>
@@ -4809,7 +5002,7 @@ function deleteHistoryEntry(entryId) {
 }
 
 function handleHistoryListClick(event) {
-  if (event.target.closest('.history-task-duration-input')) return;
+  if (event.target.closest('.history-task-duration-input') || event.target.closest('.history-entry-date-input')) return;
 
   const deleteBtn = event.target.closest('.history-delete-btn');
   if (deleteBtn) {
@@ -4855,6 +5048,17 @@ function handleHistoryDurationInput(event) {
 
   const durationMs = parseManualLimit(input.value);
   updateHistoryTaskDuration(entryId, taskIndex, durationMs);
+}
+
+function handleHistoryEntryDateInput(event) {
+  const input = event.target.closest('.history-entry-date-input');
+  if (!input || event.type !== 'change') return;
+
+  const entryEl = input.closest('.history-entry');
+  const entryId = entryEl?.dataset.entryId;
+  if (!entryId) return;
+
+  updateHistoryEntryDate(entryId, input.value);
 }
 
 function renderTemplateEditor() {
@@ -5564,6 +5768,13 @@ function completeCurrentTask() {
   state.sessionTasks[taskIndex].elapsedMs = 0;
   state.sessionTasks[taskIndex].taskOvertimeMode = false;
   state.sessionTasks[taskIndex].skipped = false;
+
+  const completedTask = state.sessionTasks[taskIndex];
+  const { enabled, rate, roundMinutes, roundScope } = getPlannedSessionRateSettings(completedTask.sourceSessionId);
+  if (enabled && rate && roundScope === 'task' && roundMinutes) {
+    completedTask.billableDurationMs = roundUpBillableMs(completedElapsedMs, roundMinutes);
+  }
+
   state.totalSessionMs += completedElapsedMs;
   playCompleteSound();
 
@@ -5759,6 +5970,7 @@ historyReportSessionMenu?.addEventListener('click', handleHistoryReportSessionOp
 historyExportInvoiceBtn?.addEventListener('click', handleExportInvoicePdf);
 historyExportPdfBtn?.addEventListener('click', handleExportEarningsReportPdf);
 historyList.addEventListener('click', handleHistoryListClick);
+historyList.addEventListener('change', handleHistoryEntryDateInput);
 historyList.addEventListener('blur', handleHistoryDurationInput, true);
 historyList.addEventListener('keydown', handleHistoryDurationInput, true);
 templatesCloseBtn.addEventListener('click', closeTemplatesModal);
@@ -5827,6 +6039,12 @@ billableRoundOptions.addEventListener('click', (e) => {
   if (!btn) return;
   const value = btn.dataset.roundMinutes;
   setBillableRoundMinutes(value === '' ? null : Number(value));
+});
+
+billableRoundScopeOptions.addEventListener('click', (e) => {
+  const btn = e.target.closest('.billable-round-scope-option');
+  if (!btn) return;
+  setBillableRoundScope(btn.dataset.roundScope);
 });
 
 billableDoneBtn.addEventListener('click', saveBillableModal);

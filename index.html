@@ -100,6 +100,13 @@
               <button type="button" class="billable-round-option" data-round-minutes="30" role="radio" aria-checked="false">30m</button>
             </div>
           </div>
+          <div id="billable-round-scope-row" class="billable-round-scope-row hidden">
+            <span class="billable-field-label">Apply rounding</span>
+            <div id="billable-round-scope-options" class="billable-round-scope-options" role="radiogroup" aria-label="Apply rounding">
+              <button type="button" class="billable-round-scope-option" data-round-scope="session" role="radio" aria-checked="true">Per session</button>
+              <button type="button" class="billable-round-scope-option" data-round-scope="task" role="radio" aria-checked="false">Per task</button>
+            </div>
+          </div>
         </div>
         <div class="clear-session-modal-actions">
           <button id="billable-done-btn" class="clear-session-modal-btn" type="button">Done</button>
@@ -112,13 +119,17 @@
       <button type="button" id="settings-templates-btn" class="settings-menu-item" role="menuitem">Templates</button>
       <button type="button" id="settings-history-btn" class="settings-menu-item" role="menuitem">Session history</button>
       <button type="button" id="settings-invoice-btn" class="settings-menu-item" role="menuitem">Personal Profile</button>
-      <button type="button" id="settings-shortcuts-btn" class="settings-menu-item" role="menuitem">Keyboard shortcuts</button>
+      <button type="button" class="settings-menu-item settings-menu-item--disabled" role="menuitem" disabled aria-disabled="true">
+        <span>Power Features</span>
+        <span class="settings-menu-item-note">Coming Soon</span>
+      </button>
       <div class="settings-menu-divider" role="separator"></div>
       <button type="button" id="settings-sound-effects-btn" class="settings-menu-item" role="menuitemcheckbox" aria-checked="true">
         <span>Sound effects</span>
         <span id="settings-sound-effects-status" class="settings-menu-item-note">On</span>
       </button>
       <button type="button" id="settings-data-btn" class="settings-menu-item" role="menuitem">Data &amp; backup</button>
+      <button type="button" id="settings-shortcuts-btn" class="settings-menu-item" role="menuitem">Keyboard shortcuts</button>
       <div class="settings-menu-divider" role="separator"></div>
       <button type="button" id="settings-tutorial-btn" class="settings-menu-item" role="menuitem">Tutorial</button>
     </div>

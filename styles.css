@@ -269,11 +269,19 @@ body.mode-edit #edit-view.view {
   color: var(--edit-muted);
 }
 
+.settings-menu-item--disabled .settings-menu-item-note {
+  color: var(--edit-muted);
+}
+
 .settings-menu-item-note {
   font-size: var(--font-xs);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--edit-input-muted);
+}
+
+.settings-menu-item-note--on {
+  color: var(--accent);
 }
 
 .settings-menu-divider {
@@ -1149,6 +1157,38 @@ body.mode-edit #edit-view.view {
 
 .history-entry--expanded .history-entry-detail {
   display: block;
+}
+
+.history-entry-date-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(8px * var(--edit-scale));
+  margin-top: calc(8px * var(--edit-scale));
+}
+
+.history-entry-date-label {
+  font-family: var(--mono);
+  font-size: var(--font-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.history-entry-date-input {
+  padding: calc(2px * var(--edit-scale)) calc(6px * var(--edit-scale));
+  font-family: var(--mono);
+  font-size: var(--font-xs);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: calc(4px * var(--edit-scale));
+  outline: none;
+  color-scheme: dark;
+}
+
+.history-entry-date-input:focus {
+  border-color: var(--accent);
 }
 
 .history-task-list {
@@ -2380,14 +2420,16 @@ body.mode-edit #edit-view.view {
 }
 
 .billable-rate-row,
-.billable-round-row {
+.billable-round-row,
+.billable-round-scope-row {
   display: flex;
   flex-direction: column;
   gap: calc(8px * var(--edit-scale));
 }
 
 .billable-rate-row.hidden,
-.billable-round-row.hidden {
+.billable-round-row.hidden,
+.billable-round-scope-row.hidden {
   display: none;
 }
 
@@ -2459,6 +2501,37 @@ body.mode-edit #edit-view.view {
 }
 
 .billable-round-option--selected {
+  color: var(--accent);
+  border-color: rgba(48, 209, 88, 0.35);
+  background: rgba(48, 209, 88, 0.08);
+}
+
+.billable-round-scope-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(6px * var(--edit-scale));
+}
+
+.billable-round-scope-option {
+  padding: calc(6px * var(--edit-scale)) calc(10px * var(--edit-scale));
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: calc(var(--radius) - 4px);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--edit-muted);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.billable-round-scope-option:hover {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.billable-round-scope-option--selected {
   color: var(--accent);
   border-color: rgba(48, 209, 88, 0.35);
   background: rgba(48, 209, 88, 0.08);
