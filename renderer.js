@@ -2693,6 +2693,37 @@ function updateHistoryEntryDate(entryId, dateStr) {
   }
 }
 
+function historyTaskToPlannedTask(task) {
+  return normalizeBraindumpTask({ text: task.text, limitMs: task.limitMs });
+}
+
+function restoreHistoryEntryToList(entryId) {
+  const entry = state.sessionHistory.find((item) => item.id === entryId);
+  if (!entry?.tasks?.length) return;
+
+  ensureBraindumpSession();
+  const tasksBySessionId = new Map();
+
+  entry.tasks.forEach((task) => {
+    const sessionId = task.sourceSessionId || BRAINDUMP_SESSION_ID;
+    const targetSession = getPlannedSession(sessionId) || getBraindumpSession();
+    const targetId = targetSession.id;
+    if (!tasksBySessionId.has(targetId)) tasksBySessionId.set(targetId, []);
+    tasksBySessionId.get(targetId).push(historyTaskToPlannedTask(task));
+  });
+
+  tasksBySessionId.forEach((tasks, sessionId) => {
+    const session = getPlannedSession(sessionId);
+    if (!session) return;
+    session.tasks.push(...tasks);
+    state.expandedSessionIds.add(sessionId);
+  });
+
+  persist();
+  if (state.mode === 'edit') renderEditView();
+  refreshDrawerIfOpen();
+}
+
 function archiveCurrentSession(status) {
   if (!hasArchivableProgress()) return null;
   ensureActiveSessionRun(false);
@@ -4877,6 +4908,7 @@ function renderHistoryEntry(entry) {
           </div>
         ` : ''}
         <div class="history-entry-actions">
+          <button type="button" class="history-restore-btn" data-restore-id="${escapeHtml(entry.id)}" title="Add these tasks back to your session list">Copy to list</button>
           <button type="button" class="history-delete-btn" data-delete-id="${escapeHtml(entry.id)}">Delete</button>
         </div>
       </div>
@@ -5003,6 +5035,13 @@ function deleteHistoryEntry(entryId) {
 
 function handleHistoryListClick(event) {
   if (event.target.closest('.history-task-duration-input') || event.target.closest('.history-entry-date-input')) return;
+
+  const restoreBtn = event.target.closest('.history-restore-btn');
+  if (restoreBtn) {
+    event.stopPropagation();
+    restoreHistoryEntryToList(restoreBtn.dataset.restoreId);
+    return;
+  }
 
   const deleteBtn = event.target.closest('.history-delete-btn');
   if (deleteBtn) {

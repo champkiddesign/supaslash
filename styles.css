@@ -1285,9 +1285,12 @@ body.mode-edit #edit-view.view {
 .history-entry-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: calc(6px * var(--edit-scale));
   margin-top: calc(8px * var(--edit-scale));
 }
 
+.history-restore-btn,
 .history-delete-btn {
   font-family: var(--mono);
   font-size: var(--font-xs);
@@ -1300,6 +1303,11 @@ body.mode-edit #edit-view.view {
   color: var(--text-secondary);
   cursor: pointer;
   -webkit-app-region: no-drag;
+}
+
+.history-restore-btn:hover {
+  color: var(--accent);
+  border-color: rgba(255, 85, 0, 0.4);
 }
 
 .history-delete-btn:hover {
