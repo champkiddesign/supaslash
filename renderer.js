@@ -1450,11 +1450,8 @@ function getTaskEarnings(task, isCurrentTask) {
   if (!ms || ms <= 0) return 0;
 
   if (roundScope === 'task') {
-    if (task.completed) {
-      const billableMs = getTaskBillableDurationMs(task, ms, roundMinutes, roundScope);
-      return calculateBillableEarningsFromMs(billableMs, rate);
-    }
-    return calculateBillableEarningsFromMs(ms, rate);
+    const billableMs = getTaskBillableDurationMs(task, ms, roundMinutes, roundScope);
+    return calculateBillableEarningsFromMs(billableMs, rate);
   }
 
   return calculateBillableEarnings(ms, rate, roundMinutes);
@@ -1478,10 +1475,34 @@ function hasPlannedSessionQueueTasks(sessionId) {
 function getSessionEarnings() {
   saveCurrentTaskProgress();
   const currentIndex = state.focusTaskIndex;
-  return state.sessionTasks.reduce(
-    (sum, task, index) => sum + getTaskEarnings(task, index === currentIndex),
-    0,
-  );
+
+  const groups = new Map();
+  state.sessionTasks.forEach((task, index) => {
+    const sessionId = task.sourceSessionId || BRAINDUMP_SESSION_ID;
+    if (!groups.has(sessionId)) groups.set(sessionId, []);
+    groups.get(sessionId).push({ task, index });
+  });
+
+  let total = 0;
+  groups.forEach((items, sessionId) => {
+    const { enabled, rate, roundMinutes, roundScope } = getPlannedSessionRateSettings(sessionId);
+    if (!enabled || !rate) return;
+
+    if (roundScope === 'task') {
+      items.forEach(({ task, index }) => {
+        total += getTaskEarnings(task, index === currentIndex);
+      });
+      return;
+    }
+
+    let totalMs = 0;
+    items.forEach(({ task, index }) => {
+      const ms = getTaskEarningsMs(task, index === currentIndex);
+      if (ms > 0) totalMs += ms;
+    });
+    total += calculateBillableEarnings(totalMs, rate, roundMinutes);
+  });
+  return total;
 }
 
 function getRawTaskEarnings(task, isCurrentTask) {
@@ -1496,42 +1517,43 @@ function getSessionEarningsLive() {
   saveCurrentTaskProgress();
   const currentIndex = state.focusTaskIndex;
   return state.sessionTasks.reduce(
-    (sum, task, index) => {
-      if (index === currentIndex) {
-        return sum + getRawTaskEarnings(task, true);
-      }
-      const { roundScope } = getPlannedSessionRateSettings(task.sourceSessionId);
-      if (roundScope === 'task') {
-        return sum + getRawTaskEarnings(task, false);
-      }
-      return sum + getTaskEarnings(task, false);
-    },
+    (sum, task, index) => sum + getRawTaskEarnings(task, index === currentIndex),
     0,
   );
 }
 
+function getQueueRoundingDisplaySettings() {
+  const currentTask = getCurrentTask();
+  if (currentTask) {
+    const sessionId = currentTask.sourceSessionId || BRAINDUMP_SESSION_ID;
+    const settings = getPlannedSessionRateSettings(sessionId);
+    if (settings.enabled && settings.rate && settings.roundMinutes) {
+      return settings;
+    }
+  }
+
+  for (const task of state.sessionTasks) {
+    const sessionId = task.sourceSessionId || BRAINDUMP_SESSION_ID;
+    const settings = getPlannedSessionRateSettings(sessionId);
+    if (settings.enabled && settings.rate && settings.roundMinutes) {
+      return settings;
+    }
+  }
+
+  return null;
+}
+
 function getCurrentTaskRoundMinutes() {
-  const task = getCurrentTask();
-  if (!task) return null;
-  const { roundMinutes } = getPlannedSessionRateSettings(task.sourceSessionId);
-  return roundMinutes || null;
+  return getQueueRoundingDisplaySettings()?.roundMinutes ?? null;
 }
 
 function getCurrentTaskRoundScope() {
-  const task = getCurrentTask();
-  if (!task) return 'session';
-  const { roundScope } = getPlannedSessionRateSettings(task.sourceSessionId);
-  return roundScope;
+  return getQueueRoundingDisplaySettings()?.roundScope ?? 'session';
 }
 
 function shouldShowEarningsRoundingDisplay() {
   if (!canShowSessionEarnings()) return false;
-  const roundMinutes = getCurrentTaskRoundMinutes();
-  if (!roundMinutes) return false;
-  const task = getCurrentTask();
-  if (!task) return false;
-  const { enabled, rate } = getPlannedSessionRateSettings(task.sourceSessionId);
-  return enabled && rate > 0;
+  return !!getQueueRoundingDisplaySettings();
 }
 
 function formatBillableRoundLabel(roundMinutes) {
