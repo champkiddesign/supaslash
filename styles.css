@@ -184,15 +184,27 @@ body.mode-edit #edit-view.view {
   position: relative;
   z-index: 1;
   flex-shrink: 0;
-  margin-bottom: calc(24px * var(--edit-scale));
+  margin-bottom: calc(30px * var(--edit-scale));
 }
 
 .edit-header-row {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: calc(12px * var(--edit-scale));
   margin-bottom: 0;
+}
+
+.app-logo {
+  flex-shrink: 0;
+  line-height: 0;
+  -webkit-app-region: drag;
+}
+
+.app-logo-image {
+  display: block;
+  width: calc(119px * var(--edit-scale));
+  height: auto;
 }
 
 .settings-btn {

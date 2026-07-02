@@ -1,4 +1,4 @@
-# Slash It
+# SupaSlash
 
 A minimal floating to-do timer for macOS, inspired by [Slash](https://getslash.co/).
 
@@ -64,8 +64,8 @@ npm run make
 ```
 
 The build outputs to `out/make/`:
-- **`Slash It.dmg`** — drag to Applications to install
-- **`Slash It-darwin-arm64-1.0.0.zip`** — zip of the `.app` bundle
+- **`SupaSlash.dmg`** — drag to Applications to install
+- **`SupaSlash-darwin-arm64-1.0.0.zip`** — zip of the `.app` bundle
 
 On first launch, macOS may warn that the app is from an unidentified developer. Right-click the app → **Open** to allow it.
 

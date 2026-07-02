@@ -3,7 +3,12 @@ const fs = require('fs');
 
 const BACKUP_COUNT = 5;
 const DOCUMENTS_BACKUP_DEBOUNCE_MS = 60000;
-const DATA_FILENAME = 'slash-it-data.json';
+const DATA_FILENAME = 'supaslash-data.json';
+const LEGACY_DATA_FILENAME = 'slash-it-data.json';
+const DOCUMENTS_DIR_NAME = 'SupaSlash';
+const LEGACY_DOCUMENTS_DIR_NAME = 'Slash It';
+const LEGACY_APP_SUPPORT_DIR = 'Slash It';
+const LEGACY_DEV_APP_SUPPORT_DIR = 'slash-it';
 
 function getDefaultData() {
   return {
@@ -49,15 +54,57 @@ function createDataStore(app) {
   }
 
   function getBackupPath(index) {
-    return path.join(getBackupsDir(), `slash-it-data.bak.${index}.json`);
+    return path.join(getBackupsDir(), `${DATA_FILENAME.replace('.json', '')}.bak.${index}.json`);
   }
 
   function getDocumentsDir() {
-    return path.join(app.getPath('documents'), 'Slash It');
+    return path.join(app.getPath('documents'), DOCUMENTS_DIR_NAME);
   }
 
   function getDocumentsDataPath() {
     return path.join(getDocumentsDir(), DATA_FILENAME);
+  }
+
+  function getLegacyAppSupportDir(appSupportDirName) {
+    return path.join(app.getPath('appData'), appSupportDirName);
+  }
+
+  function getLegacyPrimaryPath(appSupportDirName) {
+    return path.join(getLegacyAppSupportDir(appSupportDirName), LEGACY_DATA_FILENAME);
+  }
+
+  function getLegacyBackupPath(appSupportDirName, index) {
+    return path.join(getLegacyAppSupportDir(appSupportDirName), 'backups', `${LEGACY_DATA_FILENAME.replace('.json', '')}.bak.${index}.json`);
+  }
+
+  function getLegacyDocumentsDataPath() {
+    return path.join(app.getPath('documents'), LEGACY_DOCUMENTS_DIR_NAME, LEGACY_DATA_FILENAME);
+  }
+
+  function getLegacyLoadCandidates() {
+    const appSupportDirs = [LEGACY_APP_SUPPORT_DIR, LEGACY_DEV_APP_SUPPORT_DIR];
+    const candidates = [];
+
+    for (const appSupportDirName of appSupportDirs) {
+      candidates.push({
+        source: `legacy.primary.${appSupportDirName}`,
+        path: getLegacyPrimaryPath(appSupportDirName),
+      });
+
+      for (let index = 1; index <= BACKUP_COUNT; index += 1) {
+        candidates.push({
+          source: `legacy.backup.${appSupportDirName}.${index}`,
+          path: getLegacyBackupPath(appSupportDirName, index),
+        });
+      }
+    }
+
+    candidates.push({
+      source: 'legacy.documents',
+      path: getLegacyDocumentsDataPath(),
+    });
+
+    return candidates;
   }
 
   function atomicWriteSync(filePath, content) {
@@ -105,6 +152,30 @@ function createDataStore(app) {
     }
   }
 
+  function readRawDataFile(filePath) {
+    if (!fs.existsSync(filePath)) return null;
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      return parseDataContent(content) ? content : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function migrateLegacyData(source, filePath) {
+    const content = readRawDataFile(filePath);
+    if (!content) return null;
+
+    const data = parseDataContent(content);
+    if (!data) return null;
+
+    console.log(`Migrating data from ${source}: ${filePath}`);
+    const primaryPath = getPrimaryPath();
+    atomicWriteSync(primaryPath, content);
+    scheduleDocumentsBackup(content);
+    return { data, source: `migrated.${source}` };
+  }
+
   function loadDataWithFallback() {
     const candidates = [
       { source: 'primary', path: getPrimaryPath() },
@@ -119,6 +190,13 @@ function createDataStore(app) {
       const data = readDataFile(candidate.path);
       if (data) {
         return { data, source: candidate.source };
+      }
+    }
+
+    for (const candidate of getLegacyLoadCandidates()) {
+      const migrated = migrateLegacyData(candidate.source, candidate.path);
+      if (migrated) {
+        return migrated;
       }
     }
 

@@ -3,8 +3,8 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 
 module.exports = {
   packagerConfig: {
-    name: 'Slash It',
-    appBundleId: 'com.champkiddesign.slashit',
+    name: 'SupaSlash',
+    appBundleId: 'com.champkiddesign.supaslash',
     icon: './assets/icon',
     asar: true,
     osxSign: false,
@@ -14,7 +14,7 @@ module.exports = {
     {
       name: '@electron-forge/maker-dmg',
       config: {
-        title: 'Slash It',
+        title: 'SupaSlash',
         format: 'ULFO',
       },
     },

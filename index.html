@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'" />
-  <title>Slash It</title>
+  <title>SupaSlash</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -14,6 +14,9 @@
   <div id="edit-view" class="view">
     <header class="edit-header">
       <div class="edit-header-row">
+        <div class="app-logo" aria-hidden="true">
+          <img src="assets/supaslash-logo.png" alt="" class="app-logo-image" width="1024" height="140" />
+        </div>
         <div class="edit-header-actions">
           <button id="plan-session-btn" class="plan-session-btn plan-session-btn--header" type="button" data-tutorial="create-session">+ Create New Session</button>
           <button id="settings-btn" class="settings-btn icon-btn" type="button" data-tutorial="settings-menu" aria-label="Menu" aria-haspopup="true" aria-expanded="false">
@@ -192,7 +195,7 @@
     <div id="data-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="data-modal-title">
       <div class="clear-session-modal-card data-modal-card">
         <h3 id="data-modal-title" class="clear-session-modal-title">Data &amp; backup</h3>
-        <p class="data-modal-body">Your tasks are saved on this Mac. A backup copy is kept in Documents/Slash It so you can recover after reinstalling.</p>
+        <p class="data-modal-body">Your tasks are saved on this Mac. A backup copy is kept in Documents/SupaSlash so you can recover after reinstalling.</p>
         <p id="data-modal-status" class="data-modal-status">Last backed up: Not yet backed up</p>
         <div class="data-modal-actions">
           <button id="data-backup-now-btn" class="clear-session-modal-btn" type="button">Back up now</button>

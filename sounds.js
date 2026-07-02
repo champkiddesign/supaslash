@@ -1,7 +1,12 @@
 const SOUND_POOL_SIZE = 3;
-const SOUND_EFFECTS_STORAGE_KEY = 'slash-it-sound-effects';
+const SOUND_EFFECTS_STORAGE_KEY = 'supaslash-sound-effects';
+const LEGACY_SOUND_EFFECTS_STORAGE_KEY = 'slash-it-sound-effects';
 
 let soundEffectsEnabled = localStorage.getItem(SOUND_EFFECTS_STORAGE_KEY) !== 'false';
+if (localStorage.getItem(SOUND_EFFECTS_STORAGE_KEY) === null && localStorage.getItem(LEGACY_SOUND_EFFECTS_STORAGE_KEY) !== null) {
+  soundEffectsEnabled = localStorage.getItem(LEGACY_SOUND_EFFECTS_STORAGE_KEY) !== 'false';
+  localStorage.setItem(SOUND_EFFECTS_STORAGE_KEY, soundEffectsEnabled ? 'true' : 'false');
+}
 
 function setSoundEffectsEnabled(enabled) {
   soundEffectsEnabled = !!enabled;

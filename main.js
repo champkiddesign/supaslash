@@ -789,7 +789,7 @@ ipcMain.handle('restore-data-from-file', async (event) => {
     const content = await fs.promises.readFile(filePaths[0], 'utf8');
     const data = dataStore.parseDataContent(content);
     if (!data) {
-      return { canceled: false, error: 'That file is not a valid Slash It backup.' };
+      return { canceled: false, error: 'That file is not a valid SupaSlash backup.' };
     }
     await dataStore.saveDataPipeline(data);
     return { canceled: false, data };
