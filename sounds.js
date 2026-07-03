@@ -27,7 +27,7 @@ window.slashItSounds = {
   setEnabled: setSoundEffectsEnabled,
   isEnabled: isSoundEffectsEnabled,
 };
-const WHOOSH_BUTTON_SELECTOR = '.task-move-to-session, .task-move-to-braindump';
+const WHOOSH_BUTTON_SELECTOR = '.task-move-to-session, .task-move-to-braindump, .session-send-to-queue-btn';
 const POP_BUTTON_SELECTOR = '#plan-session-btn';
 const DESTRUCTIVE_BUTTON_SELECTOR = [
   '#clear-session-btn',

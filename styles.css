@@ -203,8 +203,8 @@ body.mode-edit #edit-view.view {
 
 .app-logo-image {
   display: block;
-  width: calc(38px * var(--edit-scale));
   height: calc(38px * var(--edit-scale));
+  width: auto;
 }
 
 .settings-btn {
@@ -1041,6 +1041,87 @@ body.mode-edit #edit-view.view {
   resize: vertical;
 }
 
+.invoice-settings-avatar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(8px * var(--edit-scale));
+  margin-bottom: calc(4px * var(--edit-scale));
+}
+
+.invoice-settings-avatar-btn {
+  position: relative;
+  width: calc(96px * var(--edit-scale));
+  height: calc(96px * var(--edit-scale));
+  padding: 0;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.invoice-settings-avatar-btn:hover {
+  border-color: var(--accent);
+}
+
+.invoice-settings-avatar-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.invoice-settings-avatar-preview.hidden {
+  display: none;
+}
+
+.invoice-settings-avatar-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--sans);
+  font-size: calc(28px * var(--edit-scale));
+  font-weight: 300;
+  color: var(--edit-muted);
+  line-height: 1;
+}
+
+.invoice-settings-avatar-placeholder.hidden {
+  display: none;
+}
+
+.invoice-settings-avatar-remove {
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--sans);
+  font-size: var(--font-xs);
+  color: var(--edit-muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.invoice-settings-avatar-remove:hover {
+  color: var(--edit-task-text);
+}
+
+.invoice-settings-avatar-remove.hidden {
+  display: none;
+}
+
+.invoice-settings-avatar-hint {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: var(--font-xs);
+  color: var(--edit-muted);
+  text-align: center;
+}
+
 .history-modal-card .clear-session-modal-title {
   flex-shrink: 0;
 }
@@ -1370,6 +1451,7 @@ body.mode-edit #edit-view.view {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  position: relative;
 }
 
 .planned-sessions-list::-webkit-scrollbar {
@@ -1383,6 +1465,30 @@ body.mode-edit #edit-view.view {
 
 .planned-session {
   margin-bottom: calc(8px * var(--edit-scale));
+}
+
+.planned-session.dragging-session {
+  opacity: 0.5;
+}
+
+.session-drop-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 11px;
+  margin: 0;
+  padding: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 5px,
+    var(--accent) 5px,
+    var(--accent) 6px,
+    transparent 6px,
+    transparent 11px
+  );
+  border-radius: 0;
+  pointer-events: none;
 }
 
 .planned-session--expanded {

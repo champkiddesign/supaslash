@@ -33,6 +33,8 @@ const state = {
   listTemplates: [],
   fullscreenTaskPanelOpen: false,
   invoiceSettings: {
+    name: '',
+    logoDataUrl: '',
     businessName: '',
     email: '',
     address: '',
@@ -65,11 +67,18 @@ const dataRestoreBtn = document.getElementById('data-restore-btn');
 const dataOpenFolderBtn = document.getElementById('data-open-folder-btn');
 const dataCloseBtn = document.getElementById('data-close-btn');
 const invoiceSettingsModal = document.getElementById('invoice-settings-modal');
+const invoiceSettingsAvatarBtn = document.getElementById('invoice-settings-avatar-btn');
+const invoiceSettingsAvatarPreview = document.getElementById('invoice-settings-avatar-preview');
+const invoiceSettingsAvatarPlaceholder = document.getElementById('invoice-settings-avatar-placeholder');
+const invoiceSettingsAvatarInput = document.getElementById('invoice-settings-avatar-input');
+const invoiceSettingsAvatarRemoveBtn = document.getElementById('invoice-settings-avatar-remove-btn');
+const invoiceSettingsNameInput = document.getElementById('invoice-settings-name');
 const invoiceSettingsBusinessNameInput = document.getElementById('invoice-settings-business-name');
 const invoiceSettingsEmailInput = document.getElementById('invoice-settings-email');
 const invoiceSettingsAddressInput = document.getElementById('invoice-settings-address');
 const invoiceSettingsDoneBtn = document.getElementById('invoice-settings-done-btn');
 const invoiceSettingsCancelBtn = document.getElementById('invoice-settings-cancel-btn');
+let invoiceSettingsFormLogoDataUrl = '';
 const focusView = document.getElementById('focus-view');
 const doneView = document.getElementById('done-view');
 const plannedSessionsList = document.getElementById('planned-sessions-list');
@@ -1987,6 +1996,47 @@ function decodeDragPayload(raw) {
   return null;
 }
 
+let sessionReorderDragId = null;
+let sessionDropIndicatorState = null;
+
+function encodeSessionReorderPayload(sessionId) {
+  return JSON.stringify({ type: 'session-reorder', sessionId });
+}
+
+function decodeSessionReorderPayload(raw) {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed?.type === 'session-reorder' && typeof parsed.sessionId === 'string') {
+      return parsed.sessionId;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function isSessionReorderDragActive() {
+  return sessionReorderDragId != null;
+}
+
+function getPlannedSessionIndex(sessionId) {
+  return state.plannedSessions.findIndex((session) => session.id === sessionId);
+}
+
+function movePlannedSession(sessionId, insertAt) {
+  const fromIndex = getPlannedSessionIndex(sessionId);
+  if (fromIndex < 1) return;
+
+  let toIndex = Math.max(1, Math.min(insertAt, state.plannedSessions.length));
+  if (fromIndex === toIndex) return;
+
+  const [session] = state.plannedSessions.splice(fromIndex, 1);
+  if (fromIndex < toIndex) toIndex -= 1;
+  state.plannedSessions.splice(toIndex, 0, session);
+  persist();
+  renderEditView();
+}
+
 function persist() {
   saveCurrentTaskProgress();
   window.slashIt.saveData({
@@ -2020,6 +2070,10 @@ function persist() {
 function normalizeInvoiceSettings(settings) {
   const source = settings && typeof settings === 'object' ? settings : {};
   return {
+    name: typeof source.name === 'string' ? source.name.trim() : '',
+    logoDataUrl: typeof source.logoDataUrl === 'string' && source.logoDataUrl.startsWith('data:image/')
+      ? source.logoDataUrl
+      : '',
     businessName: typeof source.businessName === 'string' ? source.businessName.trim() : '',
     email: typeof source.email === 'string' ? source.email.trim() : '',
     address: typeof source.address === 'string' ? source.address.trim() : '',
@@ -2375,12 +2429,18 @@ function getHistoryEntrySourceSessionId(entry) {
   return entry.sourceSessionId || entry.tasks?.[0]?.sourceSessionId || BRAINDUMP_SESSION_ID;
 }
 
+function formatHistorySessionName(name) {
+  const trimmed = (name || '').trim();
+  if (!trimmed) return 'SESSION';
+  return trimmed.toUpperCase();
+}
+
 function getHistoryEntryDisplayName(entry) {
   const sessionId = getHistoryEntrySourceSessionId(entry);
   const planned = getPlannedSession(sessionId);
   const plannedName = (planned?.name || '').trim();
-  if (plannedName) return plannedName;
-  return getHistoryEntryName(entry);
+  if (plannedName) return formatHistorySessionName(plannedName);
+  return formatHistorySessionName(getHistoryEntryName(entry));
 }
 
 function resolveArchiveSourceSessionId(tasks) {
@@ -2416,7 +2476,7 @@ function getReportSessionOptions() {
   state.plannedSessions.forEach((session) => {
     const id = session.id;
     const label = (session.name || '').trim() || (id === BRAINDUMP_SESSION_ID ? 'Braindump' : 'Session');
-    byId.set(id, { id, label });
+    byId.set(id, { id, label: formatHistorySessionName(label) });
   });
 
   return Array.from(byId.values()).sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
@@ -3191,7 +3251,9 @@ let dropIndicatorState = null;
 
 function clearDropIndicators() {
   document.querySelectorAll('.task-drop-indicator').forEach((el) => el.remove());
+  document.querySelectorAll('.session-drop-indicator').forEach((el) => el.remove());
   dropIndicatorState = null;
+  sessionDropIndicatorState = null;
 }
 
 function getInsertAtForTaskPosition(listId, taskIndex, task, insertBefore) {
@@ -3284,6 +3346,130 @@ function buildDropGaps(listEl, listId) {
   return gaps;
 }
 
+function showSessionDropIndicator(listEl, top, insertAt) {
+  let indicator = listEl.querySelector('.session-drop-indicator');
+  if (!indicator) {
+    indicator = document.createElement('div');
+    indicator.className = 'session-drop-indicator';
+    indicator.setAttribute('aria-hidden', 'true');
+    listEl.appendChild(indicator);
+  }
+  const topPx = `${top}px`;
+  if (indicator.dataset.insertAt === String(insertAt) && indicator.style.top === topPx) return;
+  indicator.dataset.insertAt = String(insertAt);
+  indicator.style.top = topPx;
+}
+
+function buildSessionDropGaps(listEl) {
+  const blocks = [...listEl.querySelectorAll(':scope > .planned-session')];
+  if (blocks.length <= 1) return [];
+
+  const gaps = [];
+  for (let i = 0; i < blocks.length - 1; i += 1) {
+    const curr = blocks[i];
+    const next = blocks[i + 1];
+    const currRect = curr.getBoundingClientRect();
+    const nextRect = next.getBoundingClientRect();
+    const gapStart = curr.offsetTop + curr.offsetHeight;
+    const gapEnd = next.offsetTop;
+    gaps.push(makeDropGap(
+      i + 1,
+      gapStart,
+      gapEnd,
+      (currRect.bottom + nextRect.top) / 2,
+    ));
+  }
+
+  const last = blocks[blocks.length - 1];
+  const lastRect = last.getBoundingClientRect();
+  const afterLastStart = last.offsetTop + last.offsetHeight;
+  const afterLastEnd = afterLastStart + DROP_LINE_SLOT_PX;
+  gaps.push(makeDropGap(
+    blocks.length,
+    afterLastStart,
+    afterLastEnd,
+    lastRect.bottom + DROP_LINE_SLOT_PX / 2,
+  ));
+
+  return gaps;
+}
+
+function pickSessionDropGap(gaps, clientY, listEl) {
+  let closest = gaps[0];
+  let closestDist = Math.abs(clientY - closest.centerY);
+  for (let i = 1; i < gaps.length; i += 1) {
+    const dist = Math.abs(clientY - gaps[i].centerY);
+    if (dist < closestDist) {
+      closest = gaps[i];
+      closestDist = dist;
+    }
+  }
+
+  if (sessionDropIndicatorState?.listEl === listEl) {
+    const currentDist = Math.abs(clientY - sessionDropIndicatorState.centerY);
+    if (closest.insertAt !== sessionDropIndicatorState.insertAt
+      && closestDist + DROP_HYSTERESIS_PX >= currentDist) {
+      return sessionDropIndicatorState;
+    }
+  }
+
+  return closest;
+}
+
+function updateSessionDropIndicator(listEl, clientY) {
+  const gaps = buildSessionDropGaps(listEl);
+  if (gaps.length === 0) return;
+  const chosen = pickSessionDropGap(gaps, clientY, listEl);
+  sessionDropIndicatorState = {
+    listEl,
+    insertAt: chosen.insertAt,
+    top: chosen.top,
+    centerY: chosen.centerY,
+  };
+  showSessionDropIndicator(listEl, chosen.top, chosen.insertAt);
+}
+
+function getSessionInsertIndexFromDrop(listEl) {
+  const indicator = listEl.querySelector('.session-drop-indicator');
+  if (indicator?.dataset.insertAt != null) {
+    return Number(indicator.dataset.insertAt);
+  }
+  return state.plannedSessions.length;
+}
+
+function setupPlannedSessionsReorder() {
+  if (!plannedSessionsList || plannedSessionsList.dataset.reorderSetup) return;
+  plannedSessionsList.dataset.reorderSetup = 'true';
+
+  plannedSessionsList.addEventListener('dragover', (e) => {
+    if (!isSessionReorderDragActive()) return;
+    e.preventDefault();
+    updateSessionDropIndicator(plannedSessionsList, e.clientY);
+  });
+
+  plannedSessionsList.addEventListener('dragleave', (e) => {
+    if (!plannedSessionsList.contains(e.relatedTarget)) {
+      document.querySelectorAll('.session-drop-indicator').forEach((el) => el.remove());
+      sessionDropIndicatorState = null;
+    }
+  });
+
+  plannedSessionsList.addEventListener('drop', (e) => {
+    if (!isSessionReorderDragActive()) return;
+    e.preventDefault();
+    const sessionId = decodeSessionReorderPayload(e.dataTransfer.getData('text/plain'));
+    if (!sessionId) {
+      clearDropIndicators();
+      sessionReorderDragId = null;
+      return;
+    }
+    const insertAt = getSessionInsertIndexFromDrop(plannedSessionsList);
+    clearDropIndicators();
+    sessionReorderDragId = null;
+    movePlannedSession(sessionId, insertAt);
+  });
+}
+
 function pickDropGap(gaps, clientY, listEl) {
   let closest = gaps[0];
   let closestDist = Math.abs(clientY - closest.centerY);
@@ -3343,6 +3529,10 @@ function setupListDropZone(listEl, listId) {
   });
   listEl.addEventListener('drop', (e) => {
     e.preventDefault();
+    if (decodeSessionReorderPayload(e.dataTransfer.getData('text/plain'))) {
+      clearDropIndicators();
+      return;
+    }
     const payload = decodeDragPayload(e.dataTransfer.getData('text/plain'));
     if (!payload) {
       clearDropIndicators();
@@ -3373,6 +3563,7 @@ function setupSessionHeaderDropZone(sessionBlock, listId, sessionId, isExpanded)
   if (!header) return;
 
   header.addEventListener('dragover', (e) => {
+    if (isSessionReorderDragActive()) return;
     e.preventDefault();
     e.stopPropagation();
     header.classList.add('drag-over-session');
@@ -3397,6 +3588,7 @@ function setupSessionHeaderDropZone(sessionBlock, listId, sessionId, isExpanded)
     e.stopPropagation();
     header.classList.remove('drag-over-session');
     clearSessionExpandTimer();
+    if (decodeSessionReorderPayload(e.dataTransfer.getData('text/plain'))) return;
     const payload = decodeDragPayload(e.dataTransfer.getData('text/plain'));
     if (!payload) return;
     moveTasks(payload.items, listId, getTasksForList(listId).length);
@@ -3816,6 +4008,29 @@ function renderPlannedSessions() {
     });
 
     const header = block.querySelector('.planned-session-header');
+    if (session.id !== BRAINDUMP_SESSION_ID) {
+      header.setAttribute('draggable', 'true');
+      header.addEventListener('dragstart', (e) => {
+        if (e.target.closest('button, input, .planned-session-name-input')) {
+          e.preventDefault();
+          return;
+        }
+        sessionReorderDragId = session.id;
+        block.classList.add('dragging-session');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', encodeSessionReorderPayload(session.id));
+      });
+    }
+
+    block.addEventListener('dragend', () => {
+      block.classList.remove('dragging-session');
+      sessionReorderDragId = null;
+      clearDropIndicators();
+      document.querySelectorAll('.planned-session-header.drag-over-session').forEach((el) => {
+        el.classList.remove('drag-over-session');
+      });
+    });
+
     header.addEventListener('click', (e) => {
       if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn, .session-billable-btn, .session-send-to-queue-btn')) return;
       if (!isExpanded) expandSession(session.id);
@@ -3889,6 +4104,7 @@ function renderPlannedSessions() {
     plannedSessionsList.appendChild(block);
   });
 
+  setupPlannedSessionsReorder();
   restoreSessionAddFocus();
 }
 
@@ -3944,6 +4160,11 @@ function closeDataModal() {
 }
 
 function populateInvoiceSettingsForm() {
+  invoiceSettingsFormLogoDataUrl = state.invoiceSettings.logoDataUrl || '';
+  updateInvoiceSettingsAvatarPreview(invoiceSettingsFormLogoDataUrl);
+  if (invoiceSettingsNameInput) {
+    invoiceSettingsNameInput.value = state.invoiceSettings.name || '';
+  }
   if (invoiceSettingsBusinessNameInput) {
     invoiceSettingsBusinessNameInput.value = state.invoiceSettings.businessName || '';
   }
@@ -3955,11 +4176,100 @@ function populateInvoiceSettingsForm() {
   }
 }
 
+function updateInvoiceSettingsAvatarPreview(logoDataUrl) {
+  const hasLogo = !!logoDataUrl;
+  if (invoiceSettingsAvatarPreview) {
+    if (hasLogo) {
+      invoiceSettingsAvatarPreview.src = logoDataUrl;
+      invoiceSettingsAvatarPreview.classList.remove('hidden');
+    } else {
+      invoiceSettingsAvatarPreview.removeAttribute('src');
+      invoiceSettingsAvatarPreview.classList.add('hidden');
+    }
+  }
+  invoiceSettingsAvatarPlaceholder?.classList.toggle('hidden', hasLogo);
+  invoiceSettingsAvatarRemoveBtn?.classList.toggle('hidden', !hasLogo);
+}
+
+const INVOICE_LOGO_MAX_FILE_BYTES = 10 * 1024 * 1024;
+const INVOICE_LOGO_OUTPUT_SIZE = 1024;
+const INVOICE_LOGO_ACCEPTED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
+function isAcceptedInvoiceLogoFile(file) {
+  if (!file) return false;
+  if (INVOICE_LOGO_ACCEPTED_TYPES.has(file.type)) return true;
+  return /\.(png|jpe?g|webp)$/i.test(file.name || '');
+}
+
+async function loadInvoiceLogoSource(file) {
+  try {
+    return await createImageBitmap(file);
+  } catch {
+    throw new Error('Could not load the selected image.');
+  }
+}
+
+async function processInvoiceLogoFile(file) {
+  if (!isAcceptedInvoiceLogoFile(file)) {
+    throw new Error('Please choose a PNG, JPEG, or WebP image.');
+  }
+  if (file.size > INVOICE_LOGO_MAX_FILE_BYTES) {
+    throw new Error('That image is too large. Please choose a file under 10 MB.');
+  }
+
+  const source = await loadInvoiceLogoSource(file);
+  const canvas = document.createElement('canvas');
+  canvas.width = INVOICE_LOGO_OUTPUT_SIZE;
+  canvas.height = INVOICE_LOGO_OUTPUT_SIZE;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    source.close?.();
+    throw new Error('Could not process the selected image.');
+  }
+
+  const scale = Math.max(
+    INVOICE_LOGO_OUTPUT_SIZE / source.width,
+    INVOICE_LOGO_OUTPUT_SIZE / source.height,
+  );
+  const drawWidth = source.width * scale;
+  const drawHeight = source.height * scale;
+  const offsetX = (INVOICE_LOGO_OUTPUT_SIZE - drawWidth) / 2;
+  const offsetY = (INVOICE_LOGO_OUTPUT_SIZE - drawHeight) / 2;
+  context.drawImage(source, offsetX, offsetY, drawWidth, drawHeight);
+  source.close?.();
+
+  return canvas.toDataURL('image/png');
+}
+
+async function handleInvoiceSettingsAvatarChange() {
+  const file = invoiceSettingsAvatarInput?.files?.[0];
+  if (!file) return;
+
+  try {
+    invoiceSettingsFormLogoDataUrl = await processInvoiceLogoFile(file);
+    updateInvoiceSettingsAvatarPreview(invoiceSettingsFormLogoDataUrl);
+  } catch (err) {
+    window.alert(err?.message || 'Could not use that image.');
+  } finally {
+    if (invoiceSettingsAvatarInput) {
+      invoiceSettingsAvatarInput.value = '';
+    }
+  }
+}
+
+function handleInvoiceSettingsAvatarRemove() {
+  invoiceSettingsFormLogoDataUrl = '';
+  updateInvoiceSettingsAvatarPreview('');
+  if (invoiceSettingsAvatarInput) {
+    invoiceSettingsAvatarInput.value = '';
+  }
+}
+
 function openInvoiceSettingsModal() {
   hideSettingsMenu();
   populateInvoiceSettingsForm();
   invoiceSettingsModal.classList.remove('hidden');
-  invoiceSettingsBusinessNameInput?.focus();
+  invoiceSettingsNameInput?.focus();
 }
 
 function closeInvoiceSettingsModal() {
@@ -3968,6 +4278,8 @@ function closeInvoiceSettingsModal() {
 
 function saveInvoiceSettingsModal() {
   state.invoiceSettings = normalizeInvoiceSettings({
+    name: invoiceSettingsNameInput?.value || '',
+    logoDataUrl: invoiceSettingsFormLogoDataUrl,
     businessName: invoiceSettingsBusinessNameInput?.value || '',
     email: invoiceSettingsEmailInput?.value || '',
     address: invoiceSettingsAddressInput?.value || '',
@@ -4712,6 +5024,14 @@ const INVOICE_PDF_STYLES = `
     color: #666;
     font-size: 11px;
   }
+  .invoice-logo {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+    margin-bottom: 12px;
+  }
 `;
 
 const PDF_PAGE_BREAK_STYLES = `
@@ -4810,6 +5130,10 @@ function buildEarningsReportHtml(report) {
 
 function buildInvoiceFromBlock(invoiceSettings) {
   const parts = [];
+  if (invoiceSettings.logoDataUrl) {
+    parts.push(`<img class="invoice-logo" src="${invoiceSettings.logoDataUrl}" alt="" />`);
+  }
+  if (invoiceSettings.name) parts.push(escapeHtml(invoiceSettings.name));
   if (invoiceSettings.businessName) parts.push(escapeHtml(invoiceSettings.businessName));
   if (invoiceSettings.email) parts.push(escapeHtml(invoiceSettings.email));
   if (invoiceSettings.address) {
@@ -6128,6 +6452,9 @@ shortcutsCloseBtn.addEventListener('click', closeShortcutsModal);
 dataCloseBtn.addEventListener('click', closeDataModal);
 invoiceSettingsDoneBtn.addEventListener('click', saveInvoiceSettingsModal);
 invoiceSettingsCancelBtn.addEventListener('click', closeInvoiceSettingsModal);
+invoiceSettingsAvatarBtn?.addEventListener('click', () => invoiceSettingsAvatarInput?.click());
+invoiceSettingsAvatarInput?.addEventListener('change', handleInvoiceSettingsAvatarChange);
+invoiceSettingsAvatarRemoveBtn?.addEventListener('click', handleInvoiceSettingsAvatarRemove);
 invoiceSettingsModal.addEventListener('click', (e) => {
   if (e.target === invoiceSettingsModal) closeInvoiceSettingsModal();
 });

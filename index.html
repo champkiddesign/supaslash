@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'" />
   <title>SupaSlash</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -15,7 +15,7 @@
     <header class="edit-header">
       <div class="edit-header-row">
         <div class="app-logo" aria-hidden="true">
-          <img src="assets/supaslash-logo.png" alt="" class="app-logo-image" width="816" height="816" />
+          <img src="assets/supaslash-logo.png" alt="" class="app-logo-image" width="447" height="125" />
         </div>
         <div class="edit-header-actions">
           <button id="plan-session-btn" class="plan-session-btn plan-session-btn--header" type="button" data-tutorial="create-session">+ Create New Session</button>
@@ -211,6 +211,17 @@
         <h3 id="invoice-settings-title" class="clear-session-modal-title">Personal Profile</h3>
         <p class="invoice-settings-body">For personalization and invoice details.</p>
         <div class="invoice-settings-form">
+          <div class="invoice-settings-avatar">
+            <button id="invoice-settings-avatar-btn" class="invoice-settings-avatar-btn" type="button" aria-label="Upload profile image">
+              <img id="invoice-settings-avatar-preview" class="invoice-settings-avatar-preview hidden" alt="" />
+              <span id="invoice-settings-avatar-placeholder" class="invoice-settings-avatar-placeholder" aria-hidden="true">+</span>
+            </button>
+            <input id="invoice-settings-avatar-input" class="invoice-settings-avatar-input" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+            <button id="invoice-settings-avatar-remove-btn" class="invoice-settings-avatar-remove hidden" type="button">Remove</button>
+            <p class="invoice-settings-avatar-hint">Square image recommended (1024×1024)</p>
+          </div>
+          <label class="billable-field-label" for="invoice-settings-name">Name</label>
+          <input id="invoice-settings-name" class="template-editor-input invoice-settings-input" type="text" autocomplete="name" />
           <label class="billable-field-label" for="invoice-settings-business-name">Business name</label>
           <input id="invoice-settings-business-name" class="template-editor-input invoice-settings-input" type="text" autocomplete="organization" />
           <label class="billable-field-label" for="invoice-settings-email">Email</label>
