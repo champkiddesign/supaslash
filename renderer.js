@@ -1530,6 +1530,9 @@ function getQueueRoundingDisplaySettings() {
     if (settings.enabled && settings.rate && settings.roundMinutes) {
       return settings;
     }
+    if (state.mode === 'focus') {
+      return null;
+    }
   }
 
   for (const task of state.sessionTasks) {
@@ -1552,7 +1555,7 @@ function getCurrentTaskRoundScope() {
 }
 
 function shouldShowEarningsRoundingDisplay() {
-  if (!canShowSessionEarnings()) return false;
+  if (!canShowEarningsView()) return false;
   return !!getQueueRoundingDisplaySettings();
 }
 
@@ -1577,11 +1580,18 @@ function syncEarningsSplitBarWidth(displayText) {
   scheduleFocusDimensionsUpdate();
 }
 
-function canShowSessionEarnings() {
-  return state.sessionTasks.some((task) => {
-    const { enabled, rate } = getPlannedSessionRateSettings(task.sourceSessionId);
-    return enabled && rate > 0;
-  });
+function isTaskBillable(task) {
+  if (!task) return false;
+  const { enabled, rate } = getPlannedSessionRateSettings(task.sourceSessionId);
+  return !!(enabled && rate > 0);
+}
+
+function isCurrentTaskBillable() {
+  return isTaskBillable(getCurrentTask());
+}
+
+function canShowEarningsView() {
+  return isCurrentTaskBillable();
 }
 
 function getBraindumpSession() {
@@ -1823,7 +1833,7 @@ function closeBillableModal(revert = false) {
   renderEditView();
 
   if (state.mode === 'focus') {
-    if (state.timerView === 'earnings' && !canShowSessionEarnings()) {
+    if (state.timerView === 'earnings' && !canShowEarningsView()) {
       state.timerView = 'session';
     }
     updateTimerDisplay();
@@ -2927,7 +2937,7 @@ function isTimerDisplayExpired() {
 }
 
 function updateTimerDisplay() {
-  if (state.timerView === 'earnings' && !canShowSessionEarnings()) {
+  if (state.timerView === 'earnings' && !canShowEarningsView()) {
     state.timerView = 'session';
   }
 
@@ -5463,7 +5473,7 @@ function applySavedData(saved) {
   } else {
     state.timerView = 'task';
   }
-  if (state.timerView === 'earnings' && !canShowSessionEarnings()) {
+  if (state.timerView === 'earnings' && !canShowEarningsView()) {
     state.timerView = 'task';
   }
   state.limitExpired = saved.limitExpiredKind === 'task' ? !!saved.limitExpired : false;
@@ -5896,7 +5906,7 @@ function toggleTimerView() {
   if (state.timerView === 'task') {
     state.timerView = 'session';
   } else if (state.timerView === 'session') {
-    state.timerView = canShowSessionEarnings() ? 'earnings' : 'task';
+    state.timerView = canShowEarningsView() ? 'earnings' : 'task';
   } else {
     state.timerView = 'task';
   }

@@ -203,8 +203,8 @@ body.mode-edit #edit-view.view {
 
 .app-logo-image {
   display: block;
-  width: calc(119px * var(--edit-scale));
-  height: auto;
+  width: calc(38px * var(--edit-scale));
+  height: calc(38px * var(--edit-scale));
 }
 
 .settings-btn {
