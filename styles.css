@@ -621,9 +621,8 @@ body.mode-edit #edit-view.view {
   flex-shrink: 0;
 }
 
-.history-modal-panel .history-report-session-filter {
-  flex-shrink: 0;
-  margin-top: calc(12px * var(--edit-scale));
+#history-date-toolbar .history-report-session-filter {
+  margin-top: 0;
 }
 
 .history-report-presets {
@@ -3239,6 +3238,15 @@ body.mode-edit #edit-view.view {
   transition: opacity 0.35s ease, visibility 0s;
 }
 
+/* Block hover controls while Overtime/Extend must be resolved */
+.timer-bar.timer-bar--expanded .timer-actions,
+.timer-bar.timer-bar--expanded:hover .timer-actions,
+.timer-bar.timer-bar--expanded:has(.timer-actions :focus-visible) .timer-actions {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .timer-actions button {
   position: relative;
   z-index: 1;
@@ -3622,6 +3630,12 @@ body.mode-focus.timer-bar-size-fullscreen .timer-actions::after {
 body.mode-focus.timer-bar-size-fullscreen .timer-bar:hover .timer-actions,
 body.mode-focus.timer-bar-size-fullscreen .timer-bar:has(.timer-actions :focus-visible) .timer-actions {
   opacity: 1;
+}
+
+body.mode-focus.timer-bar-size-fullscreen .timer-bar.timer-bar--expanded .timer-actions {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 body.mode-focus.timer-bar-size-fullscreen .timer-actions .icon-btn,

@@ -1669,14 +1669,40 @@ function createPlannedSession() {
   renderEditView();
 }
 
+function updateSourceSessionNameForSession(sessionId, name) {
+  state.plannedSessions.forEach((session) => {
+    session.tasks.forEach((task) => {
+      if (task.sourceSessionId === sessionId) task.sourceSessionName = name;
+    });
+  });
+  state.sessionTasks.forEach((task) => {
+    if (task.sourceSessionId === sessionId) task.sourceSessionName = name;
+  });
+  state.sessionHistory.forEach((entry) => {
+    if (getHistoryEntrySourceSessionId(entry) !== sessionId) return;
+    entry.name = name;
+    entry.tasks.forEach((task) => {
+      if (task.sourceSessionId === sessionId) task.sourceSessionName = name;
+    });
+  });
+  if (isSessionInProgress() && state.sessionTasks.some((task) => task.sourceSessionId === sessionId)) {
+    state.activeSessionName = name;
+  }
+}
+
 function savePlannedSessionName(sessionId, name) {
   const session = getPlannedSession(sessionId);
   if (!session || sessionId === BRAINDUMP_SESSION_ID) return;
   const trimmed = name.trim();
-  if (trimmed) session.name = trimmed;
+  if (!trimmed) return;
+  session.name = trimmed;
+  updateSourceSessionNameForSession(sessionId, trimmed);
   state.renamingSessionId = null;
   persist();
   renderEditView();
+  if (!historyModal.classList.contains('hidden')) {
+    refreshHistoryModalPanels();
+  }
 }
 
 function deletePlannedSession(sessionId) {
@@ -2111,6 +2137,12 @@ function isSessionInProgress() {
   return state.sessionTasks.some((task) => !task.completed && task.elapsedMs > 0);
 }
 
+function isSessionReadyToComplete() {
+  return getSessionIncompleteIndices().length === 0
+    && getCompletedCount() > 0
+    && isSessionInProgress();
+}
+
 function resetSessionProgressState() {
   state.totalSessionMs = 0;
   state.elapsedMs = 0;
@@ -2329,31 +2361,87 @@ function getHistoryEntryName(entry) {
   return (entry.name || 'Session').trim() || 'Session';
 }
 
-function getReportSessionNameOptions() {
-  const names = new Set();
-
-  for (const entry of state.sessionHistory) {
-    names.add(getHistoryEntryName(entry));
-  }
-
-  for (const session of state.plannedSessions) {
-    const name = (session.name || '').trim();
-    if (name) names.add(name);
-  }
-
-  return Array.from(names).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+function getHistoryEntrySourceSessionId(entry) {
+  return entry.sourceSessionId || entry.tasks?.[0]?.sourceSessionId || BRAINDUMP_SESSION_ID;
 }
 
-function filterSessionHistoryByName(history, sessionName) {
-  const trimmed = (sessionName || '').trim();
-  if (!trimmed) return history;
+function getHistoryEntryDisplayName(entry) {
+  const sessionId = getHistoryEntrySourceSessionId(entry);
+  const planned = getPlannedSession(sessionId);
+  const plannedName = (planned?.name || '').trim();
+  if (plannedName) return plannedName;
+  return getHistoryEntryName(entry);
+}
+
+function resolveArchiveSourceSessionId(tasks) {
+  const counts = new Map();
+  tasks.forEach((task) => {
+    const id = task.sourceSessionId || BRAINDUMP_SESSION_ID;
+    counts.set(id, (counts.get(id) || 0) + 1);
+  });
+
+  let bestId = null;
+  let bestCount = 0;
+  counts.forEach((count, id) => {
+    if (id !== BRAINDUMP_SESSION_ID && count > bestCount) {
+      bestCount = count;
+      bestId = id;
+    }
+  });
+
+  if (bestId) return bestId;
+  return tasks[0]?.sourceSessionId || BRAINDUMP_SESSION_ID;
+}
+
+function getReportSessionOptions() {
+  const byId = new Map();
+
+  state.sessionHistory.forEach((entry) => {
+    const id = getHistoryEntrySourceSessionId(entry);
+    if (!byId.has(id)) {
+      byId.set(id, { id, label: getHistoryEntryDisplayName(entry) });
+    }
+  });
+
+  state.plannedSessions.forEach((session) => {
+    const id = session.id;
+    const label = (session.name || '').trim() || (id === BRAINDUMP_SESSION_ID ? 'Braindump' : 'Session');
+    byId.set(id, { id, label });
+  });
+
+  return Array.from(byId.values()).sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+}
+
+function resolveHistoryReportSessionFilterId(filterValue) {
+  const trimmed = (filterValue || '').trim();
+  if (!trimmed) return '';
+
+  const options = getReportSessionOptions();
+  if (options.some((option) => option.id === trimmed)) return trimmed;
+
   const normalized = trimmed.toLowerCase();
-  return history.filter((entry) => getHistoryEntryName(entry).toLowerCase() === normalized);
+  const byName = options.filter((option) => option.label.toLowerCase() === normalized);
+  if (byName.length === 1) return byName[0].id;
+
+  const historyMatch = state.sessionHistory.find((entry) => getHistoryEntryName(entry).toLowerCase() === normalized);
+  if (historyMatch) return getHistoryEntrySourceSessionId(historyMatch);
+
+  const plannedMatch = state.plannedSessions.find((session) => (session.name || '').trim().toLowerCase() === normalized);
+  if (plannedMatch) return plannedMatch.id;
+
+  return '';
+}
+
+function filterSessionHistoryBySessionId(history, sessionId) {
+  const trimmed = (sessionId || '').trim();
+  if (!trimmed) return history;
+  return history.filter((entry) => getHistoryEntrySourceSessionId(entry) === trimmed);
 }
 
 function populateHistoryReportSessionFilter() {
-  const options = getReportSessionNameOptions();
-  if (historyReportSessionFilter && !options.some((name) => name === historyReportSessionFilter)) {
+  historyReportSessionFilter = resolveHistoryReportSessionFilterId(historyReportSessionFilter);
+  const options = getReportSessionOptions();
+  if (historyReportSessionFilter && !options.some((option) => option.id === historyReportSessionFilter)) {
     historyReportSessionFilter = '';
   }
   renderHistoryReportSessionMenuOptions();
@@ -2363,9 +2451,9 @@ function populateHistoryReportSessionFilter() {
 function renderHistoryReportSessionMenuOptions() {
   if (!historyReportSessionMenu) return;
 
-  const options = getReportSessionNameOptions();
+  const options = getReportSessionOptions();
   const selected = historyReportSessionFilter;
-  const items = [{ value: '', label: 'All sessions' }, ...options.map((name) => ({ value: name, label: name }))];
+  const items = [{ value: '', label: 'All sessions' }, ...options.map((option) => ({ value: option.id, label: option.label }))];
 
   historyReportSessionMenu.innerHTML = items.map((item) => {
     const isSelected = selected === item.value;
@@ -2386,7 +2474,12 @@ function renderHistoryReportSessionMenuOptions() {
 
 function updateHistoryReportSessionTriggerLabel() {
   if (!historyReportSessionValue) return;
-  historyReportSessionValue.textContent = historyReportSessionFilter || 'All sessions';
+  if (!historyReportSessionFilter) {
+    historyReportSessionValue.textContent = 'All sessions';
+    return;
+  }
+  const option = getReportSessionOptions().find((item) => item.id === historyReportSessionFilter);
+  historyReportSessionValue.textContent = option?.label || 'All sessions';
 }
 
 function positionHistoryReportSessionMenu() {
@@ -2443,7 +2536,7 @@ function handleHistoryReportSessionOptionClick(event) {
   historyReportSessionFilter = option.getAttribute('data-session-filter') ?? '';
   closeHistoryReportSessionMenu();
   updateHistoryReportSessionTriggerLabel();
-  renderHistoryReportPanel();
+  refreshHistoryModalPanels();
 }
 
 function sanitizeFileNamePart(value) {
@@ -2511,7 +2604,7 @@ function buildEarningsReportData(entries, range) {
   const sessions = entries.map((entry) => ({
     id: entry.id,
     date: entry.endedAt,
-    name: entry.name || 'Session',
+    name: getHistoryEntryDisplayName(entry),
     durationMs: entry.billable
       ? getHistoryEntryBillableTotalMs(entry)
       : getHistoryEntryTotalMs(entry),
@@ -2605,18 +2698,23 @@ function getCurrentReportRange() {
 function getFilteredSessionHistoryEntries() {
   const range = getCurrentReportRange();
   if (!range) return [];
-  return filterSessionHistoryByRange(state.sessionHistory, range.startMs, range.endMs);
+  let entries = filterSessionHistoryByRange(state.sessionHistory, range.startMs, range.endMs);
+  entries = filterSessionHistoryBySessionId(entries, historyReportSessionFilter?.trim() || '');
+  return entries;
 }
 
 function getFilteredReportEntries() {
   const range = getCurrentReportRange();
   if (!range) return { range: null, entries: [], report: null };
 
-  const sessionName = historyReportSessionFilter?.trim() || '';
+  const sessionId = historyReportSessionFilter?.trim() || '';
   let entries = filterSessionHistoryByRange(state.sessionHistory, range.startMs, range.endMs);
-  entries = filterSessionHistoryByName(entries, sessionName);
+  entries = filterSessionHistoryBySessionId(entries, sessionId);
 
-  const reportRange = sessionName ? { ...range, sessionName } : range;
+  const sessionLabel = sessionId
+    ? getReportSessionOptions().find((option) => option.id === sessionId)?.label || ''
+    : '';
+  const reportRange = sessionLabel ? { ...range, sessionName: sessionLabel } : range;
 
   return {
     range: reportRange,
@@ -2651,9 +2749,11 @@ function recalculateHistoryEntryBillable(entry) {
 function normalizeSessionHistoryEntry(entry) {
   const tasks = (entry.tasks || []).map(normalizeSessionHistoryTask);
   const billable = entry.billable ?? tasks.some((task) => task.hourlyRateEnabled && task.hourlyRate);
+  const sourceSessionId = entry.sourceSessionId || tasks[0]?.sourceSessionId || BRAINDUMP_SESSION_ID;
   const normalized = {
     id: entry.id || crypto.randomUUID(),
     runId: entry.runId || crypto.randomUUID(),
+    sourceSessionId,
     name: entry.name || 'Braindump',
     startedAt: entry.startedAt || entry.endedAt || Date.now(),
     endedAt: entry.endedAt || Date.now(),
@@ -2681,10 +2781,7 @@ function updateHistoryTaskDuration(entryId, taskIndex, durationMs) {
   task.durationMs = durationMs;
   recalculateHistoryEntryBillable(entry);
   persist();
-  renderHistoryModal();
-  if (historyModalTab === 'report') {
-    renderHistoryReportPanel();
-  }
+  refreshHistoryModalPanels();
 }
 
 function applyDateToTimestamp(timestamp, dateStr) {
@@ -2709,10 +2806,7 @@ function updateHistoryEntryDate(entryId, dateStr) {
 
   persist();
   ensureHistoryRangeIncludesEntry(entry);
-  renderHistoryModal();
-  if (historyModalTab === 'report') {
-    renderHistoryReportPanel();
-  }
+  refreshHistoryModalPanels();
 }
 
 function historyTaskToPlannedTask(task) {
@@ -2759,9 +2853,11 @@ function archiveCurrentSession(status) {
     ? tasks.reduce((sum, task) => sum + (task.earnings || 0), 0)
     : null;
 
+  const sourceSessionId = resolveArchiveSourceSessionId(tasks);
   const entry = {
     id: crypto.randomUUID(),
     runId,
+    sourceSessionId,
     name: state.activeSessionName || state.sessionTasks[0]?.sourceSessionName || 'Braindump',
     startedAt: state.activeSessionStartedAt || Date.now(),
     endedAt: Date.now(),
@@ -4387,14 +4483,11 @@ function setHistoryModalTab(tab) {
   historyExportPdfBtn?.classList.toggle('hidden', historyModalTab !== 'report');
   historyExportInvoiceBtn?.classList.toggle('hidden', historyModalTab !== 'report');
 
-  if (historyModalTab === 'report') {
-    renderHistoryReportPanel();
-  } else {
-    renderHistoryModal();
-  }
+  refreshHistoryModalPanels();
 }
 
 function refreshHistoryModalPanels() {
+  populateHistoryReportSessionFilter();
   renderHistoryModal();
   if (historyModalTab === 'report') {
     renderHistoryReportPanel();
@@ -4899,7 +4992,7 @@ function renderHistoryEntry(entry) {
       <button type="button" class="history-entry-header" aria-expanded="${isExpanded}">
         <div class="history-entry-main">
           <div class="history-entry-top">
-            <span class="history-entry-name">${escapeHtml(entry.name)}</span>
+            <span class="history-entry-name">${escapeHtml(getHistoryEntryDisplayName(entry))}</span>
             <span class="history-status-badge ${statusClass}">${statusLabel}</span>
             ${entry.billable ? '<span class="history-status-badge history-status-badge--billable">Billable</span>' : ''}
           </div>
@@ -4941,14 +5034,15 @@ function renderHistoryEntry(entry) {
 function renderHistoryModal() {
   if (!historyList) return;
 
-  if (state.sessionHistory.length === 0) {
-    historyList.innerHTML = '<p class="history-empty">No sessions yet. Finish or abandon a focus run to see it here.</p>';
-    return;
-  }
-
   const entries = getFilteredSessionHistoryEntries();
   if (entries.length === 0) {
-    historyList.innerHTML = '<p class="history-empty">No sessions in this date range.</p>';
+    if (state.sessionHistory.length === 0) {
+      historyList.innerHTML = '<p class="history-empty">No sessions yet. Finish or abandon a focus run to see it here.</p>';
+    } else if (historyReportSessionFilter) {
+      historyList.innerHTML = '<p class="history-empty">No sessions match this session filter.</p>';
+    } else {
+      historyList.innerHTML = '<p class="history-empty">No sessions in this date range.</p>';
+    }
     return;
   }
 
@@ -5022,7 +5116,7 @@ function openDeleteHistoryModal(entryId) {
   if (!entry) return;
 
   pendingDeleteHistoryEntryId = entryId;
-  const label = entry.name || 'this session';
+  const label = getHistoryEntryDisplayName(entry) || 'this session';
   deleteHistoryMessage.textContent = `Delete ${label} from session history? This cannot be undone.`;
   deleteHistoryModal.classList.remove('hidden');
 }
@@ -5045,10 +5139,7 @@ function performDeleteHistoryEntry(entryId) {
   state.sessionHistory = state.sessionHistory.filter((item) => item.id !== entryId);
   expandedHistoryEntryIds.delete(entryId);
   persist();
-  renderHistoryModal();
-  if (historyModalTab === 'report') {
-    renderHistoryReportPanel();
-  }
+  refreshHistoryModalPanels();
 }
 
 function deleteHistoryEntry(entryId) {
@@ -5452,8 +5543,14 @@ function renderEditView() {
   hideTaskContextMenu();
   renderPlannedSessions();
   renderTaskList(sessionList, 'session');
-  startBtn.disabled = getSessionIncompleteIndices().length === 0;
-  startBtn.textContent = isSessionInProgress() ? 'Resume Session' : 'Start Session';
+  if (isSessionReadyToComplete()) {
+    startBtn.disabled = false;
+    startBtn.textContent = 'Complete Session';
+  } else {
+    const incompleteCount = getSessionIncompleteIndices().length;
+    startBtn.disabled = incompleteCount === 0;
+    startBtn.textContent = isSessionInProgress() ? 'Resume Session' : 'Start Session';
+  }
   clearSessionBtn.disabled = state.sessionTasks.length === 0;
   moveBackToListBtn.disabled = state.sessionTasks.length === 0;
   clearSessionCompletedBtn.disabled = getCompletedCount() === 0;
@@ -5970,6 +6067,11 @@ function resumeSession() {
 }
 
 function startSlashing() {
+  if (isSessionReadyToComplete()) {
+    showDoneView({ playSound: true });
+    return;
+  }
+
   if (getIncompleteTasks().length === 0) return;
 
   if (isSessionInProgress()) {
