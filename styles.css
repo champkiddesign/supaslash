@@ -2487,6 +2487,51 @@ body.mode-edit #edit-view.view {
   border-color: var(--accent);
 }
 
+.complete-task-name {
+  margin: 0 0 calc(12px * var(--edit-scale));
+  font-family: var(--mono);
+  font-size: var(--font-sm);
+  color: var(--text);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.complete-task-duration-label {
+  display: block;
+  margin: 0 0 calc(6px * var(--edit-scale));
+  font-family: var(--mono);
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.complete-task-duration-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: calc(10px * var(--edit-scale)) calc(12px * var(--edit-scale));
+  margin-bottom: calc(6px * var(--edit-scale));
+  border: 1px solid var(--border);
+  border-radius: calc(6px * var(--edit-scale));
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--font-sm);
+  -webkit-app-region: no-drag;
+}
+
+.complete-task-duration-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.complete-task-duration-hint {
+  margin: 0 0 calc(16px * var(--edit-scale));
+  font-family: var(--mono);
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+
 .save-template-error {
   margin: 0 0 calc(8px * var(--edit-scale));
   font-family: var(--mono);

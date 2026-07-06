@@ -160,6 +160,7 @@ const historyReportTableFoot = document.getElementById('history-report-table-foo
 const historyExportPdfBtn = document.getElementById('history-export-pdf-btn');
 const historyExportInvoiceBtn = document.getElementById('history-export-invoice-btn');
 const taskContextMenu = document.getElementById('task-context-menu');
+const taskContextCompleteBtn = document.getElementById('task-context-complete');
 const taskContextDuplicateBtn = document.getElementById('task-context-duplicate');
 const taskContextDeleteBtn = document.getElementById('task-context-delete');
 const fullscreenTaskToggleBtn = document.getElementById('fullscreen-task-toggle');
@@ -175,6 +176,11 @@ const saveTemplateCancelBtn = document.getElementById('save-template-cancel-btn'
 const templatesModal = document.getElementById('templates-modal');
 const templatesModalBody = document.getElementById('templates-modal-body');
 const templatesCloseBtn = document.getElementById('templates-close-btn');
+const completeTaskModal = document.getElementById('complete-task-modal');
+const completeTaskNameEl = document.getElementById('complete-task-name');
+const completeTaskDurationInput = document.getElementById('complete-task-duration-input');
+const completeTaskConfirmBtn = document.getElementById('complete-task-confirm-btn');
+const completeTaskCancelBtn = document.getElementById('complete-task-cancel-btn');
 
 let taskContextMenuTarget = null;
 let sessionContextMenuTarget = null;
@@ -183,6 +189,7 @@ let pendingDeleteHistoryEntryId = null;
 let pendingBillableSessionId = null;
 let billableSnapshot = null;
 let pendingSaveTemplate = null;
+let pendingCompleteTask = null;
 let templateAutocompleteState = null;
 let templateEditorState = null;
 let focusDimensionsRaf = null;
@@ -1025,6 +1032,9 @@ function normalizeSessionTask(task) {
   }
   if (task.billableDurationMs != null) {
     normalized.billableDurationMs = task.billableDurationMs;
+  }
+  if (task.historyRecorded) {
+    normalized.historyRecorded = true;
   }
   return normalized;
 }
@@ -2241,46 +2251,236 @@ function getArchiveTotalMs() {
   saveCurrentTaskProgress();
   let total = state.totalSessionMs;
   state.sessionTasks.forEach((task) => {
+    if (task.historyRecorded && task.durationMs) {
+      total -= task.durationMs;
+    }
     if (!task.completed && task.elapsedMs > 0) {
       total += task.elapsedMs;
     }
   });
-  return total;
+  return Math.max(0, total);
+}
+
+function buildHistoryTaskEntry(task, durationMs) {
+  const sessionId = task.sourceSessionId || BRAINDUMP_SESSION_ID;
+  const { enabled, rate, roundMinutes, roundScope } = getPlannedSessionRateSettings(sessionId);
+  const entry = {
+    text: task.text,
+    status: 'completed',
+    durationMs: durationMs ?? null,
+    limitMs: task.limitMs ?? null,
+    sourceSessionId: sessionId,
+  };
+  if (task.sourceSessionName) {
+    entry.sourceSessionName = task.sourceSessionName;
+  }
+  if (enabled && rate) {
+    entry.hourlyRateEnabled = true;
+    entry.hourlyRate = rate;
+    entry.billableRoundMinutes = roundMinutes;
+    entry.billableRoundScope = roundScope;
+    if (roundScope === 'task' && durationMs) {
+      entry.billableDurationMs = task.billableDurationMs
+        ?? roundUpBillableMs(durationMs, roundMinutes);
+      entry.earnings = calculateBillableEarningsFromMs(entry.billableDurationMs, rate);
+    } else {
+      entry.earnings = calculateBillableEarnings(durationMs, rate, roundMinutes);
+    }
+  }
+  return entry;
+}
+
+function recordDashboardTaskToHistory(taskData) {
+  const {
+    text,
+    limitMs,
+    sourceSessionId,
+    sourceSessionName,
+    durationMs,
+    billableDurationMs,
+  } = taskData;
+  const sessionId = sourceSessionId || BRAINDUMP_SESSION_ID;
+  const { enabled, rate } = getPlannedSessionRateSettings(sessionId);
+  if (!enabled || !rate) return null;
+
+  const historyTask = buildHistoryTaskEntry(
+    {
+      text,
+      limitMs,
+      sourceSessionId: sessionId,
+      sourceSessionName,
+      billableDurationMs,
+    },
+    durationMs,
+  );
+
+  const session = getPlannedSession(sessionId);
+  const entry = normalizeSessionHistoryEntry({
+    id: crypto.randomUUID(),
+    runId: crypto.randomUUID(),
+    sourceSessionId: sessionId,
+    name: session?.name || sourceSessionName || 'Braindump',
+    startedAt: Date.now(),
+    endedAt: Date.now(),
+    status: 'completed',
+    totalMs: durationMs || 0,
+    completedCount: 1,
+    totalCount: 1,
+    billable: true,
+    tasks: [historyTask],
+  });
+
+  state.sessionHistory.unshift(entry);
+  if (state.sessionHistory.length > SESSION_HISTORY_MAX) {
+    state.sessionHistory.length = SESSION_HISTORY_MAX;
+  }
+  return entry;
+}
+
+function completeTaskFromDashboard(listId, taskIndex, durationMs) {
+  if (listId === 'session') {
+    const task = state.sessionTasks[taskIndex];
+    if (!task || task.completed) return;
+
+    task.completed = true;
+    task.durationMs = durationMs;
+    task.elapsedMs = 0;
+    task.taskOvertimeMode = false;
+    task.skipped = false;
+
+    const { enabled, rate, roundMinutes, roundScope } = getPlannedSessionRateSettings(task.sourceSessionId);
+    if (enabled && rate && roundScope === 'task' && roundMinutes && durationMs) {
+      task.billableDurationMs = roundUpBillableMs(durationMs, roundMinutes);
+    }
+
+    if (isSessionInProgress()) {
+      if (durationMs) {
+        state.totalSessionMs += durationMs;
+      }
+      if (taskIndex === state.focusTaskIndex) {
+        state.focusTaskIndex = getNextFocusTaskIndex();
+      }
+    }
+
+    if (enabled && rate) {
+      recordDashboardTaskToHistory({
+        text: task.text,
+        limitMs: task.limitMs,
+        sourceSessionId: task.sourceSessionId,
+        sourceSessionName: task.sourceSessionName,
+        durationMs,
+        billableDurationMs: task.billableDurationMs,
+      });
+      task.historyRecorded = true;
+    }
+
+    playCompleteSound();
+  } else if (isPlannedList(listId)) {
+    const sessionId = getPlannedSessionIdFromListId(listId);
+    const session = getPlannedSession(sessionId);
+    if (!session) return;
+
+    const task = session.tasks[taskIndex];
+    if (!task) return;
+
+    const taskData = {
+      text: task.text,
+      limitMs: task.limitMs,
+      sourceSessionId: sessionId,
+      sourceSessionName: session.name,
+      durationMs,
+      billableDurationMs: null,
+    };
+
+    const { enabled, rate, roundMinutes, roundScope } = getPlannedSessionRateSettings(sessionId);
+    if (enabled && rate && roundScope === 'task' && roundMinutes && durationMs) {
+      taskData.billableDurationMs = roundUpBillableMs(durationMs, roundMinutes);
+    }
+
+    state.selectedTasks.delete(task);
+    session.tasks.splice(taskIndex, 1);
+
+    if (enabled && rate) {
+      recordDashboardTaskToHistory(taskData);
+    }
+
+    playCompleteSound();
+  } else {
+    return;
+  }
+
+  persist();
+  renderEditView();
+  refreshDrawerIfOpen();
+}
+
+function openCompleteTaskModal(listId, taskIndex) {
+  const tasks = getTasksForList(listId);
+  const task = tasks[taskIndex];
+  if (!task) return;
+  if (listId === 'session' && task.completed) return;
+
+  pendingCompleteTask = { listId, taskIndex };
+  completeTaskNameEl.textContent = task.text;
+  completeTaskDurationInput.value = (listId === 'session' && task.elapsedMs > 0)
+    ? formatLimitField(task.elapsedMs)
+    : '';
+  completeTaskModal.classList.remove('hidden');
+  requestAnimationFrame(() => {
+    completeTaskDurationInput.focus();
+    completeTaskDurationInput.select();
+  });
+}
+
+function closeCompleteTaskModal() {
+  completeTaskModal.classList.add('hidden');
+  pendingCompleteTask = null;
+  completeTaskDurationInput.value = '';
+}
+
+function confirmCompleteTaskModal() {
+  if (!pendingCompleteTask) return;
+  const { listId, taskIndex } = pendingCompleteTask;
+  const durationMs = parseManualLimit(completeTaskDurationInput.value);
+  closeCompleteTaskModal();
+  completeTaskFromDashboard(listId, taskIndex, durationMs);
 }
 
 function buildHistoryTasks() {
   saveCurrentTaskProgress();
-  return state.sessionTasks.map((task) => {
-    const sessionId = task.sourceSessionId || BRAINDUMP_SESSION_ID;
-    const { enabled, rate, roundMinutes, roundScope } = getPlannedSessionRateSettings(sessionId);
-    const durationMs = task.completed
-      ? (task.durationMs ?? null)
-      : (task.elapsedMs > 0 ? task.elapsedMs : null);
-    const entry = {
-      text: task.text,
-      status: getTaskArchiveStatus(task),
-      durationMs,
-      limitMs: task.limitMs ?? null,
-      sourceSessionId: sessionId,
-    };
-    if (task.sourceSessionName) {
-      entry.sourceSessionName = task.sourceSessionName;
-    }
-    if (enabled && rate) {
-      entry.hourlyRateEnabled = true;
-      entry.hourlyRate = rate;
-      entry.billableRoundMinutes = roundMinutes;
-      entry.billableRoundScope = roundScope;
-      if (roundScope === 'task' && durationMs) {
-        entry.billableDurationMs = task.billableDurationMs
-          ?? roundUpBillableMs(durationMs, roundMinutes);
-        entry.earnings = calculateBillableEarningsFromMs(entry.billableDurationMs, rate);
-      } else {
-        entry.earnings = calculateBillableEarnings(durationMs, rate, roundMinutes);
+  return state.sessionTasks
+    .filter((task) => !task.historyRecorded)
+    .map((task) => {
+      const sessionId = task.sourceSessionId || BRAINDUMP_SESSION_ID;
+      const { enabled, rate, roundMinutes, roundScope } = getPlannedSessionRateSettings(sessionId);
+      const durationMs = task.completed
+        ? (task.durationMs ?? null)
+        : (task.elapsedMs > 0 ? task.elapsedMs : null);
+      const entry = {
+        text: task.text,
+        status: getTaskArchiveStatus(task),
+        durationMs,
+        limitMs: task.limitMs ?? null,
+        sourceSessionId: sessionId,
+      };
+      if (task.sourceSessionName) {
+        entry.sourceSessionName = task.sourceSessionName;
       }
-    }
-    return entry;
-  });
+      if (enabled && rate) {
+        entry.hourlyRateEnabled = true;
+        entry.hourlyRate = rate;
+        entry.billableRoundMinutes = roundMinutes;
+        entry.billableRoundScope = roundScope;
+        if (roundScope === 'task' && durationMs) {
+          entry.billableDurationMs = task.billableDurationMs
+            ?? roundUpBillableMs(durationMs, roundMinutes);
+          entry.earnings = calculateBillableEarningsFromMs(entry.billableDurationMs, rate);
+        } else {
+          entry.earnings = calculateBillableEarnings(durationMs, rate, roundMinutes);
+        }
+      }
+      return entry;
+    });
 }
 
 function normalizeSessionHistoryTask(task) {
@@ -2918,6 +3118,7 @@ function archiveCurrentSession(status) {
   if (state.sessionHistory.some((entry) => entry.runId === runId)) return null;
 
   const tasks = buildHistoryTasks();
+  if (tasks.length === 0) return null;
   const billable = tasks.some((task) => task.hourlyRateEnabled && task.hourlyRate);
   const totalEarnings = billable
     ? tasks.reduce((sum, task) => sum + (task.earnings || 0), 0)
@@ -2933,8 +3134,8 @@ function archiveCurrentSession(status) {
     endedAt: Date.now(),
     status,
     totalMs: getArchiveTotalMs(),
-    completedCount: getCompletedCount(),
-    totalCount: state.sessionTasks.length,
+    completedCount: tasks.filter((task) => task.status === 'completed').length,
+    totalCount: tasks.length,
     billable,
     totalEarnings,
     tasks,
@@ -3641,6 +3842,10 @@ function showTaskContextMenu(e, listId, taskIndex) {
   hideSessionContextMenu();
   hideTemplateAutocomplete();
   taskContextMenuTarget = { listId, taskIndex };
+  const tasks = getTasksForList(listId);
+  const task = tasks[taskIndex];
+  const showComplete = task && (listId !== 'session' || !task.completed);
+  taskContextCompleteBtn.classList.toggle('hidden', !showComplete);
   positionContextMenu(taskContextMenu, e.clientX, e.clientY);
 }
 
@@ -4411,7 +4616,7 @@ const TUTORIAL_STEPS = [
     selector: '[data-tutorial="queue-panel"]',
     arrowPlacement: 'above-heading',
     title: 'Your launch lineup',
-    body: 'The <strong>Queue</strong> is your ordered hit list — drag to reorder, double-click to rename, right-click for duplicate/delete. What\'s on top is what you slash through first when you start.',
+    body: 'The <strong>Queue</strong> is your ordered hit list — drag to reorder, double-click to rename, right-click to complete, duplicate, or delete. What\'s on top is what you slash through first when you start.',
   },
   {
     id: 'move-back',
@@ -6559,6 +6764,25 @@ billableRateInput.addEventListener('keydown', (e) => {
   }
 });
 
+completeTaskConfirmBtn.addEventListener('click', confirmCompleteTaskModal);
+completeTaskCancelBtn.addEventListener('click', closeCompleteTaskModal);
+completeTaskModal.addEventListener('click', (e) => {
+  if (e.target === completeTaskModal) closeCompleteTaskModal();
+});
+completeTaskDurationInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    confirmCompleteTaskModal();
+  }
+});
+
+taskContextCompleteBtn.addEventListener('click', () => {
+  if (!taskContextMenuTarget) return;
+  const { listId, taskIndex } = taskContextMenuTarget;
+  hideTaskContextMenu();
+  openCompleteTaskModal(listId, taskIndex);
+});
+
 taskContextDuplicateBtn.addEventListener('click', () => {
   if (!taskContextMenuTarget) return;
   const { listId, taskIndex } = taskContextMenuTarget;
@@ -6614,6 +6838,10 @@ document.addEventListener('keydown', (e) => {
     hideTemplateAutocomplete();
     if (!saveTemplateModal.classList.contains('hidden')) {
       closeSaveTemplateModal();
+      return;
+    }
+    if (!completeTaskModal.classList.contains('hidden')) {
+      closeCompleteTaskModal();
       return;
     }
     if (!templatesModal.classList.contains('hidden')) {

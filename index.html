@@ -350,6 +350,12 @@
   </div>
 
   <div id="task-context-menu" class="task-context-menu hidden" role="menu">
+    <button type="button" id="task-context-complete" class="task-context-menu-item" role="menuitem">
+      <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M20 6L9 17l-5-5"/>
+      </svg>
+      <span>Complete task</span>
+    </button>
     <button type="button" id="task-context-duplicate" class="task-context-menu-item" role="menuitem">
       <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <rect x="9" y="9" width="13" height="13" rx="2"/>
@@ -378,6 +384,20 @@
   </div>
 
   <div id="template-autocomplete" class="template-autocomplete hidden" role="listbox" aria-label="Template suggestions"></div>
+
+  <div id="complete-task-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="complete-task-title">
+    <div class="clear-session-modal-card">
+      <h3 id="complete-task-title" class="clear-session-modal-title">Complete task</h3>
+      <p id="complete-task-name" class="complete-task-name"></p>
+      <label for="complete-task-duration-input" class="complete-task-duration-label">How long did this take?</label>
+      <input id="complete-task-duration-input" type="text" class="complete-task-duration-input" placeholder="20m" autocomplete="off" />
+      <p class="complete-task-duration-hint">Optional — leave blank if you prefer.</p>
+      <div class="clear-session-modal-actions">
+        <button id="complete-task-confirm-btn" class="clear-session-modal-btn" type="button">Complete</button>
+        <button id="complete-task-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
 
   <div id="save-template-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="save-template-title">
     <div class="clear-session-modal-card">
