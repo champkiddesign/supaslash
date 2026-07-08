@@ -1,13 +1,33 @@
 const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 
+const shouldSign = Boolean(
+  process.env.APPLE_ID &&
+  process.env.APPLE_APP_SPECIFIC_PASSWORD &&
+  process.env.APPLE_TEAM_ID
+);
+
 module.exports = {
   packagerConfig: {
     name: 'SupaSlash',
     appBundleId: 'com.champkiddesign.supaslash',
     icon: './assets/icon',
     asar: true,
-    osxSign: false,
+    ...(shouldSign ? {
+      osxSign: {
+        identity: process.env.APPLE_SIGNING_IDENTITY || 'Developer ID Application',
+        'hardened-runtime': true,
+        'gatekeeper-assess': false,
+        entitlements: './entitlements.plist',
+        'entitlements-inherit': './entitlements.plist',
+      },
+      osxNotarize: {
+        tool: 'notarytool',
+        appleId: process.env.APPLE_ID,
+        appleIdPassword: process.env.APPLE_APP_SPECIFIC_PASSWORD,
+        teamId: process.env.APPLE_TEAM_ID,
+      },
+    } : {}),
   },
   rebuildConfig: {},
   makers: [
@@ -37,5 +57,18 @@ module.exports = {
       [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
       [FuseV1Options.OnlyLoadAppFromAsar]: true,
     }),
+  ],
+  publishers: [
+    {
+      name: '@electron-forge/publisher-github',
+      config: {
+        repository: {
+          owner: 'champkiddesign',
+          name: 'supaslash',
+        },
+        draft: false,
+        prerelease: true,
+      },
+    },
   ],
 };

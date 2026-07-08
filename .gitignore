@@ -5,3 +5,4 @@ out/
 *.log
 .cursor/
 assets/icon.iconset/
+.env

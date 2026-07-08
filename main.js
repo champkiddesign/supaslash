@@ -1,7 +1,8 @@
-const { app, BrowserWindow, ipcMain, screen, nativeImage, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, nativeImage, dialog, shell, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { createDataStore } = require('./data-store');
+const { setupAutoUpdater, checkForUpdates, isQuittingForUpdate } = require('./auto-updater');
 
 const CELEBRATION_DURATION_MS = 3500;
 
@@ -521,6 +522,34 @@ function setDockIcon() {
   app.dock.show();
 }
 
+function setupAppMenu() {
+  if (process.platform !== 'darwin') return;
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        {
+          label: 'Check for Updates…',
+          click: () => {
+            checkForUpdates({ manual: true }).catch((err) => {
+              console.error('Manual update check failed:', err);
+            });
+          },
+        },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
+  ]));
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: WINDOW_SIZES.edit.width,
@@ -571,7 +600,9 @@ function createWindow() {
 
 app.whenReady().then(() => {
   setDockIcon();
+  setupAppMenu();
   createWindow();
+  setupAutoUpdater();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -590,7 +621,7 @@ app.on('window-all-closed', () => {
 
 let isQuitting = false;
 app.on('before-quit', (event) => {
-  if (isQuitting) return;
+  if (isQuitting || isQuittingForUpdate()) return;
   event.preventDefault();
   isQuitting = true;
   dataStore.flushDocumentsBackup()
@@ -601,6 +632,8 @@ app.on('before-quit', (event) => {
       app.quit();
     });
 });
+
+ipcMain.handle('check-for-updates', () => checkForUpdates({ manual: true }));
 
 ipcMain.handle('set-window-mode', (_event, mode, options = {}) => {
   applyWindowSize(mode, options);

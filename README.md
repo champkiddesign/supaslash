@@ -67,6 +67,84 @@ The build outputs to `out/make/`:
 - **`SupaSlash.dmg`** — drag to Applications to install
 - **`SupaSlash-darwin-arm64-1.0.0.zip`** — zip of the `.app` bundle
 
-On first launch, macOS may warn that the app is from an unidentified developer. Right-click the app → **Open** to allow it.
+For local testing, `npm run make` produces an unsigned build. For beta distribution, use the signed release build below so testers can open the app without Gatekeeper workarounds.
 
 To rebuild after changes, run `npm run make` again.
+
+## Release Build (Signed + Notarized)
+
+Signed and notarized builds open normally on other Macs — no "damaged app" or right-click → Open workaround.
+
+### One-time Apple setup
+
+1. **Developer ID Application certificate**
+   - Keychain Access → Certificate Assistant → Request a Certificate From a Certificate Authority (save the `.certSigningRequest`)
+   - [Apple Developer Certificates](https://developer.apple.com/account/resources/certificates) → **+** → **Developer ID Application** → upload CSR → download and install the `.cer`
+2. **Team ID** — [Membership details](https://developer.apple.com/account) → copy your 10-character Team ID
+3. **App-specific password** — [appleid.apple.com](https://appleid.apple.com) → App-Specific Passwords → create one (e.g. `SupaSlash Notarize`)
+4. **Signing identity** — confirm with:
+   ```bash
+   security find-identity -v -p codesigning
+   ```
+   Copy the full `Developer ID Application: …` string.
+
+### Configure credentials
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your Apple ID, app-specific password, Team ID, and signing identity. `.env` is gitignored — never commit it.
+
+### Build for distribution
+
+```bash
+npm run make:release
+```
+
+Notarization takes a few minutes; Electron Forge waits automatically. Output is in `out/make/SupaSlash.dmg`.
+
+### Verify before sending
+
+```bash
+codesign -dv --verbose=4 "out/SupaSlash-darwin-arm64/SupaSlash.app"
+spctl -a -vv "out/SupaSlash-darwin-arm64/SupaSlash.app"
+stapler validate "out/SupaSlash-darwin-arm64/SupaSlash.app"
+```
+
+Expect `Developer ID Application` authority, `accepted` from Gatekeeper, and a successful stapler validate.
+
+Send **`out/make/SupaSlash.dmg`** to beta testers. They can double-click to install and launch normally.
+
+## Automatic Updates
+
+Installed builds check [GitHub Releases](https://github.com/champkiddesign/supaslash/releases) for updates on launch. Users are prompted before downloading or installing. Beta releases are published as **GitHub prereleases**.
+
+Users can also choose **SupaSlash → Check for Updates…** from the macOS menu bar.
+
+### Publishing an update
+
+1. Merge changes to `main`
+2. Bump `version` in `package.json` (e.g. `1.0.0` → `1.0.1`)
+3. Commit and tag the release:
+   ```bash
+   git add package.json
+   git commit -m "Release 1.0.1"
+   git tag v1.0.1
+   git push origin main --tags
+   ```
+4. Add `GH_TOKEN` to `.env` — a GitHub [personal access token](https://github.com/settings/tokens) with `repo` scope (for publishing releases)
+5. Build, sign, notarize, and publish:
+   ```bash
+   npm run publish:release
+   ```
+
+This uploads the signed `.zip` (for auto-updates) and `.dmg` (for new installs) to GitHub Releases. Existing installs will pick up the new version on next launch.
+
+### Release checklist
+
+- [ ] Version bumped in `package.json`
+- [ ] Tag pushed (`v1.0.1`)
+- [ ] `npm run publish:release` completed
+- [ ] GitHub Release shows `.zip` and `.dmg` assets
+- [ ] Test update from previous installed version
