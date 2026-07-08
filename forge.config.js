@@ -1,5 +1,6 @@
 const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
+const { generateLatestMacYml } = require('./scripts/generate-latest-mac-yml.js');
 
 const shouldSign = Boolean(
   process.env.APPLE_ID &&
@@ -71,4 +72,20 @@ module.exports = {
       },
     },
   ],
+  hooks: {
+    postMake: async (_forgeConfig, makeResults) => {
+      for (const result of makeResults) {
+        const zipArtifact = result.artifacts.find((artifact) => (
+          artifact.endsWith('.zip') && artifact.includes('darwin')
+        ));
+        if (!zipArtifact) continue;
+
+        const ymlPath = generateLatestMacYml(zipArtifact, result.packageJSON.version);
+        if (!result.artifacts.includes(ymlPath)) {
+          result.artifacts.push(ymlPath);
+        }
+      }
+      return makeResults;
+    },
+  },
 };
