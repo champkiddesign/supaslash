@@ -148,3 +148,34 @@ This uploads the signed `.zip` (for auto-updates) and `.dmg` (for new installs) 
 - [ ] `npm run publish:release` completed
 - [ ] GitHub Release shows `.zip` and `.dmg` assets
 - [ ] Test update from previous installed version
+
+### Test updates locally (no notarization)
+
+Use this loop while debugging auto-updates. It uses unsigned builds and a local HTTP server instead of GitHub Releases.
+
+**Terminal 1 — build an "old" app:**
+```bash
+# Temporarily set version to 1.0.0 in package.json
+npm run make:local
+open "out/SupaSlash-darwin-arm64/SupaSlash.app"
+```
+
+**Terminal 2 — build the "new" update and serve it:**
+```bash
+# Temporarily set version to 2.0.0 in package.json
+npm run make:local
+npm run prepare:local-update
+npm run update-server
+```
+
+**Terminal 3 — launch the old app against the local feed:**
+```bash
+SUPASLASH_UPDATE_TEST_FEED=http://127.0.0.1:8765/ \
+  "out/SupaSlash-darwin-arm64/SupaSlash.app/Contents/MacOS/SupaSlash"
+```
+
+The old app should offer version `2.0.0`, show a progress window while downloading, then prompt to restart.
+
+Updater logs are written to `~/Library/Logs/SupaSlash/updater.log`.
+
+When local testing passes, restore the real version in `package.json`, then use `npm run publish:release` for GitHub.

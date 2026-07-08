@@ -1,6 +1,7 @@
 node_modules/
 dist/
 out/
+local-update-fixtures/
 .DS_Store
 *.log
 .cursor/

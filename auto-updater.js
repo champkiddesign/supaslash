@@ -1,24 +1,60 @@
 const { app, dialog, BrowserWindow } = require('electron');
 const { autoUpdater } = require('electron-updater');
+const fs = require('fs');
+const path = require('path');
 
 const GITHUB_OWNER = 'champkiddesign';
 const GITHUB_REPO = 'supaslash';
+const LOCAL_UPDATE_FEED = process.env.SUPASLASH_UPDATE_TEST_FEED;
 
 let quittingForUpdate = false;
 let manualCheckPending = false;
 let isDownloading = false;
 let downloadPromptOpen = false;
 let progressWindow = null;
+let pendingUpdateCheck = null;
+let updaterLogPath = null;
 
 autoUpdater.autoDownload = false;
-autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.autoInstallOnAppQuit = false;
 autoUpdater.allowPrerelease = true;
 
-autoUpdater.setFeedURL({
-  provider: 'github',
-  owner: GITHUB_OWNER,
-  repo: GITHUB_REPO,
-});
+function writeUpdaterLog(message) {
+  const line = `[${new Date().toISOString()}] ${message}`;
+  console.log(line);
+  if (!updaterLogPath) return;
+  try {
+    fs.appendFileSync(updaterLogPath, `${line}\n`);
+  } catch (err) {
+    console.error('Failed to write updater log:', err);
+  }
+}
+
+function configureFeedURL() {
+  if (LOCAL_UPDATE_FEED) {
+    writeUpdaterLog(`Using local update feed: ${LOCAL_UPDATE_FEED}`);
+    autoUpdater.setFeedURL({
+      provider: 'generic',
+      url: LOCAL_UPDATE_FEED,
+    });
+    return;
+  }
+
+  autoUpdater.setFeedURL({
+    provider: 'github',
+    owner: GITHUB_OWNER,
+    repo: GITHUB_REPO,
+  });
+}
+
+function configureUpdaterLogging() {
+  autoUpdater.logger = {
+    info: (...args) => writeUpdaterLog(args.join(' ')),
+    warn: (...args) => writeUpdaterLog(`WARN ${args.join(' ')}`),
+    error: (...args) => writeUpdaterLog(`ERROR ${args.join(' ')}`),
+    debug: (...args) => writeUpdaterLog(`DEBUG ${args.join(' ')}`),
+  };
+}
 
 function getParentWindow() {
   return BrowserWindow.getAllWindows().find((window) => !window.isDestroyed() && window !== progressWindow) || null;
@@ -122,11 +158,13 @@ async function showDownloadError(err) {
   clearDockBadge();
   isDownloading = false;
 
+  writeUpdaterLog(`Download failed: ${err?.message || err}`);
+
   await dialog.showMessageBox(getParentWindow() ?? undefined, {
     type: 'error',
     title: 'Download Failed',
     message: 'Could not download the update.',
-    detail: err?.message || String(err),
+    detail: `${err?.message || String(err)}\n\nLog: ${updaterLogPath || 'console'}`,
   });
 }
 
@@ -150,8 +188,16 @@ async function promptDownload(info) {
     app.dock.bounce('informational');
   }
 
+  writeUpdaterLog(`Starting download for ${info.version}`);
+
   try {
-    await autoUpdater.downloadUpdate();
+    const cancellationToken = pendingUpdateCheck?.cancellationToken;
+    if (cancellationToken) {
+      await autoUpdater.downloadUpdate(cancellationToken);
+    } else {
+      await autoUpdater.downloadUpdate();
+    }
+    writeUpdaterLog('downloadUpdate promise resolved');
   } catch (err) {
     console.error('Failed to start update download:', err);
     await showDownloadError(err);
@@ -162,6 +208,9 @@ async function promptInstall(info) {
   closeProgressWindow();
   clearDockBadge();
   isDownloading = false;
+  pendingUpdateCheck = null;
+
+  writeUpdaterLog(`Update downloaded: ${info.version}`);
 
   const { response } = await dialog.showMessageBox(getParentWindow() ?? undefined, {
     type: 'info',
@@ -175,6 +224,7 @@ async function promptInstall(info) {
 
   if (response === 0) {
     quittingForUpdate = true;
+    writeUpdaterLog('Restarting to install update');
     autoUpdater.quitAndInstall();
   }
 }
@@ -201,12 +251,22 @@ async function checkForUpdates({ manual = false } = {}) {
   }
 
   manualCheckPending = manual;
+  writeUpdaterLog(`Checking for updates (manual=${manual})`);
 
   try {
-    return await autoUpdater.checkForUpdates();
+    const result = await autoUpdater.checkForUpdates();
+    if (result?.isUpdateAvailable) {
+      pendingUpdateCheck = result;
+      writeUpdaterLog(`Update available: ${result.updateInfo.version}`);
+    } else {
+      pendingUpdateCheck = null;
+      writeUpdaterLog('No update available');
+    }
+    return result;
   } catch (err) {
+    pendingUpdateCheck = null;
     manualCheckPending = false;
-    console.error('Failed to check for updates:', err);
+    writeUpdaterLog(`Update check failed: ${err.message}`);
     if (manual) {
       await dialog.showMessageBox(getParentWindow() ?? undefined, {
         type: 'error',
@@ -222,13 +282,28 @@ async function checkForUpdates({ manual = false } = {}) {
 function setupAutoUpdater() {
   if (!app.isPackaged) return;
 
+  try {
+    updaterLogPath = path.join(app.getPath('logs'), 'updater.log');
+    fs.mkdirSync(path.dirname(updaterLogPath), { recursive: true });
+  } catch (err) {
+    console.error('Failed to initialize updater log path:', err);
+  }
+
+  configureUpdaterLogging();
+  configureFeedURL();
+  writeUpdaterLog(`Auto-updater ready for version ${app.getVersion()}`);
+
+  autoUpdater.on('checking-for-update', () => {
+    writeUpdaterLog('checking-for-update');
+  });
+
   autoUpdater.on('update-available', (info) => {
     manualCheckPending = false;
     if (downloadPromptOpen || isDownloading) return;
     downloadPromptOpen = true;
     promptDownload(info)
       .catch((err) => {
-        console.error('Failed to prompt for update download:', err);
+        writeUpdaterLog(`Failed to prompt for update download: ${err.message}`);
       })
       .finally(() => {
         downloadPromptOpen = false;
@@ -239,33 +314,34 @@ function setupAutoUpdater() {
     if (manualCheckPending) {
       manualCheckPending = false;
       showNoUpdatesDialog().catch((err) => {
-        console.error('Failed to show no-updates dialog:', err);
+        writeUpdaterLog(`Failed to show no-updates dialog: ${err.message}`);
       });
     }
   });
 
   autoUpdater.on('download-progress', (progress) => {
+    writeUpdaterLog(`download-progress ${Math.round(progress.percent)}%`);
     updateProgressWindow(progress.percent);
     setDockBadge(String(Math.round(progress.percent)));
   });
 
   autoUpdater.on('update-downloaded', (info) => {
     promptInstall(info).catch((err) => {
-      console.error('Failed to prompt for update install:', err);
+      writeUpdaterLog(`Failed to prompt for update install: ${err.message}`);
     });
   });
 
   autoUpdater.on('error', (err) => {
-    console.error('Auto-updater error:', err);
+    writeUpdaterLog(`Auto-updater error: ${err.message || err}`);
     if (isDownloading) {
       showDownloadError(err).catch((dialogErr) => {
-        console.error('Failed to show download error dialog:', dialogErr);
+        writeUpdaterLog(`Failed to show download error dialog: ${dialogErr.message}`);
       });
     }
   });
 
   checkForUpdates().catch((err) => {
-    console.error('Initial update check failed:', err);
+    writeUpdaterLog(`Initial update check failed: ${err.message}`);
   });
 }
 

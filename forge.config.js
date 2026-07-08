@@ -7,6 +7,7 @@ const shouldSign = Boolean(
   process.env.APPLE_APP_SPECIFIC_PASSWORD &&
   process.env.APPLE_TEAM_ID
 );
+const isLocalBuild = process.env.SUPASLASH_LOCAL_BUILD === '1';
 
 module.exports = {
   packagerConfig: {
@@ -32,13 +33,13 @@ module.exports = {
   },
   rebuildConfig: {},
   makers: [
-    {
+    ...(isLocalBuild ? [] : [{
       name: '@electron-forge/maker-dmg',
       config: {
         title: 'SupaSlash',
         format: 'ULFO',
       },
-    },
+    }]),
     {
       name: '@electron-forge/maker-zip',
       platforms: ['darwin'],

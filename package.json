@@ -9,7 +9,10 @@
     "dev": "env -u ELECTRON_RUN_AS_NODE electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
+    "make:local": "env -u APPLE_ID -u APPLE_APP_SPECIFIC_PASSWORD -u APPLE_TEAM_ID -u APPLE_SIGNING_IDENTITY SUPASLASH_LOCAL_BUILD=1 electron-forge make",
     "make:release": "set -a && [ -f .env ] && . ./.env; set +a && electron-forge make",
+    "prepare:local-update": "bash scripts/prepare-local-update.sh",
+    "update-server": "node scripts/local-update-server.js",
     "publish:release": "set -a && [ -f .env ] && . ./.env; set +a && export GITHUB_TOKEN=\"${GITHUB_TOKEN:-$GH_TOKEN}\" && electron-forge publish",
     "build-icon": "bash scripts/build-icon.sh"
   },

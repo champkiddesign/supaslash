@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-function generateLatestMacYml(zipPath, version) {
+function generateLatestMacYml(zipPath, version, outputPath) {
   const zipBuffer = fs.readFileSync(zipPath);
   const sha512 = crypto.createHash('sha512').update(zipBuffer).digest('base64');
   const fileName = path.basename(zipPath);
@@ -18,7 +18,7 @@ function generateLatestMacYml(zipPath, version) {
     `releaseDate: '${releaseDate}'`,
     '',
   ].join('\n');
-  const ymlPath = path.join(path.dirname(zipPath), 'latest-mac.yml');
+  const ymlPath = outputPath || path.join(path.dirname(zipPath), 'latest-mac.yml');
   fs.writeFileSync(ymlPath, yaml);
   return ymlPath;
 }
@@ -28,9 +28,10 @@ module.exports = { generateLatestMacYml };
 if (require.main === module) {
   const zipPath = process.argv[2];
   const version = process.argv[3];
+  const outputPath = process.argv[4];
   if (!zipPath || !version) {
-    console.error('Usage: node scripts/generate-latest-mac-yml.js <zip-path> <version>');
+    console.error('Usage: node scripts/generate-latest-mac-yml.js <zip-path> <version> [output-path]');
     process.exit(1);
   }
-  process.stdout.write(`${generateLatestMacYml(zipPath, version)}\n`);
+  process.stdout.write(`${generateLatestMacYml(zipPath, version, outputPath)}\n`);
 }
