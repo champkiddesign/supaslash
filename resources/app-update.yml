@@ -1,0 +1,4 @@
+provider: github
+owner: champkiddesign
+repo: supaslash
+updaterCacheDirName: supaslash-updater

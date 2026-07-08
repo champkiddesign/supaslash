@@ -15,6 +15,15 @@ module.exports = {
     appBundleId: 'com.champkiddesign.supaslash',
     icon: './assets/icon',
     asar: true,
+    extraResource: './resources/app-update.yml',
+    // Keep local test artifacts and build output out of app.asar.
+    ignore: [
+      /^\/local-update-fixtures($|\/)/,
+      /^\/out($|\/)/,
+      /^\/\.git($|\/)/,
+      /^\/\.cursor($|\/)/,
+      /^\/\.env$/,
+    ],
     ...(shouldSign ? {
       osxSign: {
         identity: process.env.APPLE_SIGNING_IDENTITY || 'Developer ID Application',

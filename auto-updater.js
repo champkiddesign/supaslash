@@ -5,12 +5,15 @@ const path = require('path');
 
 const GITHUB_OWNER = 'champkiddesign';
 const GITHUB_REPO = 'supaslash';
+const UPDATER_CACHE_DIR_NAME = 'supaslash-updater';
 const LOCAL_UPDATE_FEED = process.env.SUPASLASH_UPDATE_TEST_FEED;
 
 let quittingForUpdate = false;
 let manualCheckPending = false;
 let isDownloading = false;
 let downloadPromptOpen = false;
+let installPromptOpen = false;
+let updateReadyToInstall = false;
 let progressWindow = null;
 let pendingUpdateCheck = null;
 let updaterLogPath = null;
@@ -27,6 +30,44 @@ function writeUpdaterLog(message) {
     fs.appendFileSync(updaterLogPath, `${line}\n`);
   } catch (err) {
     console.error('Failed to write updater log:', err);
+  }
+}
+
+function buildUpdateConfigYaml() {
+  if (LOCAL_UPDATE_FEED) {
+    return [
+      'provider: generic',
+      `url: ${LOCAL_UPDATE_FEED}`,
+      `updaterCacheDirName: ${UPDATER_CACHE_DIR_NAME}`,
+      '',
+    ].join('\n');
+  }
+
+  return [
+    'provider: github',
+    `owner: ${GITHUB_OWNER}`,
+    `repo: ${GITHUB_REPO}`,
+    `updaterCacheDirName: ${UPDATER_CACHE_DIR_NAME}`,
+    '',
+  ].join('\n');
+}
+
+function ensureUpdateConfigOnDisk() {
+  const bundledConfigPath = path.join(process.resourcesPath, 'app-update.yml');
+  if (fs.existsSync(bundledConfigPath)) {
+    autoUpdater.updateConfigPath = bundledConfigPath;
+    writeUpdaterLog(`Using bundled update config: ${bundledConfigPath}`);
+    return;
+  }
+
+  const fallbackConfigPath = path.join(app.getPath('userData'), 'app-update.yml');
+  try {
+    fs.mkdirSync(path.dirname(fallbackConfigPath), { recursive: true });
+    fs.writeFileSync(fallbackConfigPath, buildUpdateConfigYaml());
+    autoUpdater.updateConfigPath = fallbackConfigPath;
+    writeUpdaterLog(`Created fallback update config: ${fallbackConfigPath}`);
+  } catch (err) {
+    writeUpdaterLog(`Failed to create fallback update config: ${err.message}`);
   }
 }
 
@@ -160,16 +201,16 @@ async function showDownloadError(err) {
 
   writeUpdaterLog(`Download failed: ${err?.message || err}`);
 
-  await dialog.showMessageBox(getParentWindow() ?? undefined, {
+  await dialog.showMessageBox(getDialogOptions({
     type: 'error',
     title: 'Download Failed',
     message: 'Could not download the update.',
     detail: `${err?.message || String(err)}\n\nLog: ${updaterLogPath || 'console'}`,
-  });
+  }));
 }
 
 async function promptDownload(info) {
-  const { response } = await dialog.showMessageBox(getParentWindow() ?? undefined, {
+  const { response } = await dialog.showMessageBox(getDialogOptions({
     type: 'info',
     title: 'Update Available',
     message: `SupaSlash ${info.version} is available.`,
@@ -177,7 +218,7 @@ async function promptDownload(info) {
     buttons: ['Download', 'Later'],
     defaultId: 0,
     cancelId: 1,
-  });
+  }));
 
   if (response !== 0) return;
 
@@ -204,7 +245,33 @@ async function promptDownload(info) {
   }
 }
 
+function getDialogOptions(options) {
+  // Standalone dialogs are more reliable than modal sheets on frameless windows.
+  return options;
+}
+
+async function runQuitAndInstall() {
+  quittingForUpdate = true;
+  writeUpdaterLog('Restarting to install update');
+
+  setImmediate(() => {
+    app.removeAllListeners('window-all-closed');
+
+    BrowserWindow.getAllWindows().forEach((window) => {
+      if (window.isDestroyed()) return;
+      window.removeAllListeners('close');
+      window.close();
+    });
+
+    autoUpdater.quitAndInstall(false, true);
+  });
+}
+
 async function promptInstall(info) {
+  if (installPromptOpen || quittingForUpdate) return;
+  installPromptOpen = true;
+  updateReadyToInstall = true;
+
   closeProgressWindow();
   clearDockBadge();
   isDownloading = false;
@@ -212,30 +279,35 @@ async function promptInstall(info) {
 
   writeUpdaterLog(`Update downloaded: ${info.version}`);
 
-  const { response } = await dialog.showMessageBox(getParentWindow() ?? undefined, {
-    type: 'info',
-    title: 'Update Ready',
-    message: `SupaSlash ${info.version} has been downloaded.`,
-    detail: 'Restart now to install the update?',
-    buttons: ['Restart Now', 'Later'],
-    defaultId: 0,
-    cancelId: 1,
-  });
+  // Let the progress window finish closing before showing the install dialog.
+  await new Promise((resolve) => setTimeout(resolve, 150));
 
-  if (response === 0) {
-    quittingForUpdate = true;
-    writeUpdaterLog('Restarting to install update');
-    autoUpdater.quitAndInstall();
+  try {
+    const { response } = await dialog.showMessageBox(getDialogOptions({
+      type: 'info',
+      title: 'Update Ready',
+      message: `SupaSlash ${info.version} has been downloaded.`,
+      detail: 'Restart now to install the update?',
+      buttons: ['Restart Now', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+    }));
+
+    if (response === 0) {
+      await runQuitAndInstall();
+    }
+  } finally {
+    installPromptOpen = false;
   }
 }
 
 async function showNoUpdatesDialog() {
-  await dialog.showMessageBox(getParentWindow() ?? undefined, {
+  await dialog.showMessageBox(getDialogOptions({
     type: 'info',
     title: 'No Updates',
     message: 'You are on the latest version.',
     detail: `SupaSlash ${app.getVersion()} is up to date.`,
-  });
+  }));
 }
 
 async function checkForUpdates({ manual = false } = {}) {
@@ -290,6 +362,7 @@ function setupAutoUpdater() {
   }
 
   configureUpdaterLogging();
+  ensureUpdateConfigOnDisk();
   configureFeedURL();
   writeUpdaterLog(`Auto-updater ready for version ${app.getVersion()}`);
 
@@ -299,6 +372,7 @@ function setupAutoUpdater() {
 
   autoUpdater.on('update-available', (info) => {
     manualCheckPending = false;
+    if (updateReadyToInstall || quittingForUpdate) return;
     if (downloadPromptOpen || isDownloading) return;
     downloadPromptOpen = true;
     promptDownload(info)

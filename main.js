@@ -605,6 +605,7 @@ app.whenReady().then(() => {
   setupAutoUpdater();
 
   app.on('activate', () => {
+    if (isQuittingForUpdate()) return;
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
       return;
@@ -620,6 +621,9 @@ app.on('window-all-closed', () => {
 });
 
 let isQuitting = false;
+app.on('before-quit-for-update', () => {
+  isQuitting = true;
+});
 app.on('before-quit', (event) => {
   if (isQuitting || isQuittingForUpdate()) return;
   event.preventDefault();
