@@ -1,7 +1,7 @@
 {
   "name": "supaslash",
   "productName": "SupaSlash",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A simple floating to-do timer for macOS",
   "main": "main.js",
   "scripts": {
