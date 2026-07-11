@@ -24,4 +24,11 @@ contextBridge.exposeInMainWorld('slashIt', {
   setScreenOverlay: (visible) => ipcRenderer.invoke('set-screen-overlay', visible),
   triggerCelebration: () => ipcRenderer.invoke('trigger-celebration'),
   stopCelebration: () => ipcRenderer.invoke('stop-celebration'),
+  license: {
+    getCachedStatus: () => ipcRenderer.invoke('license:get-cached-status'),
+    getStatus: () => ipcRenderer.invoke('license:get-status'),
+    activate: (payload) => ipcRenderer.invoke('license:activate', payload),
+    deactivate: () => ipcRenderer.invoke('license:deactivate'),
+    openCheckout: () => ipcRenderer.invoke('license:open-checkout'),
+  },
 });

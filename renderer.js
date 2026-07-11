@@ -41,6 +41,18 @@ const state = {
   },
 };
 
+const licenseState = {
+  isLicensed: false,
+  status: 'unlicensed',
+  expiresAt: null,
+  customerEmail: '',
+  productName: '',
+  offlineGrace: false,
+  error: null,
+  lastValidatedAt: null,
+  checkoutConfigured: false,
+};
+
 const editView = document.getElementById('edit-view');
 const settingsBtn = document.getElementById('settings-btn');
 const settingsMenu = document.getElementById('settings-menu');
@@ -49,6 +61,7 @@ const settingsSoundEffectsBtn = document.getElementById('settings-sound-effects-
 const settingsSoundEffectsStatus = document.getElementById('settings-sound-effects-status');
 const settingsDataBtn = document.getElementById('settings-data-btn');
 const settingsInvoiceBtn = document.getElementById('settings-invoice-btn');
+const settingsLicenseBtn = document.getElementById('settings-license-btn');
 const settingsHistoryBtn = document.getElementById('settings-history-btn');
 const settingsTemplatesBtn = document.getElementById('settings-templates-btn');
 const settingsTutorialBtn = document.getElementById('settings-tutorial-btn');
@@ -79,6 +92,16 @@ const invoiceSettingsAddressInput = document.getElementById('invoice-settings-ad
 const invoiceSettingsDoneBtn = document.getElementById('invoice-settings-done-btn');
 const invoiceSettingsCancelBtn = document.getElementById('invoice-settings-cancel-btn');
 let invoiceSettingsFormLogoDataUrl = '';
+const licenseModal = document.getElementById('license-modal');
+const licenseModalStatus = document.getElementById('license-modal-status');
+const licenseModalDetail = document.getElementById('license-modal-detail');
+const licenseModalForm = document.getElementById('license-modal-form');
+const licenseKeyInput = document.getElementById('license-key-input');
+const licenseEmailInput = document.getElementById('license-email-input');
+const licenseModalError = document.getElementById('license-modal-error');
+const licenseActivateBtn = document.getElementById('license-activate-btn');
+const licenseBuyBtn = document.getElementById('license-buy-btn');
+const licenseDeactivateBtn = document.getElementById('license-deactivate-btn');
 const focusView = document.getElementById('focus-view');
 const doneView = document.getElementById('done-view');
 const plannedSessionsList = document.getElementById('planned-sessions-list');
@@ -1491,6 +1514,12 @@ function hasPlannedSessionQueueTasks(sessionId) {
   );
 }
 
+function getPlannedSessionEstimateTotalMs(sessionId) {
+  const session = getPlannedSession(sessionId);
+  if (!session) return 0;
+  return session.tasks.reduce((sum, task) => sum + (task.limitMs || 0), 0);
+}
+
 function getSessionEarnings() {
   saveCurrentTaskProgress();
   const currentIndex = state.focusTaskIndex;
@@ -1609,6 +1638,210 @@ function isCurrentTaskBillable() {
   return isTaskBillable(getCurrentTask());
 }
 
+function isAppLicensed() {
+  return !!licenseState.isLicensed;
+}
+
+function getAppLicenseLockMessage() {
+  if (licenseState.status === 'expired') {
+    return 'Your trial has expired. Activate a license or purchase SupaSlash to keep using the app.';
+  }
+  if (licenseState.error) return licenseState.error;
+  return 'Start your free trial or activate SupaSlash to use the app.';
+}
+
+function applyLicenseStatus(status = {}) {
+  const wasLicensed = licenseState.isLicensed;
+  licenseState.isLicensed = !!status.isLicensed;
+  licenseState.status = status.status || (licenseState.isLicensed ? 'active' : 'unlicensed');
+  licenseState.expiresAt = status.expiresAt || null;
+  licenseState.customerEmail = status.customerEmail || '';
+  licenseState.productName = status.productName || '';
+  licenseState.offlineGrace = !!status.offlineGrace;
+  licenseState.error = status.error || null;
+  licenseState.lastValidatedAt = status.lastValidatedAt || null;
+  licenseState.checkoutConfigured = !!status.checkoutConfigured;
+  updateAppLicenseLock();
+  if (!isInitializing && wasLicensed !== licenseState.isLicensed) {
+    if (state.mode === 'edit') renderEditView();
+    else if (state.mode === 'focus') renderFocusView();
+  }
+}
+
+async function refreshLicenseStatus() {
+  try {
+    const status = await window.slashIt.license.getStatus();
+    applyLicenseStatus(status);
+    return status;
+  } catch (err) {
+    applyLicenseStatus({ isLicensed: false, status: 'unlicensed', error: err.message });
+    return licenseState;
+  }
+}
+
+function formatLicenseExpiry(expiresAt) {
+  if (!expiresAt) return '';
+  const parsed = Date.parse(expiresAt);
+  if (!Number.isFinite(parsed)) return '';
+  return new Date(parsed).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function getLicenseStatusText() {
+  if (licenseState.isLicensed) {
+    if (licenseState.offlineGrace) return 'Active (offline grace)';
+    return 'Active';
+  }
+  if (licenseState.status === 'expired') return 'Trial expired';
+  if (licenseState.error) return 'Activation required';
+  return 'Activation required';
+}
+
+function updateLicenseModalUI(introMessage = '') {
+  if (!licenseModalStatus) return;
+
+  licenseModalStatus.textContent = introMessage || getLicenseStatusText();
+  licenseModalStatus.classList.toggle('license-modal-status--licensed', licenseState.isLicensed);
+  licenseModalStatus.classList.toggle('license-modal-status--locked', !licenseState.isLicensed);
+
+  const detailParts = [];
+  if (licenseState.productName) detailParts.push(licenseState.productName);
+  if (licenseState.customerEmail) detailParts.push(licenseState.customerEmail);
+  const expiryText = formatLicenseExpiry(licenseState.expiresAt);
+  if (expiryText) detailParts.push(`Expires ${expiryText}`);
+  if (licenseState.offlineGrace) detailParts.push('Offline grace active');
+  if (!licenseState.isLicensed && licenseState.error) detailParts.push(licenseState.error);
+
+  if (licenseModalDetail) {
+    licenseModalDetail.textContent = detailParts.join(' · ');
+    licenseModalDetail.classList.toggle('hidden', !detailParts.length);
+  }
+
+  if (licenseModalForm) {
+    licenseModalForm.classList.toggle('hidden', licenseState.isLicensed);
+  }
+  if (licenseActivateBtn) {
+    licenseActivateBtn.classList.toggle('hidden', licenseState.isLicensed);
+  }
+  if (licenseDeactivateBtn) {
+    licenseDeactivateBtn.classList.toggle('hidden', !licenseState.isLicensed);
+  }
+  if (licenseModalError) {
+    licenseModalError.classList.add('hidden');
+    licenseModalError.textContent = '';
+  }
+  if (licenseBuyBtn) {
+    licenseBuyBtn.disabled = !licenseState.checkoutConfigured;
+    licenseBuyBtn.title = licenseState.checkoutConfigured
+      ? 'Open SupaSlash checkout in your browser'
+      : 'Checkout link is not configured yet';
+  }
+}
+
+function updateAppLicenseLock() {
+  if (!licenseModal) return;
+
+  document.body.classList.toggle('app-license-locked', !isAppLicensed());
+
+  if (!isAppLicensed()) {
+    updateLicenseModalUI(getAppLicenseLockMessage());
+    licenseModal.classList.remove('hidden');
+    requestAnimationFrame(() => licenseKeyInput?.focus());
+    return;
+  }
+
+  if (licenseModal.classList.contains('hidden')) return;
+  updateLicenseModalUI();
+}
+
+function openLicenseModal(introMessage = '') {
+  hideSettingsMenu();
+  updateLicenseModalUI(introMessage);
+  licenseModal?.classList.remove('hidden');
+  if (!licenseState.isLicensed) {
+    requestAnimationFrame(() => licenseKeyInput?.focus());
+  }
+}
+
+function closeLicenseModal() {
+  if (!isAppLicensed()) return;
+  licenseModal?.classList.add('hidden');
+}
+
+async function handleLicenseActivate() {
+  if (!licenseKeyInput || !licenseEmailInput || !licenseActivateBtn) return;
+
+  licenseActivateBtn.disabled = true;
+  if (licenseModalError) {
+    licenseModalError.classList.add('hidden');
+    licenseModalError.textContent = '';
+  }
+
+  try {
+    const result = await window.slashIt.license.activate({
+      licenseKey: licenseKeyInput.value,
+      email: licenseEmailInput.value,
+    });
+    applyLicenseStatus(result.status || {});
+    if (!result.ok) {
+      if (licenseModalError) {
+        licenseModalError.textContent = result.status?.error || 'Could not activate this license.';
+        licenseModalError.classList.remove('hidden');
+      }
+      updateLicenseModalUI();
+      return;
+    }
+
+    licenseKeyInput.value = '';
+    if (licenseEmailInput.value.trim()) {
+      // Keep the verified email visible after activation.
+    } else if (licenseState.customerEmail) {
+      licenseEmailInput.value = licenseState.customerEmail;
+    }
+    updateLicenseModalUI('SupaSlash is now active on this Mac.');
+    closeLicenseModal();
+    renderEditView();
+    if (historyModal && !historyModal.classList.contains('hidden')) {
+      refreshHistoryModalPanels();
+    }
+  } finally {
+    licenseActivateBtn.disabled = false;
+  }
+}
+
+async function handleLicenseDeactivate() {
+  if (!licenseDeactivateBtn) return;
+  const confirmed = window.confirm('Deactivate SupaSlash on this Mac? You can activate again later if you have activations available.');
+  if (!confirmed) return;
+
+  licenseDeactivateBtn.disabled = true;
+  try {
+    const result = await window.slashIt.license.deactivate();
+    applyLicenseStatus(result.status || {});
+    if (!result.ok && licenseModalError) {
+      licenseModalError.textContent = result.status?.error || 'Could not deactivate this device.';
+      licenseModalError.classList.remove('hidden');
+    }
+    updateLicenseModalUI('License deactivated on this Mac.');
+    renderEditView();
+    if (historyModal && !historyModal.classList.contains('hidden')) {
+      refreshHistoryModalPanels();
+    }
+  } finally {
+    licenseDeactivateBtn.disabled = false;
+  }
+}
+
+async function handleLicenseBuy() {
+  const result = await window.slashIt.license.openCheckout();
+  if (!result?.ok) {
+    window.alert(result?.error || 'Checkout link is not configured yet.');
+  }
+}
+
 function canShowEarningsView() {
   return isCurrentTaskBillable();
 }
@@ -1619,10 +1852,6 @@ function getBraindumpSession() {
 
 function isSessionExpanded(sessionId) {
   return state.expandedSessionIds.has(sessionId);
-}
-
-function expandAllSessions() {
-  state.expandedSessionIds = new Set(state.plannedSessions.map((session) => session.id));
 }
 
 function expandSession(sessionId) {
@@ -1901,6 +2130,12 @@ function renderSessionBillableButton(session, tutorialAnchor) {
   `;
 }
 
+function renderSessionEstimateBadge(session) {
+  const totalMs = getPlannedSessionEstimateTotalMs(session.id);
+  if (!totalMs) return '';
+  return `<span class="session-estimate-badge" title="Total planned time from task estimates">${escapeHtml(formatLimitField(totalMs))}</span>`;
+}
+
 function renderSessionEarningsBadge(session) {
   if (!session.hourlyRateEnabled || !session.hourlyRate) return '';
   if (!hasPlannedSessionQueueTasks(session.id)) return '';
@@ -1943,6 +2178,63 @@ function toggleSelection(task, listId) {
   }
   state.lastSelected = { task, listId };
   updateSelectionClasses();
+}
+
+function getVisibleTasksInList(listId) {
+  const tasks = getTasksForList(listId);
+  if (listId === 'session') {
+    return getSessionEditIndices().map((index) => tasks[index]);
+  }
+  return [...tasks];
+}
+
+function selectRange(task, listId) {
+  if (!state.lastSelected || state.lastSelected.listId !== listId) {
+    selectOnly(task, listId);
+    return;
+  }
+
+  const visibleTasks = getVisibleTasksInList(listId);
+  const anchorIndex = visibleTasks.indexOf(state.lastSelected.task);
+  const clickIndex = visibleTasks.indexOf(task);
+
+  if (anchorIndex === -1 || clickIndex === -1) {
+    selectOnly(task, listId);
+    return;
+  }
+
+  const start = Math.min(anchorIndex, clickIndex);
+  const end = Math.max(anchorIndex, clickIndex);
+
+  state.selectedTasks.clear();
+  for (let i = start; i <= end; i++) {
+    state.selectedTasks.add(visibleTasks[i]);
+  }
+  state.lastSelected = { task, listId };
+  updateSelectionClasses();
+}
+
+function getSelectedTaskItems() {
+  const items = [];
+  getAllPlannedListIds().forEach((plannedListId) => {
+    getTasksForList(plannedListId).forEach((task, index) => {
+      if (state.selectedTasks.has(task)) items.push({ list: plannedListId, index, task });
+    });
+  });
+  state.sessionTasks.forEach((task, index) => {
+    if (state.selectedTasks.has(task)) items.push({ list: 'session', index, task });
+  });
+  return items;
+}
+
+function isTaskCompletable(listId, task) {
+  if (!task) return false;
+  if (listId === 'session') return !task.completed;
+  return isPlannedList(listId);
+}
+
+function getCompletableSelectedCount() {
+  return getSelectedTaskItems().filter(({ list, task }) => isTaskCompletable(list, task)).length;
 }
 
 function updateSelectionClasses() {
@@ -2047,8 +2339,137 @@ function movePlannedSession(sessionId, insertAt) {
   renderEditView();
 }
 
-function persist() {
+const MAX_UNDO_STACK = 50;
+let undoStack = [];
+let redoStack = [];
+let lastUndoableSnapshot = null;
+let isApplyingUndoRedo = false;
+
+function captureUndoSnapshot() {
+  return {
+    sessionTasks: structuredClone(state.sessionTasks),
+    plannedSessions: structuredClone(state.plannedSessions),
+    sessionHistory: structuredClone(state.sessionHistory),
+    listTemplates: structuredClone(state.listTemplates),
+    invoiceSettings: structuredClone(state.invoiceSettings),
+    expandedSessionIds: [...state.expandedSessionIds],
+  };
+}
+
+function undoSnapshotsEqual(a, b) {
+  if (!a || !b) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function resetUndoHistory() {
+  undoStack = [];
+  redoStack = [];
+  lastUndoableSnapshot = captureUndoSnapshot();
+}
+
+function applyUndoSnapshot(snapshot) {
+  state.sessionTasks = structuredClone(snapshot.sessionTasks);
+  state.plannedSessions = structuredClone(snapshot.plannedSessions);
+  state.sessionHistory = structuredClone(snapshot.sessionHistory);
+  state.listTemplates = structuredClone(snapshot.listTemplates);
+  state.invoiceSettings = structuredClone(snapshot.invoiceSettings);
+  state.expandedSessionIds = new Set(snapshot.expandedSessionIds);
+  state.selectedTasks.clear();
+  state.lastSelected = null;
+  state.renamingSessionId = null;
+  state.activeAddSessionIds.clear();
+  state.addFocusSessionId = null;
+  if (state.currentIndex >= state.sessionTasks.length) {
+    state.currentIndex = Math.max(0, state.sessionTasks.length - 1);
+  }
+  if (state.focusTaskIndex >= state.sessionTasks.length || !state.sessionTasks[state.focusTaskIndex]) {
+    state.focusTaskIndex = Math.max(0, getNextFocusTaskIndex());
+  }
+}
+
+function refreshViewsAfterUndoRedo() {
+  hideAllContextMenus();
+  hideTemplateAutocomplete();
+  if (state.mode === 'edit') {
+    renderEditView();
+  } else if (state.mode === 'focus') {
+    renderFocusView();
+  } else if (state.mode === 'done') {
+    showDoneView();
+  }
+  if (historyModal && !historyModal.classList.contains('hidden')) {
+    refreshHistoryModalPanels();
+  }
+  if (templatesModal && !templatesModal.classList.contains('hidden')) {
+    renderTemplatesModal();
+  }
+}
+
+function undoLastAction() {
+  if (undoStack.length === 0) return false;
+  redoStack.push(captureUndoSnapshot());
+  const previous = undoStack.pop();
+  isApplyingUndoRedo = true;
+  applyUndoSnapshot(previous);
+  lastUndoableSnapshot = captureUndoSnapshot();
+  isApplyingUndoRedo = false;
+  persist({ skipUndoCheckpoint: true });
+  refreshViewsAfterUndoRedo();
+  return true;
+}
+
+function redoLastAction() {
+  if (redoStack.length === 0) return false;
+  undoStack.push(captureUndoSnapshot());
+  const next = redoStack.pop();
+  isApplyingUndoRedo = true;
+  applyUndoSnapshot(next);
+  lastUndoableSnapshot = captureUndoSnapshot();
+  isApplyingUndoRedo = false;
+  persist({ skipUndoCheckpoint: true });
+  refreshViewsAfterUndoRedo();
+  return true;
+}
+
+function isUndoRedoShortcutBlocked() {
+  if (state.mode !== 'edit') return true;
+  if (isTaskInputFocused()) return true;
+  if (!licenseModal.classList.contains('hidden') && !isAppLicensed()) return true;
+  if (!clearSessionModal.classList.contains('hidden')) return true;
+  if (!deleteSessionModal.classList.contains('hidden')) return true;
+  if (!billableModal.classList.contains('hidden')) return true;
+  if (!completeTaskModal.classList.contains('hidden')) return true;
+  if (!saveTemplateModal.classList.contains('hidden')) return true;
+  return false;
+}
+
+function handleUndoRedoShortcuts(e) {
+  if (!e.metaKey && !e.ctrlKey) return;
+  if (e.key.toLowerCase() !== 'z') return;
+  if (isUndoRedoShortcutBlocked()) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.shiftKey) redoLastAction();
+  else undoLastAction();
+}
+
+function persist(options = {}) {
   saveCurrentTaskProgress();
+  const currentUndoable = captureUndoSnapshot();
+  if (
+    !options.skipUndoCheckpoint
+    && !isApplyingUndoRedo
+    && !isInitializing
+    && state.mode === 'edit'
+  ) {
+    if (lastUndoableSnapshot && !undoSnapshotsEqual(lastUndoableSnapshot, currentUndoable)) {
+      undoStack.push(lastUndoableSnapshot);
+      if (undoStack.length > MAX_UNDO_STACK) undoStack.shift();
+      redoStack = [];
+    }
+    lastUndoableSnapshot = currentUndoable;
+  }
   window.slashIt.saveData({
     sessionTasks: state.sessionTasks,
     plannedSessions: state.plannedSessions,
@@ -2337,10 +2758,10 @@ function recordDashboardTaskToHistory(taskData) {
   return entry;
 }
 
-function completeTaskFromDashboard(listId, taskIndex, durationMs) {
+function applyCompleteTask(listId, taskIndex, durationMs) {
   if (listId === 'session') {
     const task = state.sessionTasks[taskIndex];
-    if (!task || task.completed) return;
+    if (!task || task.completed) return false;
 
     task.completed = true;
     task.durationMs = durationMs;
@@ -2374,14 +2795,16 @@ function completeTaskFromDashboard(listId, taskIndex, durationMs) {
       task.historyRecorded = true;
     }
 
-    playCompleteSound();
-  } else if (isPlannedList(listId)) {
+    return true;
+  }
+
+  if (isPlannedList(listId)) {
     const sessionId = getPlannedSessionIdFromListId(listId);
     const session = getPlannedSession(sessionId);
-    if (!session) return;
+    if (!session) return false;
 
     const task = session.tasks[taskIndex];
-    if (!task) return;
+    if (!task) return false;
 
     const taskData = {
       text: task.text,
@@ -2404,14 +2827,62 @@ function completeTaskFromDashboard(listId, taskIndex, durationMs) {
       recordDashboardTaskToHistory(taskData);
     }
 
-    playCompleteSound();
-  } else {
-    return;
+    return true;
   }
+
+  return false;
+}
+
+function getAutoCompleteDurationMs(listId, task) {
+  if (listId === 'session' && task.elapsedMs > 0) return task.elapsedMs;
+  return null;
+}
+
+function completeSelectedTasks() {
+  const items = getSelectedTaskItems().filter(({ list, task }) => isTaskCompletable(list, task));
+  if (items.length === 0) return;
+
+  const plannedItems = items.filter(({ list }) => isPlannedList(list));
+  const sessionItems = items.filter(({ list }) => list === 'session');
+
+  const indicesByList = {};
+  plannedItems.forEach(({ list, index }) => {
+    if (!indicesByList[list]) indicesByList[list] = [];
+    indicesByList[list].push(index);
+  });
+
+  let completedCount = 0;
+  Object.keys(indicesByList).forEach((listId) => {
+    indicesByList[listId].sort((a, b) => b - a).forEach((index) => {
+      const task = getTasksForList(listId)[index];
+      if (applyCompleteTask(listId, index, getAutoCompleteDurationMs(listId, task))) {
+        completedCount += 1;
+      }
+    });
+  });
+
+  sessionItems.forEach(({ list, index, task }) => {
+    if (applyCompleteTask(list, index, getAutoCompleteDurationMs(list, task))) {
+      completedCount += 1;
+    }
+  });
+
+  if (completedCount === 0) return;
+
+  clearSelection();
+  persist();
+  renderEditView();
+  refreshDrawerIfOpen();
+  playCompleteSound();
+}
+
+function completeTaskFromDashboard(listId, taskIndex, durationMs) {
+  if (!applyCompleteTask(listId, taskIndex, durationMs)) return;
 
   persist();
   renderEditView();
   refreshDrawerIfOpen();
+  playCompleteSound();
 }
 
 function openCompleteTaskModal(listId, taskIndex) {
@@ -3149,14 +3620,45 @@ function archiveCurrentSession(status) {
   return entry;
 }
 
+function getEditTaskLimitInputHtml(task) {
+  const limitValue = escapeHtml(formatLimitField(task.limitMs));
+  return `<input class="task-limit-input" type="text" value="${limitValue}" placeholder="20m" title="Time estimate" autocomplete="off" />`;
+}
+
 function getEditTaskTimeHtml(task, isCompleted) {
   if (isCompleted) {
     return task.durationMs != null
       ? `<span class="task-duration-badge">${formatTime(task.durationMs)}</span>`
       : '';
   }
-  const limitValue = escapeHtml(formatLimitField(task.limitMs));
-  return `<input class="task-limit-input" type="text" value="${limitValue}" placeholder="20m" title="Time limit" autocomplete="off" />`;
+  return getEditTaskLimitInputHtml(task);
+}
+
+function wireTaskLimitInput(li, listId, taskIndex) {
+  const limitInput = li.querySelector('.task-limit-input');
+  if (!limitInput) return;
+
+  const saveLimit = () => {
+    getTasksForList(listId)[taskIndex].limitMs = parseManualLimit(limitInput.value);
+    persist();
+    renderEditView();
+  };
+
+  limitInput.addEventListener('mousedown', (e) => e.stopPropagation());
+  limitInput.addEventListener('click', (e) => e.stopPropagation());
+  limitInput.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    limitInput.focus();
+    limitInput.select();
+  });
+  limitInput.addEventListener('blur', saveLimit);
+  limitInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') limitInput.blur();
+    if (e.key === 'Escape') {
+      limitInput.value = formatLimitField(getTasksForList(listId)[taskIndex].limitMs);
+      limitInput.blur();
+    }
+  });
 }
 
 function isTaskOvertimeActive() {
@@ -3441,6 +3943,49 @@ function moveTasks(items, toList, toIndex) {
 
 function moveTask(fromList, fromIndex, toList, toIndex) {
   moveTasks([{ list: fromList, index: fromIndex }], toList, toIndex);
+}
+
+function moveSelectedTasksToSources(items) {
+  const resolved = items
+    .map(({ list, index }) => ({
+      fromList: list,
+      fromIndex: index,
+      task: getTasksForList(list)[index],
+    }))
+    .filter((entry) => entry.task && entry.fromList === 'session');
+
+  if (resolved.length === 0) return;
+
+  const byTarget = {};
+  resolved.forEach(({ fromIndex, task }) => {
+    const targetListId = getSourceListIdForTask(task);
+    if (!byTarget[targetListId]) byTarget[targetListId] = [];
+    byTarget[targetListId].push({ fromIndex, task });
+  });
+
+  const uniqueIndices = [...new Set(resolved.map((entry) => entry.fromIndex))].sort((a, b) => b - a);
+  uniqueIndices.forEach((index) => {
+    const task = state.sessionTasks[index];
+    if (task) state.selectedTasks.delete(task);
+    if (index >= 0 && index < state.sessionTasks.length) {
+      state.sessionTasks.splice(index, 1);
+    }
+  });
+
+  Object.keys(byTarget).forEach((targetListId) => {
+    const target = getTasksForList(targetListId);
+    byTarget[targetListId].forEach(({ task }) => {
+      target.push(toBraindumpTaskFromSession(task));
+    });
+  });
+
+  if (state.currentIndex >= state.sessionTasks.length) {
+    state.currentIndex = Math.max(0, state.sessionTasks.length - 1);
+  }
+
+  clearSelection();
+  persist();
+  renderEditView();
 }
 
 const DROP_LINE_GAP_PX = 5;
@@ -3841,11 +4386,26 @@ function showTaskContextMenu(e, listId, taskIndex) {
   e.stopPropagation();
   hideSessionContextMenu();
   hideTemplateAutocomplete();
-  taskContextMenuTarget = { listId, taskIndex };
   const tasks = getTasksForList(listId);
   const task = tasks[taskIndex];
-  const showComplete = task && (listId !== 'session' || !task.completed);
+  if (!task) return;
+
+  if (!state.selectedTasks.has(task)) {
+    selectOnly(task, listId);
+  }
+
+  taskContextMenuTarget = { listId, taskIndex };
+  const selectionCount = state.selectedTasks.size;
+  const completableCount = getCompletableSelectedCount();
+  const showComplete = completableCount > 0;
+
   taskContextCompleteBtn.classList.toggle('hidden', !showComplete);
+  taskContextCompleteBtn.querySelector('span').textContent = completableCount > 1
+    ? `Complete ${completableCount} tasks`
+    : 'Complete task';
+  taskContextDeleteBtn.querySelector('span').textContent = selectionCount > 1
+    ? `Delete ${selectionCount} tasks`
+    : 'Delete';
   positionContextMenu(taskContextMenu, e.clientX, e.clientY);
 }
 
@@ -3917,10 +4477,9 @@ function renderTaskList(listEl, listId) {
       li.classList.add('selected');
     }
 
-    const limitFieldHtml = isSession ? getEditTaskTimeHtml(task, isCompleted) : '';
-    const limitBadgeHtml = isPlanned && task.limitMs
-      ? `<span class="task-limit-badge">${formatLimitField(task.limitMs)}</span>`
-      : '';
+    const limitFieldHtml = isSession
+      ? getEditTaskTimeHtml(task, isCompleted)
+      : getEditTaskLimitInputHtml(task);
     const moveToSessionHtml = isSession
       ? ''
       : `<button class="task-move-to-session" type="button" title="Move to queue" aria-label="Move to queue">
@@ -3936,7 +4495,6 @@ function renderTaskList(listEl, listId) {
       ${leadControlHtml}
       <span class="task-text">${escapeHtml(task.text)}</span>
       ${limitFieldHtml}
-      ${limitBadgeHtml}
       ${moveToSessionHtml}
     `;
 
@@ -3947,9 +4505,11 @@ function renderTaskList(listEl, listId) {
       showTaskContextMenu(e, listId, taskIndex);
     });
     li.addEventListener('click', (e) => {
-      if (e.target.closest('button, input, .task-limit-badge')) return;
+      if (e.target.closest('button, input, .task-limit-input')) return;
       playClickSound();
-      if (e.metaKey || e.ctrlKey) {
+      if (e.shiftKey) {
+        selectRange(task, listId);
+      } else if (e.metaKey || e.ctrlKey) {
         toggleSelection(task, listId);
       } else {
         selectOnly(task, listId);
@@ -3961,8 +4521,9 @@ function renderTaskList(listEl, listId) {
       moveBtn.addEventListener('mousedown', (e) => e.stopPropagation());
       moveBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        moveTask(listId, taskIndex, 'session', getSessionActiveInsertIndex());
+        moveTasks(getDragItems(listId, taskIndex), 'session', getSessionActiveInsertIndex());
       });
+      wireTaskLimitInput(li, listId, taskIndex);
     }
 
     if (isSession) {
@@ -3970,23 +4531,10 @@ function renderTaskList(listEl, listId) {
       moveBackBtn.addEventListener('mousedown', (e) => e.stopPropagation());
       moveBackBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const targetListId = getSourceListIdForTask(task);
-        moveTask('session', taskIndex, targetListId, getTasksForList(targetListId).length);
+        moveSelectedTasksToSources(getDragItems(listId, taskIndex));
       });
 
-      const limitInput = li.querySelector('.task-limit-input');
-      if (!isCompleted && limitInput) {
-        const saveLimit = () => {
-          state.sessionTasks[taskIndex].limitMs = parseManualLimit(limitInput.value);
-          persist();
-          renderEditView();
-        };
-        limitInput.addEventListener('mousedown', (e) => e.stopPropagation());
-        limitInput.addEventListener('blur', saveLimit);
-        limitInput.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') limitInput.blur();
-        });
-      }
+      if (!isCompleted) wireTaskLimitInput(li, listId, taskIndex);
     }
 
     li.addEventListener('dragstart', (e) => {
@@ -4180,11 +4728,16 @@ function renderPlannedSessions() {
         <button class="planned-session-toggle" type="button" aria-expanded="${isExpanded}" aria-label="${isExpanded ? 'Collapse' : 'Expand'} ${escapeHtml(session.name)}">
           <span class="planned-session-toggle-icon" aria-hidden="true"></span>
         </button>
-        ${renderPlannedSessionName(session, isExpanded)}
-        ${renderSessionEarningsBadge(session)}
+        <div class="planned-session-title">
+          ${renderPlannedSessionName(session, isExpanded)}
+        </div>
         <div class="planned-session-header-actions">
+          ${renderSessionEarningsBadge(session)}
           ${renderPlannedSessionDeleteButton(session)}
-          ${renderSessionBillableButton(session, sessionIndex === 0 ? 'billable' : null)}
+          <div class="planned-session-billable-group">
+            ${renderSessionEstimateBadge(session)}
+            ${renderSessionBillableButton(session, sessionIndex === 0 ? 'billable' : null)}
+          </div>
           <button
             type="button"
             class="session-send-to-queue-btn"
@@ -4237,11 +4790,11 @@ function renderPlannedSessions() {
     });
 
     header.addEventListener('click', (e) => {
-      if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn, .session-billable-btn, .session-send-to-queue-btn')) return;
+      if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn, .session-billable-btn, .session-send-to-queue-btn, .session-estimate-badge, .session-earnings-badge')) return;
       if (!isExpanded) expandSession(session.id);
     });
     header.addEventListener('contextmenu', (e) => {
-      if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn, .session-billable-btn, .session-send-to-queue-btn')) return;
+      if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn, .session-billable-btn, .session-send-to-queue-btn, .session-estimate-badge, .session-earnings-badge')) return;
       showSessionContextMenu(e, session.id);
     });
 
@@ -4584,7 +5137,7 @@ const TUTORIAL_STEPS = [
     selector: '[data-tutorial="settings-menu"]',
     arrowPlacement: 'above-heading',
     title: 'Your command center',
-    body: 'Tap the <strong>menu</strong> anytime for the good stuff: <strong>Templates</strong> for reusable task lists, <strong>Session history</strong> for past work and invoices, <strong>Personal Profile</strong> for your business info, <strong>Keyboard shortcuts</strong> for speed, <strong>Sound effects</strong> on/off, and <strong>Data &amp; backup</strong> to protect your progress. Replay this tour anytime from <strong>Tutorial</strong> at the bottom. More power features are landing soon — watch this space!',
+    body: 'Tap the <strong>menu</strong> anytime for the good stuff: <strong>Templates</strong> for reusable task lists, <strong>Session history</strong> for past work and invoices, <strong>Personal Profile</strong> for your business info, <strong>Keyboard shortcuts</strong> for speed, <strong>Sound effects</strong> on/off, and <strong>Data &amp; backup</strong> to protect your progress. Replay this tour anytime from <strong>Tutorial</strong> at the bottom.',
   },
   {
     id: 'sessions-panel',
@@ -5752,6 +6305,21 @@ function handleHistoryEntryDateInput(event) {
   updateHistoryEntryDate(entryId, input.value);
 }
 
+function getTemplateEditorDragHandleHtml() {
+  return `
+    <div class="template-editor-drag-handle" draggable="true" aria-label="Drag to reorder" title="Drag to reorder">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="9" cy="6" r="2"/>
+        <circle cx="15" cy="6" r="2"/>
+        <circle cx="9" cy="12" r="2"/>
+        <circle cx="15" cy="12" r="2"/>
+        <circle cx="9" cy="18" r="2"/>
+        <circle cx="15" cy="18" r="2"/>
+      </svg>
+    </div>
+  `;
+}
+
 function renderTemplateEditor() {
   if (!templateEditorState) return '';
 
@@ -5771,6 +6339,7 @@ function renderTemplateEditor() {
         <div class="template-editor-task-list" id="template-editor-list-tasks">
           ${tasks.map((task, index) => `
             <div class="template-editor-row" data-task-row="${index}">
+              ${getTemplateEditorDragHandleHtml()}
               <input class="template-editor-input template-editor-task-text" type="text" value="${escapeHtml(task.text)}" placeholder="Task" autocomplete="off" />
               <input class="template-editor-input template-editor-limit template-editor-task-limit" type="text" value="${escapeHtml(formatLimitField(task.limitMs))}" placeholder="20m" autocomplete="off" />
               <button type="button" class="template-row-btn template-row-btn--danger" data-remove-task-row="${index}" aria-label="Remove task">×</button>
@@ -5796,6 +6365,7 @@ function appendListTemplateEditorRow(listEl, { focus = true } = {}) {
   row.className = 'template-editor-row';
   row.dataset.taskRow = String(index);
   row.innerHTML = `
+    ${getTemplateEditorDragHandleHtml()}
     <input class="template-editor-input template-editor-task-text" type="text" value="" placeholder="Task" autocomplete="off" />
     <input class="template-editor-input template-editor-limit template-editor-task-limit" type="text" value="" placeholder="20m" autocomplete="off" />
     <button type="button" class="template-row-btn template-row-btn--danger" data-remove-task-row="${index}" aria-label="Remove task">×</button>
@@ -5831,6 +6401,121 @@ function bindListTemplateEditorKeyboard() {
   listEl.addEventListener('keydown', handleListTemplateEditorKeydown, true);
 }
 
+let templateEditorDragState = null;
+
+function reindexTemplateEditorRows(listEl) {
+  const rows = [...listEl.querySelectorAll('[data-task-row]')];
+  rows.forEach((row, index) => {
+    row.dataset.taskRow = String(index);
+    const removeBtn = row.querySelector('[data-remove-task-row]');
+    if (removeBtn) removeBtn.dataset.removeTaskRow = String(index);
+  });
+}
+
+function clearTemplateEditorDropIndicator(listEl) {
+  listEl?.querySelector('.template-editor-drop-indicator')?.remove();
+}
+
+function getTemplateEditorInsertIndex(listEl, clientY) {
+  const rows = [...listEl.querySelectorAll(':scope > .template-editor-row')];
+  if (rows.length === 0) return 0;
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const rect = rows[i].getBoundingClientRect();
+    if (clientY < rect.top + rect.height / 2) return i;
+  }
+  return rows.length;
+}
+
+function showTemplateEditorDropIndicator(listEl, clientY) {
+  const insertAt = getTemplateEditorInsertIndex(listEl, clientY);
+  const rows = [...listEl.querySelectorAll(':scope > .template-editor-row')];
+  let top;
+
+  if (rows.length === 0) {
+    top = 0;
+  } else if (insertAt >= rows.length) {
+    const last = rows[rows.length - 1];
+    top = last.offsetTop + last.offsetHeight + 3;
+  } else {
+    top = rows[insertAt].offsetTop - 3;
+  }
+
+  let indicator = listEl.querySelector('.template-editor-drop-indicator');
+  if (!indicator) {
+    indicator = document.createElement('div');
+    indicator.className = 'template-editor-drop-indicator';
+    indicator.setAttribute('aria-hidden', 'true');
+    listEl.appendChild(indicator);
+  }
+
+  indicator.dataset.insertAt = String(insertAt);
+  indicator.style.top = `${top}px`;
+}
+
+function bindListTemplateEditorReorder() {
+  const listEl = templatesModalBody?.querySelector('#template-editor-list-tasks');
+  if (!listEl) return;
+
+  listEl.addEventListener('dragstart', (e) => {
+    const handle = e.target.closest('.template-editor-drag-handle');
+    if (!handle) return;
+
+    const row = handle.closest('[data-task-row]');
+    if (!row) return;
+
+    templateEditorDragState = { row, listEl };
+    row.classList.add('template-editor-row--dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', row.dataset.taskRow || '0');
+  });
+
+  listEl.addEventListener('dragover', (e) => {
+    if (!templateEditorDragState || templateEditorDragState.listEl !== listEl) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    showTemplateEditorDropIndicator(listEl, e.clientY);
+  });
+
+  listEl.addEventListener('dragleave', (e) => {
+    if (!listEl.contains(e.relatedTarget)) {
+      clearTemplateEditorDropIndicator(listEl);
+    }
+  });
+
+  listEl.addEventListener('drop', (e) => {
+    if (!templateEditorDragState || templateEditorDragState.listEl !== listEl) return;
+    e.preventDefault();
+
+    const { row: fromRow } = templateEditorDragState;
+    const rows = [...listEl.querySelectorAll(':scope > .template-editor-row')];
+    const fromIndex = rows.indexOf(fromRow);
+    let insertAt = getTemplateEditorInsertIndex(listEl, e.clientY);
+
+    if (fromIndex !== -1 && fromIndex < insertAt) insertAt -= 1;
+    if (fromIndex === insertAt) {
+      clearTemplateEditorDropIndicator(listEl);
+      return;
+    }
+
+    const targetRow = rows[insertAt];
+    if (targetRow) {
+      listEl.insertBefore(fromRow, targetRow);
+    } else {
+      listEl.appendChild(fromRow);
+    }
+
+    reindexTemplateEditorRows(listEl);
+    clearTemplateEditorDropIndicator(listEl);
+  });
+
+  listEl.addEventListener('dragend', () => {
+    templateEditorDragState?.row?.classList.remove('template-editor-row--dragging');
+    templateEditorDragState = null;
+    clearTemplateEditorDropIndicator(listEl);
+  });
+}
+
 function renderTemplatesModal() {
   if (!templatesModalBody) return;
 
@@ -5862,6 +6547,7 @@ function renderTemplatesModal() {
 
   if (templateEditorState?.mode === 'list-new' || templateEditorState?.mode === 'list-edit') {
     bindListTemplateEditorKeyboard();
+    bindListTemplateEditorReorder();
   }
 }
 
@@ -6037,6 +6723,8 @@ function applySavedData(saved) {
   if (!state.sessionTasks[state.focusTaskIndex] || state.sessionTasks[state.focusTaskIndex].completed) {
     state.focusTaskIndex = Math.max(0, getNextFocusTaskIndex());
   }
+
+  resetUndoHistory();
 }
 
 function routeToSavedMode(saved) {
@@ -6640,6 +7328,7 @@ planSessionBtn.addEventListener('click', createPlannedSession);
 
 startBtn.addEventListener('click', startSlashing);
 
+document.addEventListener('keydown', handleUndoRedoShortcuts, true);
 document.addEventListener('keydown', handleEditModeEnterShortcuts, true);
 
 settingsBtn.addEventListener('click', (e) => {
@@ -6648,6 +7337,7 @@ settingsBtn.addEventListener('click', (e) => {
 });
 settingsDataBtn.addEventListener('click', openDataModal);
 settingsInvoiceBtn.addEventListener('click', openInvoiceSettingsModal);
+settingsLicenseBtn.addEventListener('click', () => openLicenseModal());
 settingsTemplatesBtn.addEventListener('click', openTemplatesModal);
 settingsHistoryBtn.addEventListener('click', () => openHistoryModal());
 settingsShortcutsBtn.addEventListener('click', openShortcutsModal);
@@ -6662,6 +7352,12 @@ invoiceSettingsAvatarInput?.addEventListener('change', handleInvoiceSettingsAvat
 invoiceSettingsAvatarRemoveBtn?.addEventListener('click', handleInvoiceSettingsAvatarRemove);
 invoiceSettingsModal.addEventListener('click', (e) => {
   if (e.target === invoiceSettingsModal) closeInvoiceSettingsModal();
+});
+licenseActivateBtn?.addEventListener('click', handleLicenseActivate);
+licenseBuyBtn?.addEventListener('click', handleLicenseBuy);
+licenseDeactivateBtn?.addEventListener('click', handleLicenseDeactivate);
+licenseModal?.addEventListener('click', (e) => {
+  if (e.target === licenseModal && isAppLicensed()) closeLicenseModal();
 });
 historyCloseBtn.addEventListener('click', closeHistoryModal);
 historyTabSessionsBtn?.addEventListener('click', () => setHistoryModalTab('sessions'));
@@ -6778,8 +7474,12 @@ completeTaskDurationInput.addEventListener('keydown', (e) => {
 
 taskContextCompleteBtn.addEventListener('click', () => {
   if (!taskContextMenuTarget) return;
-  const { listId, taskIndex } = taskContextMenuTarget;
   hideTaskContextMenu();
+  if (state.selectedTasks.size > 1) {
+    completeSelectedTasks();
+    return;
+  }
+  const { listId, taskIndex } = taskContextMenuTarget;
   openCompleteTaskModal(listId, taskIndex);
 });
 
@@ -6792,8 +7492,12 @@ taskContextDuplicateBtn.addEventListener('click', () => {
 
 taskContextDeleteBtn.addEventListener('click', () => {
   if (!taskContextMenuTarget) return;
-  const { listId, taskIndex } = taskContextMenuTarget;
   hideTaskContextMenu();
+  if (state.selectedTasks.size > 1) {
+    removeSelectedTasks();
+    return;
+  }
+  const { listId, taskIndex } = taskContextMenuTarget;
   removeTask(listId, taskIndex);
 });
 
@@ -6983,17 +7687,8 @@ resetBtn.addEventListener('click', () => {
 setupListDropZone(sessionList, 'session');
 setupListSelectionClear(sessionList);
 
-function loadExpandedSessionIds(saved) {
-  if (Array.isArray(saved.expandedSessionIds) && saved.expandedSessionIds.length > 0) {
-    state.expandedSessionIds = new Set(
-      saved.expandedSessionIds.filter((id) => getPlannedSession(id)),
-    );
-    if (state.expandedSessionIds.size === 0) {
-      expandAllSessions();
-    }
-  } else {
-    expandAllSessions();
-  }
+function loadExpandedSessionIds(_saved) {
+  state.expandedSessionIds = new Set();
 }
 
 function loadPlannedSessionsFromSaved(saved) {
@@ -7009,14 +7704,19 @@ function loadPlannedSessionsFromSaved(saved) {
     name: 'Braindump',
     tasks: (saved.braindumpTasks || []).map(normalizeBraindumpTask),
   }];
-  expandAllSessions();
+  state.expandedSessionIds = new Set();
 }
 
 async function init() {
-  const saved = await window.slashIt.loadData();
+  const [saved, cachedLicense] = await Promise.all([
+    window.slashIt.loadData(),
+    window.slashIt.license.getCachedStatus(),
+  ]);
+  applyLicenseStatus(cachedLicense);
   applySavedData(saved);
   routeToSavedMode(saved);
   isInitializing = false;
+  void refreshLicenseStatus();
 }
 
 init();

@@ -1,4 +1,4 @@
-const { app, dialog, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const fs = require('fs');
 const path = require('path');
@@ -8,15 +8,23 @@ const GITHUB_REPO = 'supaslash';
 const UPDATER_CACHE_DIR_NAME = 'supaslash-updater';
 const LOCAL_UPDATE_FEED = process.env.SUPASLASH_UPDATE_TEST_FEED;
 
+const UPDATE_WINDOW_SIZES = {
+  prompt: { width: 400, height: 340 },
+  promptCompact: { width: 400, height: 300 },
+  progress: { width: 400, height: 240 },
+};
+
 let quittingForUpdate = false;
 let manualCheckPending = false;
 let isDownloading = false;
 let downloadPromptOpen = false;
 let installPromptOpen = false;
 let updateReadyToInstall = false;
-let progressWindow = null;
+let updateUiWindow = null;
 let pendingUpdateCheck = null;
 let updaterLogPath = null;
+let updateWindowIpcReady = false;
+let pendingDialogResolve = null;
 
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = false;
@@ -97,10 +105,6 @@ function configureUpdaterLogging() {
   };
 }
 
-function getParentWindow() {
-  return BrowserWindow.getAllWindows().find((window) => !window.isDestroyed() && window !== progressWindow) || null;
-}
-
 function isQuittingForUpdate() {
   return quittingForUpdate;
 }
@@ -117,108 +121,180 @@ function setDockBadge(text) {
   }
 }
 
-function closeProgressWindow() {
-  if (progressWindow && !progressWindow.isDestroyed()) {
-    progressWindow.close();
-  }
-  progressWindow = null;
-}
+function ensureUpdateWindowIpc() {
+  if (updateWindowIpcReady) return;
+  updateWindowIpcReady = true;
 
-function openProgressWindow() {
-  closeProgressWindow();
+  ipcMain.on('update-window:response', (event, buttonIndex) => {
+    const resolve = pendingDialogResolve;
+    pendingDialogResolve = null;
+    if (typeof resolve === 'function') {
+      resolve(buttonIndex);
+    }
 
-  progressWindow = new BrowserWindow({
-    width: 360,
-    height: 140,
-    resizable: false,
-    minimizable: false,
-    maximizable: false,
-    fullscreenable: false,
-    title: 'Downloading Update',
-    show: false,
-    parent: getParentWindow() || undefined,
-    modal: Boolean(getParentWindow()),
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  });
-
-  const html = `<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <style>
-      body {
-        font: 13px -apple-system, BlinkMacSystemFont, sans-serif;
-        margin: 24px;
-        color: #111;
-      }
-      .bar {
-        height: 10px;
-        background: #e5e5e5;
-        border-radius: 5px;
-        overflow: hidden;
-      }
-      .fill {
-        height: 100%;
-        width: 0;
-        background: #007aff;
-        transition: width 0.2s ease;
-      }
-      p {
-        margin: 0 0 12px;
-      }
-    </style>
-  </head>
-  <body>
-    <p>Downloading update…</p>
-    <div class="bar"><div class="fill" id="fill"></div></div>
-    <p id="status">Starting…</p>
-  </body>
-</html>`;
-
-  progressWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-  progressWindow.once('ready-to-show', () => {
-    if (progressWindow && !progressWindow.isDestroyed()) {
-      progressWindow.show();
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win && !win.isDestroyed()) {
+      win.close();
     }
   });
 }
 
+function getUpdateHtmlPath() {
+  return path.join(__dirname, 'update-window.html');
+}
+
+function getUpdatePreloadPath() {
+  return path.join(__dirname, 'update-preload.js');
+}
+
+function closeUpdateUiWindow() {
+  if (updateUiWindow && !updateUiWindow.isDestroyed()) {
+    updateUiWindow.close();
+  }
+  updateUiWindow = null;
+  pendingDialogResolve = null;
+}
+
+function createUpdateUiWindow(sizeKey = 'prompt') {
+  const size = UPDATE_WINDOW_SIZES[sizeKey] || UPDATE_WINDOW_SIZES.prompt;
+
+  const window = new BrowserWindow({
+    width: size.width,
+    height: size.height,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    show: false,
+    frame: false,
+    backgroundColor: '#0a0a0a',
+    title: 'SupaSlash Update',
+    ...(process.platform === 'darwin' ? {
+      titleBarStyle: 'hidden',
+    } : {}),
+    webPreferences: {
+      preload: getUpdatePreloadPath(),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  window.loadFile(getUpdateHtmlPath());
+  return window;
+}
+
+function sendUpdateWindowPayload(window, payload) {
+  const deliver = () => {
+    if (window.isDestroyed()) return;
+    window.webContents.send('update-window:init', payload);
+    window.show();
+    window.focus();
+  };
+
+  if (window.webContents.isLoading()) {
+    window.webContents.once('did-finish-load', deliver);
+  } else {
+    deliver();
+  }
+}
+
+function showStyledPrompt({
+  title,
+  message,
+  detail = '',
+  buttons,
+  sizeKey = 'prompt',
+}) {
+  ensureUpdateWindowIpc();
+  closeUpdateUiWindow();
+
+  return new Promise((resolve) => {
+    const window = createUpdateUiWindow(sizeKey);
+    updateUiWindow = window;
+
+    pendingDialogResolve = (buttonIndex) => {
+      resolve(buttonIndex);
+    };
+
+    window.on('closed', () => {
+      if (pendingDialogResolve) {
+        const cancelIndex = Math.max(0, buttons.findIndex((button) => button.cancel));
+        pendingDialogResolve = null;
+        resolve(cancelIndex >= 0 ? cancelIndex : -1);
+      }
+      if (updateUiWindow === window) {
+        updateUiWindow = null;
+      }
+    });
+
+    sendUpdateWindowPayload(window, {
+      mode: 'prompt',
+      title,
+      message,
+      detail,
+      buttons,
+    });
+  });
+}
+
+function openProgressWindow() {
+  ensureUpdateWindowIpc();
+  closeUpdateUiWindow();
+
+  const window = createUpdateUiWindow('progress');
+  updateUiWindow = window;
+
+  window.on('closed', () => {
+    if (updateUiWindow === window) {
+      updateUiWindow = null;
+    }
+  });
+
+  sendUpdateWindowPayload(window, {
+    mode: 'progress',
+    percent: 0,
+    status: 'Starting…',
+  });
+}
+
 function updateProgressWindow(percent) {
-  if (!progressWindow || progressWindow.isDestroyed()) return;
+  if (!updateUiWindow || updateUiWindow.isDestroyed()) return;
   const rounded = Math.max(0, Math.min(100, Math.round(percent)));
-  progressWindow.webContents.executeJavaScript(
-    `document.getElementById('fill').style.width='${rounded}%';document.getElementById('status').textContent='${rounded}% complete';`
-  ).catch(() => {});
+  updateUiWindow.webContents.send('update-window:progress', {
+    percent: rounded,
+    status: `${rounded}% complete`,
+  });
 }
 
 async function showDownloadError(err) {
-  closeProgressWindow();
+  closeUpdateUiWindow();
   clearDockBadge();
   isDownloading = false;
 
   writeUpdaterLog(`Download failed: ${err?.message || err}`);
 
-  await dialog.showMessageBox(getDialogOptions({
-    type: 'error',
+  await showStyledPrompt({
     title: 'Download Failed',
     message: 'Could not download the update.',
     detail: `${err?.message || String(err)}\n\nLog: ${updaterLogPath || 'console'}`,
-  }));
+    buttons: [
+      { label: 'OK', primary: true },
+    ],
+    sizeKey: 'prompt',
+  });
 }
 
 async function promptDownload(info) {
-  const { response } = await dialog.showMessageBox(getDialogOptions({
-    type: 'info',
+  const response = await showStyledPrompt({
     title: 'Update Available',
     message: `SupaSlash ${info.version} is available.`,
-    detail: 'You are on version ' + app.getVersion() + '. Download and install the update now?',
-    buttons: ['Download', 'Later'],
-    defaultId: 0,
-    cancelId: 1,
-  }));
+    detail: `You are on version ${app.getVersion()}. Download and install the update now?`,
+    buttons: [
+      { label: 'Download', primary: true },
+      { label: 'Later', cancel: true },
+    ],
+    sizeKey: 'promptCompact',
+  });
 
   if (response !== 0) return;
 
@@ -245,11 +321,6 @@ async function promptDownload(info) {
   }
 }
 
-function getDialogOptions(options) {
-  // Standalone dialogs are more reliable than modal sheets on frameless windows.
-  return options;
-}
-
 async function runQuitAndInstall() {
   quittingForUpdate = true;
   writeUpdaterLog('Restarting to install update');
@@ -272,26 +343,26 @@ async function promptInstall(info) {
   installPromptOpen = true;
   updateReadyToInstall = true;
 
-  closeProgressWindow();
+  closeUpdateUiWindow();
   clearDockBadge();
   isDownloading = false;
   pendingUpdateCheck = null;
 
   writeUpdaterLog(`Update downloaded: ${info.version}`);
 
-  // Let the progress window finish closing before showing the install dialog.
   await new Promise((resolve) => setTimeout(resolve, 150));
 
   try {
-    const { response } = await dialog.showMessageBox(getDialogOptions({
-      type: 'info',
+    const response = await showStyledPrompt({
       title: 'Update Ready',
       message: `SupaSlash ${info.version} has been downloaded.`,
       detail: 'Restart now to install the update?',
-      buttons: ['Restart Now', 'Later'],
-      defaultId: 0,
-      cancelId: 1,
-    }));
+      buttons: [
+        { label: 'Restart Now', primary: true },
+        { label: 'Later', cancel: true },
+      ],
+      sizeKey: 'promptCompact',
+    });
 
     if (response === 0) {
       await runQuitAndInstall();
@@ -302,21 +373,27 @@ async function promptInstall(info) {
 }
 
 async function showNoUpdatesDialog() {
-  await dialog.showMessageBox(getDialogOptions({
-    type: 'info',
+  await showStyledPrompt({
     title: 'No Updates',
     message: 'You are on the latest version.',
     detail: `SupaSlash ${app.getVersion()} is up to date.`,
-  }));
+    buttons: [
+      { label: 'OK', primary: true },
+    ],
+    sizeKey: 'promptCompact',
+  });
 }
 
 async function checkForUpdates({ manual = false } = {}) {
   if (!app.isPackaged) {
     if (manual) {
-      await dialog.showMessageBox(getParentWindow() ?? undefined, {
-        type: 'info',
+      await showStyledPrompt({
         title: 'Check for Updates',
         message: 'Updates are only checked in installed builds.',
+        buttons: [
+          { label: 'OK', primary: true },
+        ],
+        sizeKey: 'promptCompact',
       });
     }
     return null;
@@ -340,11 +417,13 @@ async function checkForUpdates({ manual = false } = {}) {
     manualCheckPending = false;
     writeUpdaterLog(`Update check failed: ${err.message}`);
     if (manual) {
-      await dialog.showMessageBox(getParentWindow() ?? undefined, {
-        type: 'error',
+      await showStyledPrompt({
         title: 'Update Check Failed',
         message: 'Could not check for updates.',
         detail: err.message,
+        buttons: [
+          { label: 'OK', primary: true },
+        ],
       });
     }
     return null;
@@ -353,6 +432,8 @@ async function checkForUpdates({ manual = false } = {}) {
 
 function setupAutoUpdater() {
   if (!app.isPackaged) return;
+
+  ensureUpdateWindowIpc();
 
   try {
     updaterLogPath = path.join(app.getPath('logs'), 'updater.log');

@@ -122,10 +122,7 @@
       <button type="button" id="settings-templates-btn" class="settings-menu-item" role="menuitem">Templates</button>
       <button type="button" id="settings-history-btn" class="settings-menu-item" role="menuitem">Session history</button>
       <button type="button" id="settings-invoice-btn" class="settings-menu-item" role="menuitem">Personal Profile</button>
-      <button type="button" class="settings-menu-item settings-menu-item--disabled" role="menuitem" disabled aria-disabled="true">
-        <span>Power Features</span>
-        <span class="settings-menu-item-note">Coming Soon</span>
-      </button>
+      <button type="button" id="settings-license-btn" class="settings-menu-item" role="menuitem">License</button>
       <div class="settings-menu-divider" role="separator"></div>
       <button type="button" id="settings-sound-effects-btn" class="settings-menu-item" role="menuitemcheckbox" aria-checked="true">
         <span>Sound effects</span>
@@ -170,8 +167,20 @@
             <dd><kbd class="shortcut-key">⌘ Click</kbd></dd>
           </div>
           <div class="shortcuts-row">
+            <dt>Select task range</dt>
+            <dd><kbd class="shortcut-key">⇧ Click</kbd></dd>
+          </div>
+          <div class="shortcuts-row">
             <dt>Delete selected tasks</dt>
             <dd><kbd class="shortcut-key">Delete</kbd></dd>
+          </div>
+          <div class="shortcuts-row">
+            <dt>Undo last action</dt>
+            <dd><kbd class="shortcut-key">⌘ Z</kbd></dd>
+          </div>
+          <div class="shortcuts-row">
+            <dt>Redo last action</dt>
+            <dd><kbd class="shortcut-key">⌘ ⇧ Z</kbd></dd>
           </div>
           <div class="shortcuts-row">
             <dt>Rename task</dt>
@@ -415,6 +424,7 @@
   <div id="templates-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="templates-modal-title">
     <div class="clear-session-modal-card templates-modal-card">
       <h3 id="templates-modal-title" class="clear-session-modal-title">Templates</h3>
+      <p class="templates-modal-desc">In any session's task list, click <strong>+ NEW TASK</strong> and type <strong>/</strong> to search and insert a list template.</p>
       <div id="templates-modal-body" class="templates-modal-body"></div>
       <div class="templates-modal-actions">
         <button id="templates-close-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Close</button>
@@ -513,6 +523,26 @@
         <button id="history-export-invoice-btn" class="clear-session-modal-btn hidden" type="button">Create Invoice</button>
         <button id="history-export-pdf-btn" class="clear-session-modal-btn hidden" type="button">Create Report</button>
         <button id="history-close-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="license-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="license-modal-title">
+    <div class="clear-session-modal-card license-modal-card">
+      <h3 id="license-modal-title" class="clear-session-modal-title">License</h3>
+      <p id="license-modal-status" class="license-modal-status">Checking license…</p>
+      <p id="license-modal-detail" class="license-modal-detail hidden"></p>
+      <div id="license-modal-form" class="license-modal-form">
+        <label class="license-modal-label" for="license-key-input">License key</label>
+        <input id="license-key-input" class="template-editor-input license-modal-input" type="text" placeholder="Paste your license key" autocomplete="off" spellcheck="false" />
+        <label class="license-modal-label" for="license-email-input">Purchase email</label>
+        <input id="license-email-input" class="template-editor-input license-modal-input" type="email" placeholder="Email used at checkout" autocomplete="email" />
+      </div>
+      <p id="license-modal-error" class="license-modal-error hidden"></p>
+      <div class="license-modal-actions">
+        <button id="license-activate-btn" class="clear-session-modal-btn" type="button">Activate</button>
+        <button id="license-buy-btn" class="clear-session-modal-btn" type="button">Purchase SupaSlash</button>
+        <button id="license-deactivate-btn" class="clear-session-modal-btn license-modal-btn--secondary hidden" type="button">Deactivate this Mac</button>
       </div>
     </div>
   </div>

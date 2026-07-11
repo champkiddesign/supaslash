@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'" />
+  <title>SupaSlash Update</title>
+  <link rel="stylesheet" href="update-window.css" />
+</head>
+<body>
+  <div class="update-shell">
+    <div class="update-card">
+      <img src="assets/supaslash-logo.png" alt="" class="update-logo" width="140" height="39" />
+
+      <div id="prompt-view" class="update-view hidden">
+        <h1 id="prompt-title" class="update-title"></h1>
+        <p id="prompt-message" class="update-message"></p>
+        <p id="prompt-detail" class="update-detail"></p>
+        <div id="prompt-actions" class="update-actions"></div>
+      </div>
+
+      <div id="progress-view" class="update-view hidden">
+        <h1 class="update-title">Downloading Update</h1>
+        <div class="update-progress">
+          <p class="update-progress-label">Please wait</p>
+          <div class="update-progress-bar">
+            <div id="progress-fill" class="update-progress-fill"></div>
+          </div>
+          <p id="progress-status" class="update-progress-status">Starting…</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="update-window.js"></script>
+</body>
+</html>

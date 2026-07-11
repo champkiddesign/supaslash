@@ -1,7 +1,37 @@
 const { app, BrowserWindow, ipcMain, screen, nativeImage, dialog, shell, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
+
+function loadLocalEnvFile() {
+  const envPath = path.join(__dirname, '.env');
+  try {
+    if (!fs.existsSync(envPath)) return;
+    const content = fs.readFileSync(envPath, 'utf8');
+    content.split('\n').forEach((line) => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) return;
+      const separatorIndex = trimmed.indexOf('=');
+      if (separatorIndex <= 0) return;
+      const key = trimmed.slice(0, separatorIndex).trim();
+      let value = trimmed.slice(separatorIndex + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"'))
+        || (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      if (!process.env[key]) process.env[key] = value;
+    });
+  } catch (err) {
+    console.error('Failed to load .env file:', err);
+  }
+}
+
+loadLocalEnvFile();
+
 const { createDataStore } = require('./data-store');
+const { createLicenseStore } = require('./license-store');
+const { createLicenseService } = require('./license-service');
 const { setupAutoUpdater, checkForUpdates, isQuittingForUpdate } = require('./auto-updater');
 
 const CELEBRATION_DURATION_MS = 3500;
@@ -39,6 +69,8 @@ let focusWindowHiddenByUser = false;
 let suppressFocusMoveEvent = false;
 
 const dataStore = createDataStore(app);
+const licenseStore = createLicenseStore(app);
+const licenseService = createLicenseService(licenseStore, { allowDevLicense: !app.isPackaged });
 
 function getMainDisplay() {
   if (!isLiveWindow(mainWindow)) return screen.getPrimaryDisplay();
@@ -547,6 +579,12 @@ function setupAppMenu() {
         { role: 'quit' },
       ],
     },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+      ],
+    },
   ]));
 }
 
@@ -603,6 +641,9 @@ app.whenReady().then(() => {
   setupAppMenu();
   createWindow();
   setupAutoUpdater();
+  licenseService.validateStoredLicense().catch((err) => {
+    console.error('Failed to validate license on startup:', err);
+  });
 
   app.on('activate', () => {
     if (isQuittingForUpdate()) return;
@@ -732,6 +773,44 @@ ipcMain.handle('trigger-celebration', () => {
 ipcMain.handle('stop-celebration', () => {
   hideCelebrationOverlay();
   return true;
+});
+
+ipcMain.handle('license:get-cached-status', () => licenseService.getStatus());
+
+ipcMain.handle('license:get-status', async () => {
+  try {
+    return await licenseService.validateStoredLicense();
+  } catch (err) {
+    console.error('Failed to get license status:', err);
+    return licenseService.getStatus();
+  }
+});
+
+ipcMain.handle('license:activate', async (_event, payload = {}) => {
+  try {
+    return await licenseService.activateLicense(payload);
+  } catch (err) {
+    console.error('Failed to activate license:', err);
+    return { ok: false, status: { isLicensed: false, error: err.message } };
+  }
+});
+
+ipcMain.handle('license:deactivate', async () => {
+  try {
+    return await licenseService.deactivateLicense();
+  } catch (err) {
+    console.error('Failed to deactivate license:', err);
+    return { ok: false, status: { isLicensed: false, error: err.message } };
+  }
+});
+
+ipcMain.handle('license:open-checkout', async () => {
+  const checkoutUrl = licenseService.getCheckoutUrl();
+  if (!checkoutUrl) {
+    return { ok: false, error: 'Checkout link is not configured yet.' };
+  }
+  await shell.openExternal(checkoutUrl);
+  return { ok: true };
 });
 
 ipcMain.handle('load-data', () => dataStore.loadData());
