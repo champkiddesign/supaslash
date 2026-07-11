@@ -62,6 +62,7 @@ const settingsSoundEffectsStatus = document.getElementById('settings-sound-effec
 const settingsDataBtn = document.getElementById('settings-data-btn');
 const settingsInvoiceBtn = document.getElementById('settings-invoice-btn');
 const settingsLicenseBtn = document.getElementById('settings-license-btn');
+const settingsCheckUpdatesBtn = document.getElementById('settings-check-updates-btn');
 const settingsHistoryBtn = document.getElementById('settings-history-btn');
 const settingsTemplatesBtn = document.getElementById('settings-templates-btn');
 const settingsTutorialBtn = document.getElementById('settings-tutorial-btn');
@@ -122,6 +123,10 @@ const deleteHistoryModal = document.getElementById('delete-history-modal');
 const deleteHistoryMessage = document.getElementById('delete-history-message');
 const deleteHistoryConfirmBtn = document.getElementById('delete-history-confirm-btn');
 const deleteHistoryCancelBtn = document.getElementById('delete-history-cancel-btn');
+const appAlertModal = document.getElementById('app-alert-modal');
+const appAlertTitle = document.getElementById('app-alert-title');
+const appAlertMessage = document.getElementById('app-alert-message');
+const appAlertOkBtn = document.getElementById('app-alert-ok-btn');
 const billableModal = document.getElementById('billable-modal');
 const billableModalTitle = document.getElementById('billable-modal-title');
 const billableToggleBtn = document.getElementById('billable-toggle-btn');
@@ -910,14 +915,30 @@ function limitUnitToMs(value, unit) {
 
 function formatLimitField(limitMs) {
   if (!limitMs) return '';
-  if (limitMs >= 3600000) return `${limitMs / 3600000}h`;
-  if (limitMs >= 60000) return `${Math.round(limitMs / 60000)}m`;
-  return `${Math.round(limitMs / 1000)}s`;
+  const totalSeconds = Math.round(limitMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+  if (minutes > 0) return `${minutes}m`;
+  return `${seconds}s`;
 }
 
 function parseManualLimit(str) {
   if (!str || !str.trim()) return null;
-  const match = str.trim().match(/^(\d+(?:\.\d+)?)\s*(h|hrs?|hours?|m|mins?|minutes?|s|secs?|seconds?)?$/i);
+  const trimmed = str.trim();
+
+  const compoundMatch = trimmed.match(/^(\d+(?:\.\d+)?)\s*h(?:rs?|ours?)?\s*(\d+(?:\.\d+)?)\s*m(?:ins?|inutes?)?$/i);
+  if (compoundMatch) {
+    const hours = parseFloat(compoundMatch[1]);
+    const minutes = parseFloat(compoundMatch[2]);
+    return Math.round(hours * 3600000 + minutes * 60000);
+  }
+
+  const match = trimmed.match(/^(\d+(?:\.\d+)?)\s*(h|hrs?|hours?|m|mins?|minutes?|s|secs?|seconds?)?$/i);
   if (!match) return null;
   const value = parseFloat(match[1]);
   const unit = match[2] || 'm';
@@ -1106,6 +1127,12 @@ function calculateBillableEarnings(durationMs, rate, roundMinutes) {
 function calculateBillableEarningsFromMs(ms, rate) {
   if (!rate || ms == null || ms <= 0) return 0;
   return (ms / 3600000) * rate;
+}
+
+function entryHasBillableTasks(entry) {
+  return (entry?.tasks || []).some(
+    (task) => task.hourlyRateEnabled && task.hourlyRate && task.durationMs > 0,
+  );
 }
 
 function getTaskBillableDurationMs(task, durationMs, roundMinutes, roundScope) {
@@ -1838,7 +1865,7 @@ async function handleLicenseDeactivate() {
 async function handleLicenseBuy() {
   const result = await window.slashIt.license.openCheckout();
   if (!result?.ok) {
-    window.alert(result?.error || 'Checkout link is not configured yet.');
+    showAppAlert(result?.error || 'Checkout link is not configured yet.', { title: 'Purchase' });
   }
 }
 
@@ -2972,7 +2999,7 @@ function normalizeSessionHistoryTask(task) {
     if (task.billableDurationMs != null) {
       normalized.billableDurationMs = task.billableDurationMs;
     }
-    normalized.earnings = task.earnings ?? getHistoryTaskEarnings(normalized);
+    normalized.earnings = getHistoryTaskEarnings(normalized);
   }
 
   return normalized;
@@ -2991,20 +3018,15 @@ function getHistoryTaskRateSettings(task) {
 }
 
 function getHistoryTaskEarnings(task) {
-  const { enabled, rate, roundMinutes, roundScope } = getHistoryTaskRateSettings(task);
+  const { enabled, rate } = getHistoryTaskRateSettings(task);
   if (!enabled || !rate) return 0;
-  if (!task.durationMs || task.durationMs <= 0) return 0;
-
-  if (roundScope === 'task') {
-    const billableMs = task.billableDurationMs ?? roundUpBillableMs(task.durationMs, roundMinutes);
-    return calculateBillableEarningsFromMs(billableMs, rate);
-  }
-
-  return calculateBillableEarnings(task.durationMs, rate, roundMinutes);
+  const billableMs = getHistoryTaskBillableDurationMs(task);
+  if (!billableMs || billableMs <= 0) return 0;
+  return calculateBillableEarningsFromMs(billableMs, rate);
 }
 
 function getHistoryEntryEarnings(entry) {
-  if (!entry.billable) return 0;
+  if (!entryHasBillableTasks(entry)) return 0;
   return entry.tasks.reduce((sum, task) => sum + getHistoryTaskEarnings(task), 0);
 }
 
@@ -3025,15 +3047,17 @@ function getHistoryEntryTotalMs(entry) {
 function getHistoryTaskBillableDurationMs(task) {
   const { enabled, rate, roundMinutes, roundScope } = getHistoryTaskRateSettings(task);
   if (!enabled || !rate || !task.durationMs || task.durationMs <= 0) return 0;
-  if (!roundMinutes) return task.durationMs;
   if (roundScope === 'task') {
-    return task.billableDurationMs ?? roundUpBillableMs(task.durationMs, roundMinutes);
+    if (task.billableDurationMs != null) return task.billableDurationMs;
+    if (!roundMinutes) return task.durationMs;
+    return roundUpBillableMs(task.durationMs, roundMinutes);
   }
+  if (!roundMinutes) return task.durationMs;
   return roundUpBillableMs(task.durationMs, roundMinutes);
 }
 
 function getHistoryEntryBillableTotalMs(entry) {
-  if (!entry.billable) return getHistoryEntryTotalMs(entry);
+  if (!entryHasBillableTasks(entry)) return getHistoryEntryTotalMs(entry);
   if (!entry?.tasks?.length) return entry?.totalMs || 0;
 
   let total = 0;
@@ -3049,7 +3073,7 @@ function getHistoryEntryBillableTotalMs(entry) {
 }
 
 function getHistoryEntryDisplayHourlyRate(entry) {
-  if (!entry.billable) return null;
+  if (!entryHasBillableTasks(entry)) return null;
   if (sessionHasMixedRates(entry)) return null;
   const task = entry.tasks.find((t) => t.hourlyRateEnabled && t.hourlyRate);
   return task?.hourlyRate ?? null;
@@ -3075,7 +3099,7 @@ function getReportTotalsDisplayRate(billableSessions) {
 }
 
 function sessionHasMixedRates(entry) {
-  if (!entry.billable) return false;
+  if (!entryHasBillableTasks(entry)) return false;
   const rates = new Set(
     entry.tasks
       .filter((task) => task.hourlyRateEnabled && task.hourlyRate)
@@ -3309,13 +3333,83 @@ function formatInvoiceHours(durationMs) {
   return (durationMs / 3600000).toFixed(2);
 }
 
+function formatBillableHours(durationMs) {
+  return formatInvoiceHours(durationMs);
+}
+
+function formatBillableDurationDisplay(trackedMs, billedMs) {
+  if (!billedMs || billedMs <= 0) return formatTime(trackedMs || 0);
+  const billedHours = formatBillableHours(billedMs);
+  if (!trackedMs || trackedMs <= 0 || Math.abs(trackedMs - billedMs) < 1000) {
+    return `${billedHours} hr`;
+  }
+  return `${formatLimitField(trackedMs)} → ${billedHours} hr`;
+}
+
+function buildInvoiceLineItems(report) {
+  const { entries } = getFilteredReportEntries();
+  const tasksWithMeta = [];
+
+  for (const entry of entries) {
+    const dateKey = getLocalDateKey(entry.endedAt);
+    const name = getHistoryEntryDisplayName(entry);
+    for (const task of entry.tasks) {
+      if (!task.hourlyRateEnabled || !task.hourlyRate || !task.durationMs || task.durationMs <= 0) continue;
+      if (task.status !== 'completed') continue;
+      tasksWithMeta.push({ task, dateKey, dateMs: entry.endedAt, name });
+    }
+  }
+
+  const groups = new Map();
+  for (const item of tasksWithMeta) {
+    const rate = item.task.hourlyRate;
+    const key = `${item.dateKey}|${item.name}|${rate}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        dateKey: item.dateKey,
+        dateMs: item.dateMs,
+        name: item.name,
+        rate,
+        tasks: [],
+      });
+    }
+    groups.get(key).tasks.push(item.task);
+  }
+
+  return Array.from(groups.values())
+    .map((group) => {
+      let billedMs = 0;
+      let earnings = 0;
+      for (const task of group.tasks) {
+        billedMs += getHistoryTaskBillableDurationMs(task);
+        earnings += getHistoryTaskEarnings(task);
+      }
+
+      const trackedMs = group.tasks.reduce((sum, task) => sum + task.durationMs, 0);
+
+      return {
+        date: group.dateMs,
+        dateKey: group.dateKey,
+        name: group.name,
+        description: `${group.name} (${group.tasks.length} task${group.tasks.length === 1 ? '' : 's'})`,
+        durationMs: billedMs,
+        trackedMs,
+        displayRate: group.rate,
+        hasMixedRates: false,
+        earnings,
+        taskCount: group.tasks.length,
+      };
+    })
+    .filter((line) => (line.earnings || 0) > 0)
+    .sort((a, b) => a.date - b.date);
+}
+
 function getInvoiceBillableLines(report) {
-  if (!report?.sessions?.length) return [];
-  return report.sessions.filter((session) => session.billable && (session.earnings || 0) > 0);
+  return buildInvoiceLineItems(report);
 }
 
 function getInvoiceBillableTotal(report) {
-  return getInvoiceBillableLines(report).reduce((sum, session) => sum + (session.earnings || 0), 0);
+  return getInvoiceBillableLines(report).reduce((sum, line) => sum + (line.earnings || 0), 0);
 }
 
 function groupEarningsByDay(entries) {
@@ -3323,7 +3417,7 @@ function groupEarningsByDay(entries) {
 
   for (const entry of entries) {
     const dateKey = getLocalDateKey(entry.endedAt);
-    const earnings = entry.billable ? getHistoryEntryEarnings(entry) : 0;
+    const earnings = entryHasBillableTasks(entry) ? getHistoryEntryEarnings(entry) : 0;
     const existing = buckets.get(dateKey) || {
       dateKey,
       dateMs: parseDateInputToStartMs(dateKey),
@@ -3342,19 +3436,23 @@ function groupEarningsByDay(entries) {
 }
 
 function buildEarningsReportData(entries, range) {
-  const sessions = entries.map((entry) => ({
-    id: entry.id,
-    date: entry.endedAt,
-    name: getHistoryEntryDisplayName(entry),
-    durationMs: entry.billable
-      ? getHistoryEntryBillableTotalMs(entry)
-      : getHistoryEntryTotalMs(entry),
-    earnings: entry.billable ? getHistoryEntryEarnings(entry) : null,
-    displayRate: getHistoryEntryDisplayHourlyRate(entry),
-    hasMixedRates: sessionHasMixedRates(entry),
-    status: entry.status === 'abandoned' ? 'Abandoned' : 'Completed',
-    billable: !!entry.billable,
-  }));
+  const sessions = entries.map((entry) => {
+    const billable = entryHasBillableTasks(entry);
+    const trackedMs = getHistoryEntryTotalMs(entry);
+    const billedMs = billable ? getHistoryEntryBillableTotalMs(entry) : trackedMs;
+    return {
+      id: entry.id,
+      date: entry.endedAt,
+      name: getHistoryEntryDisplayName(entry),
+      durationMs: billedMs,
+      trackedMs,
+      earnings: billable ? getHistoryEntryEarnings(entry) : null,
+      displayRate: getHistoryEntryDisplayHourlyRate(entry),
+      hasMixedRates: sessionHasMixedRates(entry),
+      status: entry.status === 'abandoned' ? 'Abandoned' : 'Completed',
+      billable,
+    };
+  });
 
   const dailyBars = groupEarningsByDay(entries).map((day) => ({
     label: formatReportDay(day.dateMs),
@@ -3465,7 +3563,13 @@ function getFilteredReportEntries() {
 }
 
 function recalculateHistoryEntryBillable(entry) {
+  entry.billable = entry.tasks.some((task) => task.hourlyRateEnabled && task.hourlyRate);
+
   if (!entry.billable) {
+    entry.tasks.forEach((task) => {
+      delete task.billableDurationMs;
+      delete task.earnings;
+    });
     entry.totalEarnings = null;
     entry.totalMs = getHistoryEntryTotalMs(entry);
     return;
@@ -3506,9 +3610,7 @@ function normalizeSessionHistoryEntry(entry) {
     tasks,
   };
 
-  normalized.totalEarnings = billable
-    ? (entry.totalEarnings ?? getHistoryEntryEarnings(normalized))
-    : null;
+  normalized.totalEarnings = billable ? getHistoryEntryEarnings(normalized) : null;
   normalized.totalMs = getHistoryEntryTotalMs(normalized);
 
   return normalized;
@@ -3520,6 +3622,52 @@ function updateHistoryTaskDuration(entryId, taskIndex, durationMs) {
 
   const task = entry.tasks[taskIndex];
   task.durationMs = durationMs;
+  recalculateHistoryEntryBillable(entry);
+  persist();
+  refreshHistoryModalPanels();
+}
+
+function applyBillableSettingsToHistoryTask(task, settings) {
+  task.hourlyRateEnabled = true;
+  task.hourlyRate = settings.rate;
+  task.billableRoundMinutes = settings.roundMinutes;
+  task.billableRoundScope = settings.roundScope;
+}
+
+function clearBillableSettingsFromHistoryTask(task) {
+  delete task.hourlyRateEnabled;
+  delete task.hourlyRate;
+  delete task.billableRoundMinutes;
+  delete task.billableRoundScope;
+  delete task.billableDurationMs;
+  delete task.earnings;
+}
+
+function canToggleHistoryTaskBillable(task) {
+  return task.status === 'completed' && task.durationMs > 0;
+}
+
+function toggleHistoryTaskBillable(entryId, taskIndex, enabled) {
+  const entry = state.sessionHistory.find((item) => item.id === entryId);
+  if (!entry || !entry.tasks[taskIndex]) return;
+
+  const task = entry.tasks[taskIndex];
+  if (!canToggleHistoryTaskBillable(task)) return;
+
+  if (enabled) {
+    const sessionId = task.sourceSessionId || BRAINDUMP_SESSION_ID;
+    const settings = getPlannedSessionRateSettings(sessionId);
+    if (!settings.enabled || !settings.rate) {
+      const session = getPlannedSession(sessionId);
+      const name = session?.name || task.sourceSessionName || 'this session';
+      showAppAlert(`Set an hourly rate on ${name} first (use the $ button on the session).`, { title: 'Hourly rate required' });
+      return;
+    }
+    applyBillableSettingsToHistoryTask(task, settings);
+  } else {
+    clearBillableSettingsFromHistoryTask(task);
+  }
+
   recalculateHistoryEntryBillable(entry);
   persist();
   refreshHistoryModalPanels();
@@ -3590,7 +3738,7 @@ function archiveCurrentSession(status) {
 
   const tasks = buildHistoryTasks();
   if (tasks.length === 0) return null;
-  const billable = tasks.some((task) => task.hourlyRateEnabled && task.hourlyRate);
+  const billable = entryHasBillableTasks({ tasks });
   const totalEarnings = billable
     ? tasks.reduce((sum, task) => sum + (task.earnings || 0), 0)
     : null;
@@ -5007,7 +5155,7 @@ async function handleInvoiceSettingsAvatarChange() {
     invoiceSettingsFormLogoDataUrl = await processInvoiceLogoFile(file);
     updateInvoiceSettingsAvatarPreview(invoiceSettingsFormLogoDataUrl);
   } catch (err) {
-    window.alert(err?.message || 'Could not use that image.');
+    showAppAlert(err?.message || 'Could not use that image.', { title: 'Profile photo' });
   } finally {
     if (invoiceSettingsAvatarInput) {
       invoiceSettingsAvatarInput.value = '';
@@ -5060,7 +5208,7 @@ async function handleRestoreFromBackup() {
   const result = await window.slashIt.restoreDataFromFile();
   if (result.canceled) return;
   if (result.error) {
-    window.alert(result.error);
+    showAppAlert(result.error, { title: 'Restore backup' });
     return;
   }
   closeDataModal();
@@ -5424,11 +5572,23 @@ function renderHistoryTaskItem(task, entryId, taskIndex) {
   const durationValue = escapeHtml(formatLimitField(task.durationMs));
   const showBillable = task.hourlyRateEnabled && task.hourlyRate;
   const earnings = showBillable ? formatCurrency(getHistoryTaskEarnings(task)) : '';
+  const canToggleBillable = canToggleHistoryTaskBillable(task);
+  const billableToggle = canToggleBillable
+    ? `<button
+          type="button"
+          class="history-task-billable-toggle${showBillable ? ' history-task-billable-toggle--on' : ''}"
+          data-entry-id="${escapeHtml(entryId)}"
+          data-task-index="${taskIndex}"
+          aria-pressed="${showBillable ? 'true' : 'false'}"
+          title="${showBillable ? 'Mark non-billable' : 'Mark billable'}"
+        >$</button>`
+    : '';
 
   return `
     <li class="history-task-item ${statusClass}" data-entry-id="${escapeHtml(entryId)}" data-task-index="${taskIndex}">
       <span class="history-task-label">${escapeHtml(task.text)}${suffix}</span>
       <div class="history-task-meta">
+        ${billableToggle}
         <input
           type="text"
           class="history-task-duration-input"
@@ -5473,7 +5633,7 @@ function renderReportSummary(report) {
       : '';
   return `
     <span class="history-report-summary-item"><strong>${totals.sessionCount}</strong> session${totals.sessionCount === 1 ? '' : 's'}</span>
-    <span class="history-report-summary-item"><strong>${escapeHtml(formatTime(totals.totalMs))}</strong> tracked</span>
+    <span class="history-report-summary-item"><strong>${escapeHtml(formatTime(totals.totalMs))}</strong> billed</span>
     <span class="history-report-summary-item history-report-summary-item--earnings"><strong>${escapeHtml(formatCurrency(totals.totalEarnings))}</strong> earned</span>
     ${rateSummary}
   `;
@@ -5486,16 +5646,21 @@ function renderReportTable(report) {
     return;
   }
 
-  historyReportTableBody.innerHTML = report.sessions.map((session) => `
+  historyReportTableBody.innerHTML = report.sessions.map((session) => {
+    const durationDisplay = session.billable
+      ? formatBillableDurationDisplay(session.trackedMs, session.durationMs)
+      : formatTime(session.durationMs);
+    return `
     <tr>
       <td>${escapeHtml(formatReportDate(session.date))}</td>
       <td>${escapeHtml(session.name)}</td>
-      <td>${escapeHtml(formatTime(session.durationMs))}</td>
+      <td>${escapeHtml(durationDisplay)}</td>
       <td class="history-report-earnings">${session.billable ? escapeHtml(formatCurrency(session.earnings || 0)) : '—'}</td>
       <td>${session.billable ? escapeHtml(formatReportHourlyRate(session.displayRate, session.hasMixedRates)) : '—'}</td>
       <td>${escapeHtml(session.status)}</td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
   historyReportTableFoot.innerHTML = `
     <tr>
@@ -5705,14 +5870,6 @@ const EARNINGS_REPORT_PDF_STYLES = `
   }
 `;
 
-const EARNINGS_REPORT_SCOPED_PDF_STYLES = EARNINGS_REPORT_PDF_STYLES
-  .replace(/(^|\n)([^{}\n][^{]*)\{/g, (match, prefix, selector) => {
-    if (selector.trim().startsWith('*') || selector.trim().startsWith('body')) {
-      return match;
-    }
-    return `${prefix}.report-page ${selector.trim()} {`;
-  });
-
 const INVOICE_PDF_STYLES = `
   ${PDF_BASE_STYLES}
   body { line-height: 1.5; }
@@ -5792,13 +5949,6 @@ const INVOICE_PDF_STYLES = `
   }
 `;
 
-const PDF_PAGE_BREAK_STYLES = `
-  .pdf-page-break {
-    page-break-after: always;
-    break-after: page;
-  }
-`;
-
 function buildEarningsReportContent(report) {
   const dailyChart = renderReportBarChart(
     report.dailyBars,
@@ -5808,16 +5958,21 @@ function buildEarningsReportContent(report) {
     report.sessionBars,
     'No billable sessions in this range.',
   );
-  const tableRows = report.sessions.map((session) => `
+  const tableRows = report.sessions.map((session) => {
+    const durationDisplay = session.billable
+      ? formatBillableDurationDisplay(session.trackedMs, session.durationMs)
+      : formatTime(session.durationMs);
+    return `
     <tr>
       <td>${escapeHtml(formatReportDate(session.date))}</td>
       <td>${escapeHtml(session.name)}</td>
-      <td>${escapeHtml(formatTime(session.durationMs))}</td>
+      <td>${escapeHtml(durationDisplay)}</td>
       <td class="earnings">${session.billable ? escapeHtml(formatCurrency(session.earnings || 0)) : '—'}</td>
       <td>${session.billable ? escapeHtml(formatReportHourlyRate(session.displayRate, session.hasMixedRates)) : '—'}</td>
       <td>${escapeHtml(session.status)}</td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
   const footnote = report.hasMixedRatesNote
     ? '<p class="footnote">Sessions with mixed billing rates show "Mixed" in the hourly rate column.</p>'
@@ -5834,7 +5989,7 @@ function buildEarningsReportContent(report) {
   <p class="subtitle">${escapeHtml(report.range.startLabel)} – ${escapeHtml(report.range.endLabel)}${report.range.sessionName ? `<br />Session: ${escapeHtml(report.range.sessionName)}` : ''}</p>
   <div class="summary">
     <span><strong>${report.totals.sessionCount}</strong> session${report.totals.sessionCount === 1 ? '' : 's'}</span>
-    <span><strong>${escapeHtml(formatTime(report.totals.totalMs))}</strong> tracked</span>
+    <span><strong>${escapeHtml(formatTime(report.totals.totalMs))}</strong> billed</span>
     <span class="earnings"><strong>${escapeHtml(formatCurrency(report.totals.totalEarnings))}</strong> earned</span>
     ${rateSummary}
   </div>
@@ -5853,7 +6008,7 @@ function buildEarningsReportContent(report) {
         <tr>
           <th>Date</th>
           <th>Session</th>
-          <th>Duration</th>
+          <th>Hours</th>
           <th>Earnings</th>
           <th>Hourly rate</th>
           <th>Status</th>
@@ -5906,15 +6061,15 @@ function buildInvoiceContent(report, invoiceSettings, invoiceDateMs = Date.now()
   const billableLines = getInvoiceBillableLines(report);
   const totalDue = getInvoiceBillableTotal(report);
   const billTo = (report.range.sessionName || '').trim() || 'Multiple sessions';
-  const hasMixedRatesNote = billableLines.some((session) => session.hasMixedRates);
+  const hasMixedRatesNote = billableLines.some((line) => line.hasMixedRates);
 
-  const lineRows = billableLines.map((session) => `
+  const lineRows = billableLines.map((line) => `
     <tr>
-      <td>${escapeHtml(formatReportDate(session.date))}</td>
-      <td>${escapeHtml(session.name)}</td>
-      <td>${escapeHtml(formatInvoiceHours(session.durationMs))}</td>
-      <td>${escapeHtml(formatReportHourlyRate(session.displayRate, session.hasMixedRates))}</td>
-      <td class="amount">${escapeHtml(formatCurrency(session.earnings || 0))}</td>
+      <td>${escapeHtml(formatReportDate(line.date))}</td>
+      <td>${escapeHtml(line.description)}</td>
+      <td>${escapeHtml(formatBillableHours(line.durationMs))}</td>
+      <td>${escapeHtml(formatReportHourlyRate(line.displayRate, line.hasMixedRates))}</td>
+      <td class="amount">${escapeHtml(formatCurrency(line.earnings || 0))}</td>
     </tr>
   `).join('');
 
@@ -5970,21 +6125,6 @@ function buildInvoiceHtml(report, invoiceSettings) {
   );
 }
 
-function buildInvoiceWithReportHtml(report, invoiceSettings) {
-  const invoiceDateMs = Date.now();
-  const invoiceNumber = generateInvoiceNumber(report.range.sessionName, invoiceDateMs);
-  const styles = `${INVOICE_PDF_STYLES}${PDF_PAGE_BREAK_STYLES}${EARNINGS_REPORT_SCOPED_PDF_STYLES}`;
-  const bodyHtml = `
-    <div class="invoice-page pdf-page-break">
-      ${buildInvoiceContent(report, invoiceSettings, invoiceDateMs)}
-    </div>
-    <div class="report-page">
-      ${buildEarningsReportContent(report)}
-    </div>
-  `;
-  return wrapPdfHtml(`Invoice ${invoiceNumber}`, styles, bodyHtml);
-}
-
 async function handleExportEarningsReportPdf() {
   const { report } = getFilteredReportEntries();
   if (!report?.sessions.length) return;
@@ -6002,7 +6142,7 @@ async function handleExportEarningsReportPdf() {
       dialogTitle: 'Create report',
     });
     if (result.error) {
-      window.alert(result.error);
+      showAppAlert(result.error, { title: 'Create report' });
     }
   } finally {
     const { report: latestReport } = getFilteredReportEntries();
@@ -6019,7 +6159,7 @@ async function handleExportInvoicePdf() {
   const defaultFileName = report.range.sessionName
     ? `Invoice ${sanitizeFileNamePart(sessionNameToInvoicePrefix(report.range.sessionName))} ${formatInvoiceNumberDate(invoiceDateMs)}.pdf`
     : `Invoice ${formatInvoiceNumberDate(invoiceDateMs)}.pdf`;
-  const html = buildInvoiceWithReportHtml(report, state.invoiceSettings);
+  const html = buildInvoiceHtml(report, state.invoiceSettings);
 
   historyExportInvoiceBtn.disabled = true;
   try {
@@ -6029,7 +6169,7 @@ async function handleExportInvoicePdf() {
       dialogTitle: 'Create invoice',
     });
     if (result.error) {
-      window.alert(result.error);
+      showAppAlert(result.error, { title: 'Create invoice' });
     }
   } finally {
     const { report: latestReport } = getFilteredReportEntries();
@@ -6075,8 +6215,10 @@ function renderHistoryEntry(entry) {
     ? 'history-status-badge--abandoned'
     : 'history-status-badge--completed';
   const taskSummary = `${entry.completedCount} of ${entry.totalCount} task${entry.totalCount === 1 ? '' : 's'}`;
-  const earningsSummary = entry.billable
-    ? ` · ${formatCurrency(entry.totalEarnings ?? getHistoryEntryEarnings(entry))}`
+  const hasBillableTasks = entryHasBillableTasks(entry);
+  const entryEarnings = hasBillableTasks ? getHistoryEntryEarnings(entry) : 0;
+  const earningsSummary = hasBillableTasks && entryEarnings > 0
+    ? ` · ${formatCurrency(entryEarnings)}`
     : '';
 
   return `
@@ -6086,7 +6228,7 @@ function renderHistoryEntry(entry) {
           <div class="history-entry-top">
             <span class="history-entry-name">${escapeHtml(getHistoryEntryDisplayName(entry))}</span>
             <span class="history-status-badge ${statusClass}">${statusLabel}</span>
-            ${entry.billable ? '<span class="history-status-badge history-status-badge--billable">Billable</span>' : ''}
+            ${hasBillableTasks ? '<span class="history-status-badge history-status-badge--billable">Billable</span>' : ''}
           </div>
           <div class="history-entry-meta">
             ${escapeHtml(formatRelativeBackupTime(entry.endedAt))} · ${escapeHtml(formatTime(getHistoryEntryTotalMs(entry)))} · ${escapeHtml(taskSummary)}${escapeHtml(earningsSummary)}
@@ -6108,10 +6250,10 @@ function renderHistoryEntry(entry) {
         <ul class="history-task-list">
           ${entry.tasks.map((task, taskIndex) => renderHistoryTaskItem(task, entry.id, taskIndex)).join('')}
         </ul>
-        ${entry.billable ? `
+        ${hasBillableTasks && entryEarnings > 0 ? `
           <div class="history-entry-billable-summary">
             <span class="history-entry-billable-label">Total earnings</span>
-            <span class="history-entry-billable-amount">${escapeHtml(formatCurrency(entry.totalEarnings ?? getHistoryEntryEarnings(entry)))}</span>
+            <span class="history-entry-billable-amount">${escapeHtml(formatCurrency(entryEarnings))}</span>
           </div>
         ` : ''}
         <div class="history-entry-actions">
@@ -6203,6 +6345,26 @@ function closeHistoryModal() {
   historyHighlightRunId = null;
 }
 
+let appAlertResolve = null;
+
+function showAppAlert(message, { title = 'Notice' } = {}) {
+  return new Promise((resolve) => {
+    appAlertTitle.textContent = title;
+    appAlertMessage.textContent = message;
+    appAlertResolve = resolve;
+    appAlertModal.classList.remove('hidden');
+    requestAnimationFrame(() => appAlertOkBtn.focus());
+  });
+}
+
+function closeAppAlert() {
+  appAlertModal.classList.add('hidden');
+  if (appAlertResolve) {
+    appAlertResolve();
+    appAlertResolve = null;
+  }
+}
+
 function openDeleteHistoryModal(entryId) {
   const entry = state.sessionHistory.find((item) => item.id === entryId);
   if (!entry) return;
@@ -6240,6 +6402,19 @@ function deleteHistoryEntry(entryId) {
 
 function handleHistoryListClick(event) {
   if (event.target.closest('.history-task-duration-input') || event.target.closest('.history-entry-date-input')) return;
+
+  const billableToggle = event.target.closest('.history-task-billable-toggle');
+  if (billableToggle) {
+    event.stopPropagation();
+    const entryId = billableToggle.dataset.entryId;
+    const taskIndex = Number(billableToggle.dataset.taskIndex);
+    if (!entryId || !Number.isInteger(taskIndex)) return;
+    const entry = state.sessionHistory.find((item) => item.id === entryId);
+    const task = entry?.tasks[taskIndex];
+    const enabled = !(task?.hourlyRateEnabled && task?.hourlyRate);
+    toggleHistoryTaskBillable(entryId, taskIndex, enabled);
+    return;
+  }
 
   const restoreBtn = event.target.closest('.history-restore-btn');
   if (restoreBtn) {
@@ -6624,15 +6799,15 @@ function handleTemplatesModalClick(event) {
     const excludeId = templateEditorState?.mode === 'list-edit' ? templateEditorState.id : null;
 
     if (!name) {
-      window.alert('Enter a template name.');
+      showAppAlert('Enter a template name.', { title: 'Save template' });
       return;
     }
     if (tasks.length === 0) {
-      window.alert('Add at least one task.');
+      showAppAlert('Add at least one task.', { title: 'Save template' });
       return;
     }
     if (isListTemplateNameTaken(name, excludeId)) {
-      window.alert('A list template with that name already exists.');
+      showAppAlert('A list template with that name already exists.', { title: 'Save template' });
       return;
     }
 
@@ -7338,6 +7513,12 @@ settingsBtn.addEventListener('click', (e) => {
 settingsDataBtn.addEventListener('click', openDataModal);
 settingsInvoiceBtn.addEventListener('click', openInvoiceSettingsModal);
 settingsLicenseBtn.addEventListener('click', () => openLicenseModal());
+settingsCheckUpdatesBtn.addEventListener('click', () => {
+  hideSettingsMenu();
+  window.slashIt.checkForUpdates().catch((err) => {
+    console.error('Manual update check failed:', err);
+  });
+});
 settingsTemplatesBtn.addEventListener('click', openTemplatesModal);
 settingsHistoryBtn.addEventListener('click', () => openHistoryModal());
 settingsShortcutsBtn.addEventListener('click', openShortcutsModal);
@@ -7421,6 +7602,10 @@ deleteHistoryCancelBtn.addEventListener('click', closeDeleteHistoryModal);
 deleteHistoryModal.addEventListener('click', (e) => {
   if (e.target === deleteHistoryModal) closeDeleteHistoryModal();
 });
+appAlertOkBtn.addEventListener('click', closeAppAlert);
+appAlertModal.addEventListener('click', (e) => {
+  if (e.target === appAlertModal) closeAppAlert();
+});
 
 billableToggleBtn.addEventListener('click', () => {
   const session = getPlannedSession(pendingBillableSessionId);
@@ -7474,12 +7659,12 @@ completeTaskDurationInput.addEventListener('keydown', (e) => {
 
 taskContextCompleteBtn.addEventListener('click', () => {
   if (!taskContextMenuTarget) return;
+  const { listId, taskIndex } = taskContextMenuTarget;
   hideTaskContextMenu();
   if (state.selectedTasks.size > 1) {
     completeSelectedTasks();
     return;
   }
-  const { listId, taskIndex } = taskContextMenuTarget;
   openCompleteTaskModal(listId, taskIndex);
 });
 
@@ -7492,12 +7677,12 @@ taskContextDuplicateBtn.addEventListener('click', () => {
 
 taskContextDeleteBtn.addEventListener('click', () => {
   if (!taskContextMenuTarget) return;
+  const { listId, taskIndex } = taskContextMenuTarget;
   hideTaskContextMenu();
   if (state.selectedTasks.size > 1) {
     removeSelectedTasks();
     return;
   }
-  const { listId, taskIndex } = taskContextMenuTarget;
   removeTask(listId, taskIndex);
 });
 
@@ -7537,6 +7722,14 @@ document.addEventListener('click', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
+  if (!appAlertModal.classList.contains('hidden')) {
+    if (e.key === 'Escape' || e.key === 'Enter') {
+      e.preventDefault();
+      closeAppAlert();
+    }
+    return;
+  }
+
   if (e.key === 'Escape') {
     hideAllContextMenus();
     hideTemplateAutocomplete();
@@ -7687,6 +7880,7 @@ resetBtn.addEventListener('click', () => {
 setupListDropZone(sessionList, 'session');
 setupListSelectionClear(sessionList);
 
+// Intentional: always start collapsed on load. Expansion is session-only and is not restored from saved data.
 function loadExpandedSessionIds(_saved) {
   state.expandedSessionIds = new Set();
 }

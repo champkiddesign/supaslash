@@ -31,4 +31,5 @@ contextBridge.exposeInMainWorld('slashIt', {
     deactivate: () => ipcRenderer.invoke('license:deactivate'),
     openCheckout: () => ipcRenderer.invoke('license:open-checkout'),
   },
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
 });

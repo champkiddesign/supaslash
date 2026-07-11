@@ -122,7 +122,6 @@
       <button type="button" id="settings-templates-btn" class="settings-menu-item" role="menuitem">Templates</button>
       <button type="button" id="settings-history-btn" class="settings-menu-item" role="menuitem">Session history</button>
       <button type="button" id="settings-invoice-btn" class="settings-menu-item" role="menuitem">Personal Profile</button>
-      <button type="button" id="settings-license-btn" class="settings-menu-item" role="menuitem">License</button>
       <div class="settings-menu-divider" role="separator"></div>
       <button type="button" id="settings-sound-effects-btn" class="settings-menu-item" role="menuitemcheckbox" aria-checked="true">
         <span>Sound effects</span>
@@ -130,8 +129,10 @@
       </button>
       <button type="button" id="settings-data-btn" class="settings-menu-item" role="menuitem">Data &amp; backup</button>
       <button type="button" id="settings-shortcuts-btn" class="settings-menu-item" role="menuitem">Keyboard shortcuts</button>
-      <div class="settings-menu-divider" role="separator"></div>
       <button type="button" id="settings-tutorial-btn" class="settings-menu-item" role="menuitem">Tutorial</button>
+      <div class="settings-menu-divider" role="separator"></div>
+      <button type="button" id="settings-license-btn" class="settings-menu-item" role="menuitem">License</button>
+      <button type="button" id="settings-check-updates-btn" class="settings-menu-item" role="menuitem">Check for updates</button>
     </div>
 
     <div id="shortcuts-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-title">
@@ -443,6 +444,16 @@
     </div>
   </div>
 
+  <div id="app-alert-modal" class="clear-session-modal app-alert-modal hidden" role="alertdialog" aria-modal="true" aria-labelledby="app-alert-title" aria-describedby="app-alert-message">
+    <div class="clear-session-modal-card app-alert-modal-card">
+      <h3 id="app-alert-title" class="clear-session-modal-title">Notice</h3>
+      <p id="app-alert-message" class="delete-session-message app-alert-message"></p>
+      <div class="clear-session-modal-actions">
+        <button id="app-alert-ok-btn" class="clear-session-modal-btn" type="button">OK</button>
+      </div>
+    </div>
+  </div>
+
   <div id="history-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="history-modal-title">
     <div class="clear-session-modal-card history-modal-card">
       <h3 id="history-modal-title" class="clear-session-modal-title">Session history</h3>
@@ -508,7 +519,7 @@
               <tr>
                 <th scope="col">Date</th>
                 <th scope="col">Session</th>
-                <th scope="col">Duration</th>
+                <th scope="col">Hours</th>
                 <th scope="col">Earnings</th>
                 <th scope="col">Hourly rate</th>
                 <th scope="col">Status</th>

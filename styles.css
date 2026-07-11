@@ -1430,6 +1430,33 @@ body.app-license-locked #focus-view {
   text-align: right;
 }
 
+.history-task-billable-toggle {
+  flex-shrink: 0;
+  width: calc(22px * var(--edit-scale));
+  height: calc(22px * var(--edit-scale));
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: calc(4px * var(--edit-scale));
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  font-family: var(--mono);
+  font-size: calc(10px * var(--edit-scale));
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.history-task-billable-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.history-task-billable-toggle--on {
+  color: #30d158;
+  border-color: rgba(48, 209, 88, 0.35);
+  background: rgba(48, 209, 88, 0.08);
+}
+
 .history-entry-billable-summary {
   display: flex;
   align-items: center;
@@ -2058,6 +2085,18 @@ body.app-license-locked #focus-view {
 
 .clear-session-modal--stacked {
   z-index: 210;
+}
+
+.app-alert-modal {
+  z-index: 320;
+}
+
+.app-alert-modal-card .clear-session-modal-title {
+  margin-bottom: calc(16px * var(--edit-scale));
+}
+
+.app-alert-message {
+  margin-bottom: calc(20px * var(--edit-scale));
 }
 
 .clear-session-modal.hidden {
