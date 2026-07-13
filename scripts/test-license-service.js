@@ -52,6 +52,21 @@ async function run() {
   const initialStatus = await licenseService.validateStoredLicense();
   assert.strictEqual(initialStatus.isLicensed, false, 'missing license should be unlicensed');
 
+  const packagedLicenseService = createLicenseService(licenseStore, { allowDevLicense: false });
+  const betaActivate = await packagedLicenseService.activateLicense({
+    licenseKey: 'SUPASLASH-BETA-ACCESS',
+    email: 'tester@example.com',
+  });
+  assert.strictEqual(betaActivate.ok, true, 'beta license should activate without Lemon Squeezy');
+  assert.strictEqual(betaActivate.status.isLicensed, true, 'beta license should be licensed');
+  assert.strictEqual(betaActivate.status.productName, 'SupaSlash (Beta)');
+
+  const betaValidated = await packagedLicenseService.validateStoredLicense({ force: true });
+  assert.strictEqual(betaValidated.isLicensed, true, 'beta license should validate offline');
+
+  await packagedLicenseService.deactivateLicense();
+  assert.strictEqual(licenseStore.loadLicense(), null, 'beta license should deactivate locally');
+
   const originalFetch = global.fetch;
   global.fetch = async (url, options) => {
     assert.match(String(url), /\/v1\/licenses\/activate$/);

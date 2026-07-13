@@ -179,15 +179,24 @@ function createLicenseService(licenseStore, { allowDevLicense = false } = {}) {
     return allowDevLicense && licenseKey === licenseConfig.devLicenseKey;
   }
 
-  async function activateDevLicense({ licenseKey, email }) {
+  function isBetaLicenseKey(licenseKey) {
+    const betaKey = licenseConfig.betaLicenseKey;
+    return typeof betaKey === 'string' && betaKey.length > 0 && licenseKey === betaKey;
+  }
+
+  function isLocalLicenseKey(licenseKey) {
+    return isDevLicenseKey(licenseKey) || isBetaLicenseKey(licenseKey);
+  }
+
+  async function activateLocalLicense({ licenseKey, email, productName, instanceId }) {
     const record = buildLicenseRecord({
       licenseKey,
-      instanceId: 'dev-local',
+      instanceId,
       instanceName: getMachineFingerprint(),
-      customerEmail: email || 'dev@localhost',
+      customerEmail: email || 'beta@localhost',
       status: 'active',
       expiresAt: null,
-      productName: 'SupaSlash (Dev)',
+      productName,
       lastValidatedAt: new Date().toISOString(),
     });
     await licenseStore.saveLicense(record);
@@ -238,7 +247,21 @@ function createLicenseService(licenseStore, { allowDevLicense = false } = {}) {
     }
 
     if (isDevLicenseKey(trimmedKey)) {
-      return activateDevLicense({ licenseKey: trimmedKey, email });
+      return activateLocalLicense({
+        licenseKey: trimmedKey,
+        email,
+        productName: 'SupaSlash (Dev)',
+        instanceId: 'dev-local',
+      });
+    }
+
+    if (isBetaLicenseKey(trimmedKey)) {
+      return activateLocalLicense({
+        licenseKey: trimmedKey,
+        email,
+        productName: 'SupaSlash (Beta)',
+        instanceId: 'beta-local',
+      });
     }
 
     const instanceName = getMachineFingerprint();
@@ -301,7 +324,7 @@ function createLicenseService(licenseStore, { allowDevLicense = false } = {}) {
       return cachedStatus;
     }
 
-    if (isDevLicenseKey(record.licenseKey)) {
+    if (isLocalLicenseKey(record.licenseKey)) {
       cachedStatus = statusFromRecord(record);
       return cachedStatus;
     }
@@ -371,7 +394,7 @@ function createLicenseService(licenseStore, { allowDevLicense = false } = {}) {
       return { ok: true, status: cachedStatus };
     }
 
-    if (isDevLicenseKey(record.licenseKey)) {
+    if (isLocalLicenseKey(record.licenseKey)) {
       await licenseStore.clearLicense();
       cachedStatus = buildStatus();
       return { ok: true, status: cachedStatus };

@@ -571,6 +571,14 @@ function setupAppMenu() {
             });
           },
         },
+        {
+          label: "What's New",
+          click: () => {
+            if (isLiveWindow(mainWindow)) {
+              mainWindow.webContents.send('open-whats-new');
+            }
+          },
+        },
         { type: 'separator' },
         { role: 'hide' },
         { role: 'hideOthers' },
@@ -679,6 +687,8 @@ app.on('before-quit', (event) => {
 });
 
 ipcMain.handle('check-for-updates', () => checkForUpdates({ manual: true }));
+
+ipcMain.handle('get-app-version', () => app.getVersion());
 
 ipcMain.handle('set-window-mode', (_event, mode, options = {}) => {
   applyWindowSize(mode, options);

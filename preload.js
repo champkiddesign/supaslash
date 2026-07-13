@@ -32,4 +32,6 @@ contextBridge.exposeInMainWorld('slashIt', {
     openCheckout: () => ipcRenderer.invoke('license:open-checkout'),
   },
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  onOpenWhatsNew: (callback) => ipcRenderer.on('open-whats-new', callback),
 });

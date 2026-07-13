@@ -302,6 +302,108 @@ body.mode-edit #edit-view.view {
   background: var(--border);
 }
 
+.settings-menu-item--whats-new {
+  position: relative;
+  margin-top: 4px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(0, 0, 153, 0.06);
+  isolation: isolate;
+}
+
+.settings-menu-item--whats-new::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, #000099, #7e2a4d);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.settings-menu-item--whats-new:hover:not(.settings-menu-item--disabled) {
+  background: rgba(0, 0, 153, 0.1);
+}
+
+.whats-new-modal-card {
+  width: min(420px, calc(100% - 48px));
+}
+
+.whats-new-version {
+  margin: calc(-12px * var(--edit-scale)) 0 calc(20px * var(--edit-scale));
+  font-family: var(--mono);
+  font-size: var(--font-xs);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--edit-muted);
+}
+
+.whats-new-slide {
+  min-height: calc(96px * var(--edit-scale));
+  margin-bottom: calc(20px * var(--edit-scale));
+}
+
+.whats-new-slide-title {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text);
+  margin-bottom: calc(12px * var(--edit-scale));
+}
+
+.whats-new-slide-body {
+  font-size: var(--font-sm);
+  line-height: 1.55;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.whats-new-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: calc(24px * var(--edit-scale));
+}
+
+.whats-new-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--border);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.whats-new-dot:hover {
+  background: #7e2a4d;
+}
+
+.whats-new-dot--active {
+  background: linear-gradient(135deg, #000099, #7e2a4d);
+  transform: scale(1.15);
+}
+
+.whats-new-modal-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.whats-new-modal-actions .clear-session-modal-btn {
+  flex: 1;
+}
+
 .tutorial-overlay {
   position: fixed;
   inset: 0;

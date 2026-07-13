@@ -30,4 +30,6 @@ module.exports = {
   licenseApiBaseUrl: 'https://api.lemonsqueezy.com/v1/licenses',
   // Local dev only (honored when running unpackaged via npm start)
   devLicenseKey: 'SUPASLASH-DEV-LOCAL-TEST',
+  // Beta testers (works in signed/packaged releases; override via SUPASLASH_BETA_LICENSE_KEY)
+  betaLicenseKey: process.env.SUPASLASH_BETA_LICENSE_KEY || 'SUPASLASH-BETA-ACCESS',
 };

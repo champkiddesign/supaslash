@@ -39,6 +39,7 @@ const state = {
     email: '',
     address: '',
   },
+  lastSeenWhatsNewVersion: null,
 };
 
 const licenseState = {
@@ -63,6 +64,7 @@ const settingsDataBtn = document.getElementById('settings-data-btn');
 const settingsInvoiceBtn = document.getElementById('settings-invoice-btn');
 const settingsLicenseBtn = document.getElementById('settings-license-btn');
 const settingsCheckUpdatesBtn = document.getElementById('settings-check-updates-btn');
+const settingsWhatsNewBtn = document.getElementById('settings-whats-new-btn');
 const settingsHistoryBtn = document.getElementById('settings-history-btn');
 const settingsTemplatesBtn = document.getElementById('settings-templates-btn');
 const settingsTutorialBtn = document.getElementById('settings-tutorial-btn');
@@ -127,6 +129,14 @@ const appAlertModal = document.getElementById('app-alert-modal');
 const appAlertTitle = document.getElementById('app-alert-title');
 const appAlertMessage = document.getElementById('app-alert-message');
 const appAlertOkBtn = document.getElementById('app-alert-ok-btn');
+const whatsNewModal = document.getElementById('whats-new-modal');
+const whatsNewVersion = document.getElementById('whats-new-version');
+const whatsNewSlideTitle = document.getElementById('whats-new-slide-title');
+const whatsNewSlideBody = document.getElementById('whats-new-slide-body');
+const whatsNewDots = document.getElementById('whats-new-dots');
+const whatsNewPrevBtn = document.getElementById('whats-new-prev-btn');
+const whatsNewNextBtn = document.getElementById('whats-new-next-btn');
+const whatsNewDoneBtn = document.getElementById('whats-new-done-btn');
 const billableModal = document.getElementById('billable-modal');
 const billableModalTitle = document.getElementById('billable-modal-title');
 const billableToggleBtn = document.getElementById('billable-toggle-btn');
@@ -2522,6 +2532,7 @@ function persist(options = {}) {
     listTemplates: state.listTemplates,
     soundEffectsEnabled: window.slashItSounds.isEnabled(),
     invoiceSettings: state.invoiceSettings,
+    lastSeenWhatsNewVersion: state.lastSeenWhatsNewVersion,
   });
 }
 
@@ -5034,7 +5045,8 @@ function isSettingsUiOpen() {
     || !historyModal.classList.contains('hidden')
     || !templatesModal.classList.contains('hidden')
     || !saveTemplateModal.classList.contains('hidden')
-    || !billableModal.classList.contains('hidden');
+    || !billableModal.classList.contains('hidden')
+    || !whatsNewModal.classList.contains('hidden');
 }
 
 function formatRelativeBackupTime(timestamp) {
@@ -6365,6 +6377,103 @@ function closeAppAlert() {
   }
 }
 
+let whatsNewSlides = [];
+let whatsNewSlideIndex = 0;
+let whatsNewVersionLabel = '';
+
+function renderWhatsNewSlide() {
+  const slide = whatsNewSlides[whatsNewSlideIndex];
+  if (!slide) return;
+  whatsNewSlideTitle.textContent = slide.title;
+  whatsNewSlideBody.textContent = slide.description;
+}
+
+function renderWhatsNewDots() {
+  whatsNewDots.innerHTML = '';
+  whatsNewSlides.forEach((slide, index) => {
+    const dot = document.createElement('button');
+    dot.type = 'button';
+    dot.className = `whats-new-dot${index === whatsNewSlideIndex ? ' whats-new-dot--active' : ''}`;
+    dot.setAttribute('role', 'tab');
+    dot.setAttribute('aria-label', slide.title);
+    dot.setAttribute('aria-selected', index === whatsNewSlideIndex ? 'true' : 'false');
+    dot.addEventListener('click', () => goToWhatsNewSlide(index));
+    whatsNewDots.appendChild(dot);
+  });
+}
+
+function updateWhatsNewNav() {
+  const isFirst = whatsNewSlideIndex === 0;
+  const isLast = whatsNewSlideIndex >= whatsNewSlides.length - 1;
+  whatsNewPrevBtn.classList.toggle('hidden', isFirst);
+  whatsNewNextBtn.classList.toggle('hidden', isLast);
+  whatsNewDoneBtn.classList.toggle('hidden', !isLast);
+}
+
+function goToWhatsNewSlide(index) {
+  if (index < 0 || index >= whatsNewSlides.length) return;
+  whatsNewSlideIndex = index;
+  renderWhatsNewSlide();
+  renderWhatsNewDots();
+  updateWhatsNewNav();
+}
+
+function goWhatsNewNext() {
+  if (whatsNewSlideIndex < whatsNewSlides.length - 1) {
+    goToWhatsNewSlide(whatsNewSlideIndex + 1);
+  }
+}
+
+function goWhatsNewPrev() {
+  if (whatsNewSlideIndex > 0) {
+    goToWhatsNewSlide(whatsNewSlideIndex - 1);
+  }
+}
+
+function markWhatsNewSeen() {
+  if (!whatsNewVersionLabel) return;
+  state.lastSeenWhatsNewVersion = whatsNewVersionLabel;
+  persist({ skipUndoCheckpoint: true });
+}
+
+function closeWhatsNewModal() {
+  markWhatsNewSeen();
+  whatsNewModal.classList.add('hidden');
+  whatsNewSlides = [];
+  whatsNewSlideIndex = 0;
+  whatsNewVersionLabel = '';
+}
+
+async function openWhatsNewModal() {
+  const version = await window.slashIt.getAppVersion();
+  const slides = getReleaseNotes(version);
+  if (!slides?.length) {
+    showAppAlert('No release highlights are available for this version.', { title: "What's new" });
+    return;
+  }
+
+  whatsNewSlides = slides;
+  whatsNewSlideIndex = 0;
+  whatsNewVersionLabel = version;
+  whatsNewVersion.textContent = `Version ${version}`;
+  renderWhatsNewSlide();
+  renderWhatsNewDots();
+  updateWhatsNewNav();
+  whatsNewModal.classList.remove('hidden');
+  requestAnimationFrame(() => {
+    if (whatsNewSlides.length > 1) whatsNewNextBtn.focus();
+    else whatsNewDoneBtn.focus();
+  });
+}
+
+async function maybeAutoShowWhatsNew() {
+  const version = await window.slashIt.getAppVersion();
+  const slides = getReleaseNotes(version);
+  if (!slides?.length) return;
+  if (state.lastSeenWhatsNewVersion === version) return;
+  openWhatsNewModal();
+}
+
 function openDeleteHistoryModal(entryId) {
   const entry = state.sessionHistory.find((item) => item.id === entryId);
   if (!entry) return;
@@ -6890,6 +6999,9 @@ function applySavedData(saved) {
   migrateLegacyTaskTemplates(saved.taskTemplates);
   window.slashItSounds.setEnabled(saved.soundEffectsEnabled !== false);
   state.invoiceSettings = normalizeInvoiceSettings(saved.invoiceSettings);
+  state.lastSeenWhatsNewVersion = typeof saved.lastSeenWhatsNewVersion === 'string'
+    ? saved.lastSeenWhatsNewVersion
+    : null;
 
   if (saved.timerBarSize === 'hidden') {
     state.timerBarSize = state.timerBarSizeBeforeHide;
@@ -7519,6 +7631,10 @@ settingsCheckUpdatesBtn.addEventListener('click', () => {
     console.error('Manual update check failed:', err);
   });
 });
+settingsWhatsNewBtn.addEventListener('click', () => {
+  hideSettingsMenu();
+  openWhatsNewModal();
+});
 settingsTemplatesBtn.addEventListener('click', openTemplatesModal);
 settingsHistoryBtn.addEventListener('click', () => openHistoryModal());
 settingsShortcutsBtn.addEventListener('click', openShortcutsModal);
@@ -7606,6 +7722,13 @@ appAlertOkBtn.addEventListener('click', closeAppAlert);
 appAlertModal.addEventListener('click', (e) => {
   if (e.target === appAlertModal) closeAppAlert();
 });
+whatsNewPrevBtn.addEventListener('click', goWhatsNewPrev);
+whatsNewNextBtn.addEventListener('click', goWhatsNewNext);
+whatsNewDoneBtn.addEventListener('click', closeWhatsNewModal);
+whatsNewModal.addEventListener('click', (e) => {
+  if (e.target === whatsNewModal) closeWhatsNewModal();
+});
+window.slashIt.onOpenWhatsNew(() => openWhatsNewModal());
 
 billableToggleBtn.addEventListener('click', () => {
   const session = getPlannedSession(pendingBillableSessionId);
@@ -7792,6 +7915,10 @@ document.addEventListener('keydown', (e) => {
       closeBillableModal(true);
       return;
     }
+    if (!whatsNewModal.classList.contains('hidden')) {
+      closeWhatsNewModal();
+      return;
+    }
     if (!clearSessionModal.classList.contains('hidden')) {
       closeClearSessionModal();
     }
@@ -7911,6 +8038,7 @@ async function init() {
   routeToSavedMode(saved);
   isInitializing = false;
   void refreshLicenseStatus();
+  void maybeAutoShowWhatsNew();
 }
 
 init();
