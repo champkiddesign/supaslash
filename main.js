@@ -30,6 +30,7 @@ function loadLocalEnvFile() {
 loadLocalEnvFile();
 
 const { createDataStore } = require('./data-store');
+const { createAttachmentStore } = require('./attachment-store');
 const { createLicenseStore } = require('./license-store');
 const { createLicenseService } = require('./license-service');
 const { setupAutoUpdater, checkForUpdates, isQuittingForUpdate } = require('./auto-updater');
@@ -69,6 +70,10 @@ let focusWindowHiddenByUser = false;
 let suppressFocusMoveEvent = false;
 
 const dataStore = createDataStore(app);
+const attachmentStore = createAttachmentStore(() => app.getPath('userData'));
+
+const linkPreviewCache = new Map();
+const LINK_PREVIEW_TIMEOUT_MS = 5000;
 const licenseStore = createLicenseStore(app);
 const licenseService = createLicenseService(licenseStore, { allowDevLicense: !app.isPackaged });
 
@@ -588,6 +593,18 @@ function setupAppMenu() {
       ],
     },
     {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      ],
+    },
+    {
       label: 'View',
       submenu: [
         { role: 'reload' },
@@ -922,5 +939,159 @@ ipcMain.handle('restore-data-from-file', async (event) => {
   } catch (err) {
     console.error('Failed to restore data:', err);
     return { canceled: false, error: 'Could not restore from that backup file.' };
+  }
+});
+
+ipcMain.handle('pick-task-attachments', async (event) => {
+  const parentWindow = BrowserWindow.fromWebContents(event.sender);
+  const { canceled, filePaths } = await dialog.showOpenDialog(parentWindow, {
+    title: 'Add attachments',
+    properties: ['openFile', 'multiSelections'],
+  });
+  if (canceled || !filePaths?.length) {
+    return { canceled: true, attachments: [] };
+  }
+  try {
+    const attachments = await attachmentStore.pickAndCopyFiles(filePaths);
+    return { canceled: false, attachments };
+  } catch (err) {
+    console.error('Failed to pick task attachments:', err);
+    return { canceled: false, error: 'Could not add attachments.', attachments: [] };
+  }
+});
+
+ipcMain.handle('open-task-attachment', async (_event, attachment) => {
+  if (!attachment?.id || !attachment?.storedName) {
+    return { error: 'Invalid attachment.' };
+  }
+  const filePath = attachmentStore.getAttachmentPath(attachment);
+  if (!fs.existsSync(filePath)) {
+    return { error: 'Attachment file not found.' };
+  }
+  const result = await shell.openPath(filePath);
+  return result ? { error: result } : { ok: true };
+});
+
+ipcMain.handle('remove-task-attachment-file', async (_event, attachment) => {
+  if (!attachment?.id) return { ok: true };
+  await attachmentStore.removeAttachmentFile(attachment);
+  return { ok: true };
+});
+
+ipcMain.handle('copy-task-attachments', async (_event, attachments) => {
+  try {
+    const copies = await attachmentStore.copyAttachments(attachments || []);
+    return { attachments: copies };
+  } catch (err) {
+    console.error('Failed to copy task attachments:', err);
+    return { error: 'Could not copy attachments.', attachments: [] };
+  }
+});
+
+ipcMain.handle('copy-attachments-for-template', async (_event, attachments) => {
+  try {
+    const copies = await attachmentStore.copyAttachmentsForTemplate(attachments || []);
+    return { attachments: copies };
+  } catch (err) {
+    console.error('Failed to copy template attachments:', err);
+    return { error: 'Could not copy attachments for template.', attachments: [] };
+  }
+});
+
+ipcMain.handle('clone-template-attachments', async (_event, attachments) => {
+  try {
+    const copies = await attachmentStore.cloneTemplateAttachments(attachments || []);
+    return { attachments: copies };
+  } catch (err) {
+    console.error('Failed to clone template attachments:', err);
+    return { error: 'Could not clone template attachments.', attachments: [] };
+  }
+});
+
+ipcMain.handle('open-external-url', async (_event, url) => {
+  if (!url || typeof url !== 'string') return { error: 'Invalid URL.' };
+  try {
+    await shell.openExternal(url);
+    return { ok: true };
+  } catch (err) {
+    console.error('Failed to open external URL:', err);
+    return { error: 'Could not open link.' };
+  }
+});
+
+function parseLinkPreviewMeta(html, url) {
+  const getMeta = (property) => {
+    const patterns = [
+      new RegExp(`<meta[^>]+property=["']${property}["'][^>]+content=["']([^"']+)["']`, 'i'),
+      new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']${property}["']`, 'i'),
+      new RegExp(`<meta[^>]+name=["']${property}["'][^>]+content=["']([^"']+)["']`, 'i'),
+      new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+name=["']${property}["']`, 'i'),
+    ];
+    for (const pattern of patterns) {
+      const match = html.match(pattern);
+      if (match?.[1]) return match[1].trim();
+    }
+    return '';
+  };
+
+  const title = getMeta('og:title')
+    || getMeta('twitter:title')
+    || (html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] || '').trim();
+  const description = getMeta('og:description') || getMeta('twitter:description') || getMeta('description');
+  let image = getMeta('og:image') || getMeta('twitter:image');
+  if (image && !/^https?:\/\//i.test(image)) {
+    try {
+      image = new URL(image, url).href;
+    } catch {
+      image = '';
+    }
+  }
+
+  return {
+    url,
+    title: title || url,
+    description,
+    image,
+  };
+}
+
+ipcMain.handle('fetch-link-preview', async (_event, url) => {
+  if (!url || typeof url !== 'string') {
+    return { url, error: 'Invalid URL.' };
+  }
+  if (linkPreviewCache.has(url)) {
+    return linkPreviewCache.get(url);
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), LINK_PREVIEW_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'SupaSlash/1.0 LinkPreview' },
+      redirect: 'follow',
+    });
+    if (!response.ok) {
+      const result = { url, error: 'Could not load preview.' };
+      linkPreviewCache.set(url, result);
+      return result;
+    }
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('text/html')) {
+      const result = { url, title: url, description: '', image: '' };
+      linkPreviewCache.set(url, result);
+      return result;
+    }
+    const html = await response.text();
+    const result = parseLinkPreviewMeta(html.slice(0, 200000), url);
+    linkPreviewCache.set(url, result);
+    return result;
+  } catch (err) {
+    const result = { url, error: 'Could not load preview.' };
+    linkPreviewCache.set(url, result);
+    return result;
+  } finally {
+    clearTimeout(timeout);
   }
 });

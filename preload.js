@@ -34,4 +34,12 @@ contextBridge.exposeInMainWorld('slashIt', {
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   onOpenWhatsNew: (callback) => ipcRenderer.on('open-whats-new', callback),
+  pickTaskAttachments: () => ipcRenderer.invoke('pick-task-attachments'),
+  openTaskAttachment: (attachment) => ipcRenderer.invoke('open-task-attachment', attachment),
+  removeTaskAttachmentFile: (attachment) => ipcRenderer.invoke('remove-task-attachment-file', attachment),
+  copyTaskAttachments: (attachments) => ipcRenderer.invoke('copy-task-attachments', attachments),
+  copyAttachmentsForTemplate: (attachments) => ipcRenderer.invoke('copy-attachments-for-template', attachments),
+  cloneTemplateAttachments: (attachments) => ipcRenderer.invoke('clone-template-attachments', attachments),
+  openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
+  fetchLinkPreview: (url) => ipcRenderer.invoke('fetch-link-preview', url),
 });

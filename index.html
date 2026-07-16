@@ -361,6 +361,13 @@
   </div>
 
   <div id="task-context-menu" class="task-context-menu hidden" role="menu">
+    <button type="button" id="task-context-edit-details" class="task-context-menu-item" role="menuitem">
+      <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M12 20h9"/>
+        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+      </svg>
+      <span>Edit details</span>
+    </button>
     <button type="button" id="task-context-complete" class="task-context-menu-item" role="menuitem">
       <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <path d="M20 6L9 17l-5-5"/>
@@ -395,6 +402,82 @@
   </div>
 
   <div id="template-autocomplete" class="template-autocomplete hidden" role="listbox" aria-label="Template suggestions"></div>
+
+  <div id="task-detail-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="task-detail-title">
+    <div class="clear-session-modal-card task-detail-modal-card">
+      <div class="task-detail-header">
+        <h3 id="task-detail-title" class="clear-session-modal-title task-detail-modal-title">Task details</h3>
+        <button id="task-detail-menu-btn" class="task-detail-menu-btn" type="button" aria-label="Task actions" aria-haspopup="menu" aria-expanded="false">
+          <svg class="task-detail-menu-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <circle cx="12" cy="5" r="1.75"/>
+            <circle cx="12" cy="12" r="1.75"/>
+            <circle cx="12" cy="19" r="1.75"/>
+          </svg>
+        </button>
+        <div id="task-detail-overflow-menu" class="task-context-menu task-detail-overflow-menu hidden" role="menu">
+          <button type="button" id="task-detail-duplicate-btn" class="task-context-menu-item" role="menuitem">
+            <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <rect x="9" y="9" width="13" height="13" rx="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+            <span>Duplicate</span>
+          </button>
+          <button type="button" id="task-detail-delete-btn" class="task-context-menu-item task-context-menu-item--danger" role="menuitem">
+            <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+              <path d="M10 11v6M14 11v6"/>
+            </svg>
+            <span>Delete</span>
+          </button>
+        </div>
+      </div>
+      <div class="task-detail-session-badge" id="task-detail-session-badge"></div>
+      <label for="task-detail-name-input" class="task-detail-label">Title</label>
+      <input id="task-detail-name-input" type="text" class="task-detail-name-input" autocomplete="off" />
+      <label for="task-detail-limit-input" class="task-detail-label">Estimated time</label>
+      <input id="task-detail-limit-input" type="text" class="task-detail-limit-input" placeholder="20m" autocomplete="off" />
+      <label for="task-detail-notes-input" class="task-detail-label">Notes</label>
+      <textarea id="task-detail-notes-input" class="task-detail-notes-input" rows="5" placeholder="Add notes, links, and context"></textarea>
+      <div id="task-detail-link-previews" class="task-detail-link-previews"></div>
+      <div class="task-detail-attachments-header">
+        <span class="task-detail-label">Attachments</span>
+        <button id="task-detail-add-attachment-btn" class="task-detail-inline-btn" type="button">Add attachment</button>
+      </div>
+      <ul id="task-detail-attachments-list" class="task-detail-attachments-list"></ul>
+      <div class="task-detail-actions">
+        <div class="task-detail-actions-row task-detail-actions-row--move">
+          <label class="task-detail-sublabel">Move to session</label>
+          <div class="task-detail-move-row">
+            <div id="task-detail-move-select-wrap" class="task-detail-select-wrap">
+              <button type="button" id="task-detail-move-trigger" class="task-detail-select-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="task-detail-move-menu">
+                <span id="task-detail-move-value" class="task-detail-select-trigger-label">Queue</span>
+                <span class="task-detail-select-trigger-chevron" aria-hidden="true">▾</span>
+              </button>
+            </div>
+            <button id="task-detail-move-btn" class="task-detail-action-btn" type="button">Move</button>
+          </div>
+        </div>
+        <div class="task-detail-actions-row task-detail-actions-row--template">
+          <label class="task-detail-sublabel">Template</label>
+          <div class="task-detail-template-row">
+            <div id="task-detail-template-select-wrap" class="task-detail-select-wrap">
+              <button type="button" id="task-detail-template-trigger" class="task-detail-select-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="task-detail-template-menu">
+                <span id="task-detail-template-value" class="task-detail-select-trigger-label">Choose a template</span>
+                <span class="task-detail-select-trigger-chevron" aria-hidden="true">▾</span>
+              </button>
+            </div>
+            <button id="task-detail-add-template-btn" class="task-detail-action-btn" type="button">Add to template</button>
+            <button id="task-detail-new-template-btn" class="task-detail-action-btn" type="button">Create template</button>
+          </div>
+        </div>
+      </div>
+      <div class="clear-session-modal-actions">
+        <button id="task-detail-done-btn" class="clear-session-modal-btn" type="button">Close</button>
+      </div>
+    </div>
+    <div id="task-detail-move-menu" class="task-detail-select-menu hidden" role="listbox" aria-label="Move to session"></div>
+    <div id="task-detail-template-menu" class="task-detail-select-menu hidden" role="listbox" aria-label="Template"></div>
+  </div>
 
   <div id="complete-task-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="complete-task-title">
     <div class="clear-session-modal-card">

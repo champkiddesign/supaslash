@@ -198,6 +198,7 @@ const historyReportTableFoot = document.getElementById('history-report-table-foo
 const historyExportPdfBtn = document.getElementById('history-export-pdf-btn');
 const historyExportInvoiceBtn = document.getElementById('history-export-invoice-btn');
 const taskContextMenu = document.getElementById('task-context-menu');
+const taskContextEditDetailsBtn = document.getElementById('task-context-edit-details');
 const taskContextCompleteBtn = document.getElementById('task-context-complete');
 const taskContextDuplicateBtn = document.getElementById('task-context-duplicate');
 const taskContextDeleteBtn = document.getElementById('task-context-delete');
@@ -219,6 +220,30 @@ const completeTaskNameEl = document.getElementById('complete-task-name');
 const completeTaskDurationInput = document.getElementById('complete-task-duration-input');
 const completeTaskConfirmBtn = document.getElementById('complete-task-confirm-btn');
 const completeTaskCancelBtn = document.getElementById('complete-task-cancel-btn');
+const taskDetailModal = document.getElementById('task-detail-modal');
+const taskDetailMenuBtn = document.getElementById('task-detail-menu-btn');
+const taskDetailOverflowMenu = document.getElementById('task-detail-overflow-menu');
+const taskDetailSessionBadge = document.getElementById('task-detail-session-badge');
+const taskDetailNameInput = document.getElementById('task-detail-name-input');
+const taskDetailLimitInput = document.getElementById('task-detail-limit-input');
+const taskDetailNotesInput = document.getElementById('task-detail-notes-input');
+const taskDetailLinkPreviews = document.getElementById('task-detail-link-previews');
+const taskDetailAddAttachmentBtn = document.getElementById('task-detail-add-attachment-btn');
+const taskDetailAttachmentsList = document.getElementById('task-detail-attachments-list');
+const taskDetailDeleteBtn = document.getElementById('task-detail-delete-btn');
+const taskDetailDuplicateBtn = document.getElementById('task-detail-duplicate-btn');
+const taskDetailMoveSelectWrap = document.getElementById('task-detail-move-select-wrap');
+const taskDetailMoveTrigger = document.getElementById('task-detail-move-trigger');
+const taskDetailMoveValue = document.getElementById('task-detail-move-value');
+const taskDetailMoveMenu = document.getElementById('task-detail-move-menu');
+const taskDetailMoveBtn = document.getElementById('task-detail-move-btn');
+const taskDetailTemplateSelectWrap = document.getElementById('task-detail-template-select-wrap');
+const taskDetailTemplateTrigger = document.getElementById('task-detail-template-trigger');
+const taskDetailTemplateValue = document.getElementById('task-detail-template-value');
+const taskDetailTemplateMenu = document.getElementById('task-detail-template-menu');
+const taskDetailAddTemplateBtn = document.getElementById('task-detail-add-template-btn');
+const taskDetailNewTemplateBtn = document.getElementById('task-detail-new-template-btn');
+const taskDetailDoneBtn = document.getElementById('task-detail-done-btn');
 
 let taskContextMenuTarget = null;
 let sessionContextMenuTarget = null;
@@ -228,6 +253,14 @@ let pendingBillableSessionId = null;
 let billableSnapshot = null;
 let pendingSaveTemplate = null;
 let pendingCompleteTask = null;
+let pendingTaskDetail = null;
+let taskDetailMoveListId = '';
+let taskDetailTemplateId = '';
+let taskDetailMoveMenuOpen = false;
+let taskDetailTemplateMenuOpen = false;
+let taskDetailOverflowMenuOpen = false;
+let taskDetailLinkPreviewTimer = null;
+let taskDetailLinkPreviewRequestId = 0;
 let templateAutocompleteState = null;
 let templateEditorState = null;
 let focusDimensionsRaf = null;
@@ -1070,6 +1103,36 @@ function parseTaskInput(text, manualLimit) {
   return { text: cleanText, completed: false, limitMs: limitMs || null };
 }
 
+function normalizeTaskAttachment(attachment) {
+  if (!attachment || !attachment.id || !attachment.storedName) return null;
+  const normalized = {
+    id: attachment.id,
+    name: attachment.name || attachment.storedName,
+    storedName: attachment.storedName,
+    addedAt: attachment.addedAt || Date.now(),
+  };
+  if (attachment.size != null) normalized.size = attachment.size;
+  if (attachment.storageKind === 'template') normalized.storageKind = 'template';
+  return normalized;
+}
+
+function normalizeTaskAttachments(attachments) {
+  return (attachments || [])
+    .map(normalizeTaskAttachment)
+    .filter(Boolean);
+}
+
+function applyTaskDetailFields(normalized, task) {
+  normalized.notes = typeof task.notes === 'string' ? task.notes : '';
+  const attachments = normalizeTaskAttachments(task.attachments);
+  if (attachments.length > 0) normalized.attachments = attachments;
+  return normalized;
+}
+
+function taskHasNotes(task) {
+  return typeof task.notes === 'string' && task.notes.trim().length > 0;
+}
+
 function normalizeSessionTask(task) {
   const normalized = {
     text: task.text || '',
@@ -1090,11 +1153,14 @@ function normalizeSessionTask(task) {
   if (task.historyRecorded) {
     normalized.historyRecorded = true;
   }
-  return normalized;
+  return applyTaskDetailFields(normalized, task);
 }
 
 function normalizeBraindumpTask(task) {
-  return { text: task.text || '', limitMs: task.limitMs ?? null };
+  return applyTaskDetailFields({
+    text: task.text || '',
+    limitMs: task.limitMs ?? null,
+  }, task);
 }
 
 function parseHourlyRate(value) {
@@ -1384,9 +1450,19 @@ function applyTemplateFromInput(inputEl, sessionId, { toQueue = false, match = n
 }
 
 function applyListTemplate(template, sessionId, { toQueue = false } = {}) {
-  const tasks = template.tasks.map(normalizeBraindumpTask);
-  if (toQueue) insertTasksIntoQueue(sessionId, tasks);
-  else insertTasksIntoSession(sessionId, tasks);
+  void (async () => {
+    const tasks = await Promise.all(template.tasks.map(async (task) => {
+      const normalized = normalizeBraindumpTask(task);
+      if (normalized.attachments?.length) {
+        const result = await window.slashIt.cloneTemplateAttachments(normalized.attachments);
+        if (result.attachments?.length) normalized.attachments = result.attachments;
+        else delete normalized.attachments;
+      }
+      return normalized;
+    }));
+    if (toQueue) insertTasksIntoQueue(sessionId, tasks);
+    else insertTasksIntoSession(sessionId, tasks);
+  })();
 }
 
 function createListTemplate(name, tasks) {
@@ -1419,15 +1495,7 @@ function deleteListTemplate(id) {
 }
 
 function duplicateTask(listId, taskIndex) {
-  const tasks = getTasksForList(listId);
-  const task = tasks[taskIndex];
-  if (!task) return;
-  const copy = listId === 'session'
-    ? normalizeSessionTask(task)
-    : normalizeBraindumpTask(task);
-  tasks.splice(taskIndex + 1, 0, copy);
-  persist();
-  renderEditView();
+  void duplicateTaskWithAttachments(listId, taskIndex);
 }
 
 function openSaveTemplateModal(pending) {
@@ -1469,10 +1537,13 @@ function confirmSaveTemplateModal() {
     saveTemplateError.classList.remove('hidden');
     return;
   }
-  createListTemplate(name, pendingSaveTemplate.tasks);
 
-  closeSaveTemplateModal();
-  if (!templatesModal.classList.contains('hidden')) renderTemplatesModal();
+  void (async () => {
+    const tasks = await buildTemplateTasksFromPending(pendingSaveTemplate.tasks);
+    createListTemplate(name, tasks);
+    closeSaveTemplateModal();
+    if (!templatesModal.classList.contains('hidden')) renderTemplatesModal();
+  })();
 }
 
 function saveSessionAsTemplateFromContext(sessionId) {
@@ -2477,6 +2548,7 @@ function isUndoRedoShortcutBlocked() {
   if (!billableModal.classList.contains('hidden')) return true;
   if (!completeTaskModal.classList.contains('hidden')) return true;
   if (!saveTemplateModal.classList.contains('hidden')) return true;
+  if (isTaskDetailModalOpen()) return true;
   return false;
 }
 
@@ -2921,6 +2993,543 @@ function completeTaskFromDashboard(listId, taskIndex, durationMs) {
   renderEditView();
   refreshDrawerIfOpen();
   playCompleteSound();
+}
+
+function getTaskDetailSessionLabel(listId, task) {
+  if (listId === 'session') {
+    return task.sourceSessionName ? `Session: ${task.sourceSessionName}` : 'Queue';
+  }
+  const sessionId = getPlannedSessionIdFromListId(listId);
+  const session = getPlannedSession(sessionId);
+  return `Session: ${session?.name || 'Session'}`;
+}
+
+const TASK_URL_REGEX = /\bhttps?:\/\/[^\s<>"']+/gi;
+
+function matchTaskUrls(text) {
+  if (!text) return [];
+  const matches = text.match(TASK_URL_REGEX) || [];
+  TASK_URL_REGEX.lastIndex = 0;
+  return [...new Set(matches.map((url) => url.replace(/[),.!?;:]+$/, '')))];
+}
+
+function extractUrlsFromText(text) {
+  return matchTaskUrls(text);
+}
+
+function formatTaskDetailSelectLabel(text) {
+  return (text || '').toUpperCase();
+}
+
+function getTaskDetailMoveOptions(currentListId) {
+  const options = state.plannedSessions.map((session) => ({
+    value: listIdForSession(session.id),
+    label: formatTaskDetailSelectLabel(session.name),
+  }));
+  options.push({ value: 'session', label: 'QUEUE' });
+  taskDetailMoveListId = currentListId;
+  return options;
+}
+
+function getTaskDetailTemplateOptions() {
+  return state.listTemplates.map((template) => ({
+    value: template.id,
+    label: formatTaskDetailSelectLabel(template.name),
+  }));
+}
+
+function renderTaskDetailSelectMenu(menuEl, options, selectedValue) {
+  menuEl.innerHTML = options.map((item) => {
+    const isSelected = selectedValue === item.value;
+    return `
+      <button
+        type="button"
+        class="task-detail-select-option${isSelected ? ' task-detail-select-option--selected' : ''}"
+        role="option"
+        aria-selected="${isSelected}"
+        data-value="${escapeHtml(item.value)}"
+      >
+        <span class="task-detail-select-option-check" aria-hidden="true">${isSelected ? '✓' : ''}</span>
+        <span class="task-detail-select-option-label">${escapeHtml(item.label)}</span>
+      </button>
+    `;
+  }).join('');
+}
+
+function getTaskDetailMoveLabel(listId) {
+  if (listId === 'session') return 'QUEUE';
+  const sessionId = getPlannedSessionIdFromListId(listId);
+  const session = getPlannedSession(sessionId);
+  return formatTaskDetailSelectLabel(session?.name || 'Session');
+}
+
+function updateTaskDetailMoveTriggerLabel() {
+  taskDetailMoveValue.textContent = getTaskDetailMoveLabel(taskDetailMoveListId);
+}
+
+function updateTaskDetailTemplateTriggerLabel() {
+  if (!taskDetailTemplateId) {
+    taskDetailTemplateValue.textContent = state.listTemplates.length
+      ? 'CHOOSE A TEMPLATE'
+      : 'NO TEMPLATES YET';
+    return;
+  }
+  const template = state.listTemplates.find((item) => item.id === taskDetailTemplateId);
+  taskDetailTemplateValue.textContent = formatTaskDetailSelectLabel(template?.name || 'Template');
+}
+
+function resetTaskDetailSelectMenuStyles(menuEl) {
+  if (!menuEl) return;
+  menuEl.style.top = '';
+  menuEl.style.left = '';
+  menuEl.style.width = '';
+  menuEl.style.maxHeight = '';
+  menuEl.style.transform = '';
+}
+
+function positionTaskDetailSelectMenu(triggerEl, menuEl) {
+  const gap = 4;
+  const edgePadding = 8;
+  const rect = triggerEl.getBoundingClientRect();
+  const defaultMax = parseFloat(getComputedStyle(menuEl).maxHeight) || 220;
+
+  menuEl.style.width = `${rect.width}px`;
+  menuEl.style.left = `${rect.left}px`;
+  menuEl.style.transform = '';
+
+  const naturalHeight = menuEl.scrollHeight;
+  const spaceBelow = window.innerHeight - rect.bottom - gap - edgePadding;
+  const spaceAbove = rect.top - gap - edgePadding;
+
+  let openAbove = false;
+  let maxHeight = Math.min(defaultMax, spaceBelow);
+  if (naturalHeight > spaceBelow && spaceAbove > spaceBelow) {
+    openAbove = true;
+    maxHeight = Math.min(defaultMax, spaceAbove);
+  } else if (naturalHeight > spaceBelow) {
+    maxHeight = spaceBelow;
+  }
+
+  menuEl.style.maxHeight = `${Math.max(maxHeight, 96)}px`;
+
+  if (openAbove) {
+    menuEl.style.top = `${rect.top - gap}px`;
+    menuEl.style.transform = 'translateY(-100%)';
+    return;
+  }
+
+  menuEl.style.top = `${rect.bottom + gap}px`;
+}
+
+function closeTaskDetailMoveMenu() {
+  if (!taskDetailMoveMenu || !taskDetailMoveTrigger) return;
+  taskDetailMoveMenu.classList.add('hidden');
+  taskDetailMoveTrigger.setAttribute('aria-expanded', 'false');
+  taskDetailMoveMenuOpen = false;
+  resetTaskDetailSelectMenuStyles(taskDetailMoveMenu);
+  document.removeEventListener('click', handleTaskDetailMoveOutsideClick, true);
+}
+
+function openTaskDetailMoveMenu() {
+  if (!taskDetailMoveMenu || !taskDetailMoveTrigger || !pendingTaskDetail) return;
+  closeTaskDetailTemplateMenu();
+  closeTaskDetailOverflowMenu();
+  const options = getTaskDetailMoveOptions(pendingTaskDetail.listId);
+  renderTaskDetailSelectMenu(taskDetailMoveMenu, options, taskDetailMoveListId);
+  taskDetailMoveMenu.classList.remove('hidden');
+  positionTaskDetailSelectMenu(taskDetailMoveTrigger, taskDetailMoveMenu);
+  taskDetailMoveTrigger.setAttribute('aria-expanded', 'true');
+  taskDetailMoveMenuOpen = true;
+  requestAnimationFrame(() => {
+    document.addEventListener('click', handleTaskDetailMoveOutsideClick, true);
+  });
+}
+
+function handleTaskDetailMoveOutsideClick(event) {
+  if (taskDetailMoveSelectWrap?.contains(event.target)) return;
+  if (taskDetailMoveMenu?.contains(event.target)) return;
+  closeTaskDetailMoveMenu();
+}
+
+function handleTaskDetailMoveTriggerClick(event) {
+  event.stopPropagation();
+  if (taskDetailMoveMenuOpen) {
+    closeTaskDetailMoveMenu();
+    return;
+  }
+  openTaskDetailMoveMenu();
+}
+
+function handleTaskDetailMoveOptionClick(event) {
+  const option = event.target.closest('.task-detail-select-option');
+  if (!option) return;
+  event.stopPropagation();
+  taskDetailMoveListId = option.getAttribute('data-value') || '';
+  closeTaskDetailMoveMenu();
+  updateTaskDetailMoveTriggerLabel();
+}
+
+function closeTaskDetailTemplateMenu() {
+  if (!taskDetailTemplateMenu || !taskDetailTemplateTrigger) return;
+  taskDetailTemplateMenu.classList.add('hidden');
+  taskDetailTemplateTrigger.setAttribute('aria-expanded', 'false');
+  taskDetailTemplateMenuOpen = false;
+  resetTaskDetailSelectMenuStyles(taskDetailTemplateMenu);
+  document.removeEventListener('click', handleTaskDetailTemplateOutsideClick, true);
+}
+
+function openTaskDetailTemplateMenu() {
+  if (!taskDetailTemplateMenu || !taskDetailTemplateTrigger) return;
+  if (!state.listTemplates.length) return;
+  closeTaskDetailMoveMenu();
+  closeTaskDetailOverflowMenu();
+  const options = getTaskDetailTemplateOptions();
+  renderTaskDetailSelectMenu(taskDetailTemplateMenu, options, taskDetailTemplateId);
+  taskDetailTemplateMenu.classList.remove('hidden');
+  positionTaskDetailSelectMenu(taskDetailTemplateTrigger, taskDetailTemplateMenu);
+  taskDetailTemplateTrigger.setAttribute('aria-expanded', 'true');
+  taskDetailTemplateMenuOpen = true;
+  requestAnimationFrame(() => {
+    document.addEventListener('click', handleTaskDetailTemplateOutsideClick, true);
+  });
+}
+
+function handleTaskDetailTemplateOutsideClick(event) {
+  if (taskDetailTemplateSelectWrap?.contains(event.target)) return;
+  if (taskDetailTemplateMenu?.contains(event.target)) return;
+  closeTaskDetailTemplateMenu();
+}
+
+function handleTaskDetailTemplateTriggerClick(event) {
+  event.stopPropagation();
+  if (!state.listTemplates.length) return;
+  if (taskDetailTemplateMenuOpen) {
+    closeTaskDetailTemplateMenu();
+    return;
+  }
+  openTaskDetailTemplateMenu();
+}
+
+function handleTaskDetailTemplateOptionClick(event) {
+  const option = event.target.closest('.task-detail-select-option');
+  if (!option) return;
+  event.stopPropagation();
+  taskDetailTemplateId = option.getAttribute('data-value') || '';
+  closeTaskDetailTemplateMenu();
+  updateTaskDetailTemplateTriggerLabel();
+}
+
+function closeTaskDetailOverflowMenu() {
+  if (!taskDetailOverflowMenu || !taskDetailMenuBtn) return;
+  taskDetailOverflowMenu.classList.add('hidden');
+  taskDetailMenuBtn.setAttribute('aria-expanded', 'false');
+  taskDetailOverflowMenuOpen = false;
+  document.removeEventListener('click', handleTaskDetailOverflowOutsideClick, true);
+}
+
+function openTaskDetailOverflowMenu() {
+  if (!taskDetailOverflowMenu || !taskDetailMenuBtn) return;
+  closeTaskDetailMoveMenu();
+  closeTaskDetailTemplateMenu();
+  taskDetailOverflowMenu.classList.remove('hidden');
+  taskDetailMenuBtn.setAttribute('aria-expanded', 'true');
+  taskDetailOverflowMenuOpen = true;
+  requestAnimationFrame(() => {
+    document.addEventListener('click', handleTaskDetailOverflowOutsideClick, true);
+  });
+}
+
+function handleTaskDetailOverflowOutsideClick(event) {
+  if (taskDetailMenuBtn?.contains(event.target) || taskDetailOverflowMenu?.contains(event.target)) return;
+  closeTaskDetailOverflowMenu();
+}
+
+function handleTaskDetailMenuBtnClick(event) {
+  event.stopPropagation();
+  if (taskDetailOverflowMenuOpen) {
+    closeTaskDetailOverflowMenu();
+    return;
+  }
+  openTaskDetailOverflowMenu();
+}
+
+function closeAllTaskDetailMenus() {
+  closeTaskDetailMoveMenu();
+  closeTaskDetailTemplateMenu();
+  closeTaskDetailOverflowMenu();
+}
+
+function populateTaskDetailMoveSelect(listId) {
+  taskDetailMoveListId = listId;
+  updateTaskDetailMoveTriggerLabel();
+  taskDetailMoveTrigger.disabled = false;
+}
+
+function populateTaskDetailTemplateSelect() {
+  taskDetailTemplateId = '';
+  updateTaskDetailTemplateTriggerLabel();
+  const hasTemplates = state.listTemplates.length > 0;
+  taskDetailAddTemplateBtn.disabled = !hasTemplates;
+  taskDetailTemplateTrigger.disabled = !hasTemplates;
+}
+
+function getTaskDetailTarget() {
+  if (!pendingTaskDetail) return null;
+  const { listId, taskIndex } = pendingTaskDetail;
+  const task = getTasksForList(listId)[taskIndex];
+  if (!task) return null;
+  return { listId, taskIndex, task };
+}
+
+function renderTaskDetailAttachments(task) {
+  taskDetailAttachmentsList.innerHTML = '';
+  const attachments = normalizeTaskAttachments(task.attachments);
+  attachments.forEach((attachment) => {
+    const li = document.createElement('li');
+    li.className = 'task-detail-attachment-item';
+    li.innerHTML = `
+      <span class="task-detail-attachment-name" title="${escapeHtml(attachment.name)}">${escapeHtml(attachment.name)}</span>
+      <button class="task-detail-attachment-btn task-detail-attachment-open-btn" type="button">Open</button>
+      <button class="task-detail-attachment-btn task-detail-attachment-btn--danger task-detail-attachment-remove-btn" type="button">Remove</button>
+    `;
+    li.querySelector('.task-detail-attachment-open-btn').addEventListener('click', async () => {
+      const result = await window.slashIt.openTaskAttachment(attachment);
+      if (result?.error) showAppAlert(result.error, { title: 'Open failed' });
+    });
+    li.querySelector('.task-detail-attachment-remove-btn').addEventListener('click', async () => {
+      await removeTaskAttachmentFromTask(task, attachment);
+      renderTaskDetailAttachments(task);
+    });
+    taskDetailAttachmentsList.appendChild(li);
+  });
+}
+
+async function removeTaskAttachmentFromTask(task, attachment) {
+  if (!task.attachments?.length) return;
+  task.attachments = task.attachments.filter((item) => item.id !== attachment.id);
+  if (task.attachments.length === 0) delete task.attachments;
+  await window.slashIt.removeTaskAttachmentFile(attachment);
+  persist();
+}
+
+async function cleanupTaskAttachments(task) {
+  const attachments = normalizeTaskAttachments(task?.attachments);
+  if (!attachments.length) return;
+  await Promise.all(attachments.map((attachment) => window.slashIt.removeTaskAttachmentFile(attachment)));
+}
+
+function renderTaskDetailLinkPreviewCard(preview) {
+  if (preview.error) {
+    const card = document.createElement('div');
+    card.className = 'task-detail-link-preview task-detail-link-preview--error';
+    card.innerHTML = `
+      <div class="task-detail-link-preview-body">
+        <div class="task-detail-link-preview-title">${escapeHtml(preview.url)}</div>
+        <div class="task-detail-link-preview-description">Preview unavailable</div>
+      </div>
+    `;
+    return card;
+  }
+
+  const card = document.createElement('a');
+  card.className = 'task-detail-link-preview';
+  card.href = preview.url;
+  card.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.slashIt.openExternalUrl(preview.url);
+  });
+
+  const imageHtml = preview.image
+    ? `<img class="task-detail-link-preview-image" src="${escapeHtml(preview.image)}" alt="" />`
+    : '';
+  card.innerHTML = `
+    ${imageHtml}
+    <div class="task-detail-link-preview-body">
+      <div class="task-detail-link-preview-title">${escapeHtml(preview.title || preview.url)}</div>
+      ${preview.description ? `<div class="task-detail-link-preview-description">${escapeHtml(preview.description)}</div>` : ''}
+      <div class="task-detail-link-preview-url">${escapeHtml(preview.url)}</div>
+    </div>
+  `;
+  return card;
+}
+
+async function updateTaskDetailLinkPreviews(notes) {
+  const urls = extractUrlsFromText(notes);
+  const requestId = ++taskDetailLinkPreviewRequestId;
+  taskDetailLinkPreviews.innerHTML = '';
+
+  if (!urls.length) return;
+
+  const previews = await Promise.all(urls.map((url) => window.slashIt.fetchLinkPreview(url)));
+  if (requestId !== taskDetailLinkPreviewRequestId) return;
+
+  previews.forEach((preview) => {
+    taskDetailLinkPreviews.appendChild(renderTaskDetailLinkPreviewCard(preview));
+  });
+}
+
+function insertTextAtCursor(el, text) {
+  const start = el.selectionStart ?? el.value.length;
+  const end = el.selectionEnd ?? el.value.length;
+  el.value = `${el.value.slice(0, start)}${text}${el.value.slice(end)}`;
+  const caret = start + text.length;
+  if (typeof el.setSelectionRange === 'function') {
+    el.setSelectionRange(caret, caret);
+  }
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function wireTaskDetailTextInput(el) {
+  el.addEventListener('paste', (e) => {
+    const text = e.clipboardData?.getData('text/plain');
+    if (!text) return;
+    e.preventDefault();
+    insertTextAtCursor(el, text);
+  });
+}
+
+function scheduleTaskDetailLinkPreviews() {
+  if (taskDetailLinkPreviewTimer) clearTimeout(taskDetailLinkPreviewTimer);
+  taskDetailLinkPreviewTimer = setTimeout(() => {
+    taskDetailLinkPreviewTimer = null;
+    updateTaskDetailLinkPreviews(taskDetailNotesInput.value);
+  }, 500);
+}
+
+function applyTaskDetailModalChanges() {
+  const target = getTaskDetailTarget();
+  if (!target) return;
+  const { listId, taskIndex, task } = target;
+  const title = taskDetailNameInput.value.trim();
+  if (!title) return;
+
+  const parsed = parseTaskInput(title, taskDetailLimitInput.value.trim());
+  task.text = parsed.text;
+  task.limitMs = parsed.limitMs;
+  task.notes = taskDetailNotesInput.value;
+  if (!task.notes) delete task.notes;
+
+  persist();
+  renderEditView();
+}
+
+function openTaskDetailModal(listId, taskIndex) {
+  const task = getTasksForList(listId)[taskIndex];
+  if (!task) return;
+
+  hideTaskContextMenu();
+  hideTemplateAutocomplete();
+  closeAllTaskDetailMenus();
+  pendingTaskDetail = { listId, taskIndex };
+  taskDetailSessionBadge.textContent = getTaskDetailSessionLabel(listId, task);
+  taskDetailNameInput.value = task.text;
+  taskDetailLimitInput.value = formatLimitField(task.limitMs);
+  taskDetailNotesInput.value = task.notes || '';
+  renderTaskDetailAttachments(task);
+  populateTaskDetailMoveSelect(listId);
+  populateTaskDetailTemplateSelect();
+  updateTaskDetailLinkPreviews(task.notes || '');
+  taskDetailModal.classList.remove('hidden');
+  requestAnimationFrame(() => taskDetailNameInput.focus());
+}
+
+function closeTaskDetailModal({ save = true } = {}) {
+  if (taskDetailLinkPreviewTimer) {
+    clearTimeout(taskDetailLinkPreviewTimer);
+    taskDetailLinkPreviewTimer = null;
+  }
+  taskDetailLinkPreviewRequestId += 1;
+  closeAllTaskDetailMenus();
+  if (save) applyTaskDetailModalChanges();
+  taskDetailModal.classList.add('hidden');
+  pendingTaskDetail = null;
+  taskDetailLinkPreviews.innerHTML = '';
+}
+
+async function addTaskDetailAttachments() {
+  const target = getTaskDetailTarget();
+  if (!target) return;
+  const { task } = target;
+  const result = await window.slashIt.pickTaskAttachments();
+  if (result.canceled) return;
+  if (result.error) {
+    showAppAlert(result.error, { title: 'Attachment failed' });
+    return;
+  }
+  if (!result.attachments?.length) return;
+  if (!task.attachments) task.attachments = [];
+  task.attachments.push(...result.attachments.map(normalizeTaskAttachment).filter(Boolean));
+  persist();
+  renderTaskDetailAttachments(task);
+}
+
+async function duplicateTaskWithAttachments(listId, taskIndex) {
+  applyTaskDetailModalChanges();
+  const tasks = getTasksForList(listId);
+  const task = tasks[taskIndex];
+  if (!task) return;
+
+  const copy = listId === 'session'
+    ? normalizeSessionTask(task)
+    : normalizeBraindumpTask(task);
+
+  if (copy.attachments?.length) {
+    const result = await window.slashIt.copyTaskAttachments(copy.attachments);
+    if (result.attachments?.length) copy.attachments = result.attachments;
+    else delete copy.attachments;
+  }
+
+  tasks.splice(taskIndex + 1, 0, copy);
+  persist();
+  renderEditView();
+  return taskIndex + 1;
+}
+
+async function removeTaskWithAttachments(listId, index) {
+  const task = getTasksForList(listId)[index];
+  if (task) {
+    await cleanupTaskAttachments(task);
+    state.selectedTasks.delete(task);
+  }
+  getTasksForList(listId).splice(index, 1);
+  if (listId === 'session' && state.currentIndex >= state.sessionTasks.length) {
+    state.currentIndex = Math.max(0, state.sessionTasks.length - 1);
+  }
+  persist();
+  renderEditView();
+}
+
+async function appendTaskToListTemplate(templateId, task) {
+  const template = state.listTemplates.find((item) => item.id === templateId);
+  if (!template) return false;
+
+  applyTaskDetailModalChanges();
+  const target = getTaskDetailTarget();
+  const sourceTask = target?.task || task;
+  const templateTask = normalizeBraindumpTask(sourceTask);
+
+  if (templateTask.attachments?.length) {
+    const result = await window.slashIt.copyAttachmentsForTemplate(templateTask.attachments);
+    if (result.attachments?.length) templateTask.attachments = result.attachments;
+    else delete templateTask.attachments;
+  }
+
+  template.tasks.push(templateTask);
+  template.updatedAt = Date.now();
+  persist();
+  if (!templatesModal.classList.contains('hidden')) renderTemplatesModal();
+  return true;
+}
+
+async function buildTemplateTasksFromPending(tasks) {
+  return Promise.all(tasks.map(async (task) => {
+    const normalized = normalizeBraindumpTask(task);
+    if (!normalized.attachments?.length) return normalized;
+    const result = await window.slashIt.copyAttachmentsForTemplate(normalized.attachments);
+    if (result.attachments?.length) normalized.attachments = result.attachments;
+    else delete normalized.attachments;
+    return normalized;
+  }));
 }
 
 function openCompleteTaskModal(listId, taskIndex) {
@@ -3710,7 +4319,12 @@ function updateHistoryEntryDate(entryId, dateStr) {
 }
 
 function historyTaskToPlannedTask(task) {
-  return normalizeBraindumpTask({ text: task.text, limitMs: task.limitMs });
+  return normalizeBraindumpTask({
+    text: task.text,
+    limitMs: task.limitMs,
+    notes: task.notes,
+    attachments: task.attachments,
+  });
 }
 
 function restoreHistoryEntryToList(entryId) {
@@ -4029,7 +4643,7 @@ function getSourceMetaFromListId(listId) {
 }
 
 function toSessionTaskFromBraindump(task, sourceMeta = null) {
-  const sessionTask = {
+  const sessionTask = normalizeSessionTask({
     text: task.text,
     completed: false,
     limitMs: task.limitMs ?? null,
@@ -4037,7 +4651,9 @@ function toSessionTaskFromBraindump(task, sourceMeta = null) {
     elapsedMs: 0,
     taskOvertimeMode: false,
     skipped: false,
-  };
+    notes: task.notes,
+    attachments: task.attachments,
+  });
   if (sourceMeta) {
     sessionTask.sourceSessionId = sourceMeta.sourceSessionId;
     sessionTask.sourceSessionName = sourceMeta.sourceSessionName;
@@ -4046,7 +4662,12 @@ function toSessionTaskFromBraindump(task, sourceMeta = null) {
 }
 
 function toBraindumpTaskFromSession(task) {
-  return { text: task.text, limitMs: task.limitMs ?? null };
+  return normalizeBraindumpTask({
+    text: task.text,
+    limitMs: task.limitMs ?? null,
+    notes: task.notes,
+    attachments: task.attachments,
+  });
 }
 
 function convertTaskForMove(task, fromList, toList) {
@@ -4562,6 +5183,7 @@ function showTaskContextMenu(e, listId, taskIndex) {
   taskContextCompleteBtn.querySelector('span').textContent = completableCount > 1
     ? `Complete ${completableCount} tasks`
     : 'Complete task';
+  taskContextEditDetailsBtn.classList.toggle('hidden', selectionCount > 1);
   taskContextDeleteBtn.querySelector('span').textContent = selectionCount > 1
     ? `Delete ${selectionCount} tasks`
     : 'Delete';
@@ -4650,15 +5272,23 @@ function renderTaskList(listEl, listId) {
         </button>`
       : '';
 
+    const notesIndicatorHtml = taskHasNotes(task)
+      ? '<span class="task-notes-indicator" aria-hidden="true"></span>'
+      : '';
+
     li.innerHTML = `
       ${leadControlHtml}
-      <span class="task-text">${escapeHtml(task.text)}</span>
+      <span class="task-text-cell">
+        ${notesIndicatorHtml}
+        <span class="task-text">${escapeHtml(task.text)}</span>
+      </span>
       ${limitFieldHtml}
       ${moveToSessionHtml}
     `;
 
-    li.querySelector('.task-text').addEventListener('dblclick', () => {
-      startEditingTask(li, listId, taskIndex);
+    li.querySelector('.task-text').addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      openTaskDetailModal(listId, taskIndex);
     });
     li.addEventListener('contextmenu', (e) => {
       showTaskContextMenu(e, listId, taskIndex);
@@ -7205,7 +7835,17 @@ function isAddFormFocused() {
 function isTaskInputFocused() {
   if (isAddFormFocused()) return true;
   const active = document.activeElement;
-  return !!active?.matches('.task-text-input, .task-limit-input, .planned-session-name-input');
+  if (active?.matches('.task-text-input, .task-limit-input, .planned-session-name-input')) return true;
+  if (!taskDetailModal.classList.contains('hidden')
+    && active?.closest('#task-detail-modal')
+    && active.matches('input, textarea')) {
+    return true;
+  }
+  return false;
+}
+
+function isTaskDetailModalOpen() {
+  return !taskDetailModal.classList.contains('hidden');
 }
 
 function startEditingTask(li, listId, index) {
@@ -7254,6 +7894,7 @@ function isEditShortcutBlocked() {
   if (!clearSessionModal.classList.contains('hidden')) return true;
   if (!deleteSessionModal.classList.contains('hidden')) return true;
   if (!billableModal.classList.contains('hidden')) return true;
+  if (isTaskDetailModalOpen()) return true;
   if (isSettingsUiOpen()) return true;
   return false;
 }
@@ -7289,25 +7930,20 @@ function handleEditModeEnterShortcuts(e) {
 }
 
 function removeTask(listId, index) {
-  const task = getTasksForList(listId)[index];
-  if (task) state.selectedTasks.delete(task);
-  getTasksForList(listId).splice(index, 1);
-  if (listId === 'session' && state.currentIndex >= state.sessionTasks.length) {
-    state.currentIndex = Math.max(0, state.sessionTasks.length - 1);
-  }
-  persist();
-  renderEditView();
+  void removeTaskWithAttachments(listId, index);
 }
 
 function removeSelectedTasks() {
   if (state.selectedTasks.size === 0) return;
 
   const indicesByList = {};
+  const tasksToCleanup = [];
   getAllPlannedListIds().forEach((listId) => {
     getTasksForList(listId).forEach((task, index) => {
       if (state.selectedTasks.has(task)) {
         if (!indicesByList[listId]) indicesByList[listId] = [];
         indicesByList[listId].push(index);
+        tasksToCleanup.push(task);
       }
     });
   });
@@ -7315,22 +7951,27 @@ function removeSelectedTasks() {
     if (state.selectedTasks.has(task)) {
       if (!indicesByList.session) indicesByList.session = [];
       indicesByList.session.push(index);
+      tasksToCleanup.push(task);
     }
   });
 
-  Object.keys(indicesByList).forEach((listId) => {
-    indicesByList[listId].sort((a, b) => b - a).forEach((index) => {
-      getTasksForList(listId).splice(index, 1);
+  void (async () => {
+    await Promise.all(tasksToCleanup.map((task) => cleanupTaskAttachments(task)));
+
+    Object.keys(indicesByList).forEach((listId) => {
+      indicesByList[listId].sort((a, b) => b - a).forEach((index) => {
+        getTasksForList(listId).splice(index, 1);
+      });
     });
-  });
 
-  if (state.currentIndex >= state.sessionTasks.length) {
-    state.currentIndex = Math.max(0, state.sessionTasks.length - 1);
-  }
+    if (state.currentIndex >= state.sessionTasks.length) {
+      state.currentIndex = Math.max(0, state.sessionTasks.length - 1);
+    }
 
-  clearSelection();
-  persist();
-  renderEditView();
+    clearSelection();
+    persist();
+    renderEditView();
+  })();
 }
 
 function renderFocusView() {
@@ -7780,6 +8421,90 @@ completeTaskDurationInput.addEventListener('keydown', (e) => {
   }
 });
 
+taskDetailDoneBtn.addEventListener('click', () => closeTaskDetailModal());
+taskDetailModal.addEventListener('click', (e) => {
+  if (e.target === taskDetailModal) closeTaskDetailModal();
+});
+taskDetailMenuBtn.addEventListener('click', handleTaskDetailMenuBtnClick);
+taskDetailOverflowMenu.addEventListener('click', (e) => e.stopPropagation());
+taskDetailMoveTrigger.addEventListener('click', handleTaskDetailMoveTriggerClick);
+taskDetailMoveMenu.addEventListener('click', handleTaskDetailMoveOptionClick);
+taskDetailTemplateTrigger.addEventListener('click', handleTaskDetailTemplateTriggerClick);
+taskDetailTemplateMenu.addEventListener('click', handleTaskDetailTemplateOptionClick);
+wireTaskDetailTextInput(taskDetailNameInput);
+wireTaskDetailTextInput(taskDetailLimitInput);
+wireTaskDetailTextInput(taskDetailNotesInput);
+taskDetailNotesInput.addEventListener('input', scheduleTaskDetailLinkPreviews);
+taskDetailAddAttachmentBtn.addEventListener('click', () => {
+  void addTaskDetailAttachments();
+});
+taskDetailDeleteBtn.addEventListener('click', () => {
+  const target = getTaskDetailTarget();
+  if (!target) return;
+  const { listId, taskIndex } = target;
+  closeTaskDetailOverflowMenu();
+  closeTaskDetailModal({ save: false });
+  void removeTaskWithAttachments(listId, taskIndex);
+});
+taskDetailDuplicateBtn.addEventListener('click', () => {
+  const target = getTaskDetailTarget();
+  if (!target) return;
+  closeTaskDetailOverflowMenu();
+  void (async () => {
+    const newIndex = await duplicateTaskWithAttachments(target.listId, target.taskIndex);
+    if (Number.isInteger(newIndex)) {
+      openTaskDetailModal(target.listId, newIndex);
+    }
+  })();
+});
+taskDetailMoveBtn.addEventListener('click', () => {
+  const target = getTaskDetailTarget();
+  if (!target) return;
+  const toList = taskDetailMoveListId;
+  if (!toList || toList === target.listId) return;
+  applyTaskDetailModalChanges();
+  const refreshed = getTaskDetailTarget();
+  if (!refreshed) return;
+  const fromList = refreshed.listId;
+  const fromIndex = refreshed.taskIndex;
+  closeTaskDetailModal({ save: false });
+  moveTasks([{ list: fromList, index: fromIndex }], toList, getTasksForList(toList).length);
+});
+taskDetailAddTemplateBtn.addEventListener('click', () => {
+  if (!taskDetailTemplateId) return;
+  void (async () => {
+    const added = await appendTaskToListTemplate(taskDetailTemplateId);
+    if (added) {
+      showAppAlert('Task added to template.', { title: 'Template updated' });
+      populateTaskDetailTemplateSelect();
+    }
+  })();
+});
+taskDetailNewTemplateBtn.addEventListener('click', () => {
+  const target = getTaskDetailTarget();
+  if (!target) return;
+  applyTaskDetailModalChanges();
+  const refreshed = getTaskDetailTarget();
+  if (!refreshed) return;
+  openSaveTemplateModal({
+    defaultName: refreshed.task.text,
+    tasks: [normalizeBraindumpTask(refreshed.task)],
+  });
+});
+taskDetailNameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    closeTaskDetailModal();
+  }
+});
+
+taskContextEditDetailsBtn.addEventListener('click', () => {
+  if (!taskContextMenuTarget) return;
+  const { listId, taskIndex } = taskContextMenuTarget;
+  hideTaskContextMenu();
+  openTaskDetailModal(listId, taskIndex);
+});
+
 taskContextCompleteBtn.addEventListener('click', () => {
   if (!taskContextMenuTarget) return;
   const { listId, taskIndex } = taskContextMenuTarget;
@@ -7856,6 +8581,14 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     hideAllContextMenus();
     hideTemplateAutocomplete();
+    if (!taskDetailModal.classList.contains('hidden')) {
+      if (taskDetailOverflowMenuOpen || taskDetailMoveMenuOpen || taskDetailTemplateMenuOpen) {
+        closeAllTaskDetailMenus();
+        return;
+      }
+      closeTaskDetailModal();
+      return;
+    }
     if (!saveTemplateModal.classList.contains('hidden')) {
       closeSaveTemplateModal();
       return;
@@ -7927,6 +8660,7 @@ document.addEventListener('keydown', (e) => {
   if (state.mode !== 'edit') return;
   if (e.key !== 'Backspace' && e.key !== 'Delete') return;
   if (isTaskInputFocused()) return;
+  if (isTaskDetailModalOpen()) return;
   if (state.selectedTasks.size === 0) return;
 
   e.preventDefault();
