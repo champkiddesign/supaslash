@@ -1,4 +1,22 @@
 const RELEASE_NOTES = {
+  '1.0.10': [
+    {
+      title: 'Task details',
+      description: 'Double-click any task or choose Edit details from the context menu to open a full detail view. Update the title, estimated time, notes, and attachments in one place.',
+    },
+    {
+      title: 'Notes & link previews',
+      description: 'Add context, links, and reference material in task notes. Paste URLs and SupaSlash fetches a preview card so you can jump back to them later.',
+    },
+    {
+      title: 'File attachments',
+      description: 'Attach files to tasks from the detail view. Copies are stored in your SupaSlash data folder, so attachments travel with your tasks and backups.',
+    },
+    {
+      title: 'Move, duplicate & templates',
+      description: 'Move tasks between sessions, duplicate with notes and attachments, or add to a template — all from the detail view. Tasks with notes show a subtle dot beside the name in your lists.',
+    },
+  ],
   '1.0.9': [
     {
       title: 'License & free trial',
