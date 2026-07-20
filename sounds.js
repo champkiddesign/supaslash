@@ -143,6 +143,7 @@ function playTasksCompleteSound() {
 
 const HOVER_CLICK_SOUND_SELECTORS = [
   '.settings-menu-item:not(.settings-menu-item--disabled)',
+  '.planned-sessions-filter-option',
   '#timer-bar button:not(:disabled):not(#timer-display)',
   '.session-drawer-task--clickable',
   '#done-view .done-actions button:not(:disabled)',

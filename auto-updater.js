@@ -109,6 +109,14 @@ function isQuittingForUpdate() {
   return quittingForUpdate;
 }
 
+function isUpdateReadyToInstall() {
+  return updateReadyToInstall;
+}
+
+function isUpdateDownloading() {
+  return isDownloading;
+}
+
 function clearDockBadge() {
   if (process.platform === 'darwin' && app.dock) {
     app.dock.setBadge('');
@@ -504,4 +512,6 @@ module.exports = {
   setupAutoUpdater,
   checkForUpdates,
   isQuittingForUpdate,
+  isUpdateReadyToInstall,
+  isUpdateDownloading,
 };

@@ -36,6 +36,16 @@
       <section class="task-section task-section--planned">
         <div class="section-header">
           <h2 class="section-label section-label--bright" data-tutorial="sessions-panel">Sessions:</h2>
+          <div class="section-header-actions">
+            <div class="planned-sessions-filter-wrap">
+              <button id="planned-sessions-filter-btn" class="planned-sessions-filter-btn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Filter sessions">
+                <svg class="planned-sessions-filter-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                </svg>
+              </button>
+              <div id="planned-sessions-filter-menu" class="planned-sessions-filter-menu hidden" role="listbox" aria-label="Session filter"></div>
+            </div>
+          </div>
         </div>
         <div id="planned-sessions-list" class="planned-sessions-list"></div>
       </section>
@@ -44,7 +54,7 @@
         <div class="section-header">
           <h2 class="section-label section-label--bright" data-tutorial="queue-panel">Queue:</h2>
           <div class="section-header-actions">
-            <button id="move-back-to-list-btn" class="section-action-btn" type="button" data-tutorial="move-back" disabled>Move back to list</button>
+            <button id="move-back-to-list-btn" class="section-action-btn" type="button" data-tutorial="move-back" disabled>Move back</button>
             <button id="clear-session-btn" class="section-action-btn" type="button" data-tutorial="clear-tasks" disabled>Clear tasks</button>
           </div>
         </div>
@@ -391,6 +401,12 @@
   </div>
 
   <div id="session-context-menu" class="task-context-menu hidden" role="menu">
+    <button type="button" id="session-context-pin" class="task-context-menu-item" role="menuitem">
+      <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3.76z"/>
+      </svg>
+      <span>Pin session</span>
+    </button>
     <button type="button" id="session-context-save-template" class="task-context-menu-item" role="menuitem">
       <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
@@ -502,6 +518,21 @@
       <div class="clear-session-modal-actions">
         <button id="save-template-confirm-btn" class="clear-session-modal-btn" type="button">Save</button>
         <button id="save-template-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="create-session-filter-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="create-session-filter-title">
+    <div class="clear-session-modal-card session-filter-modal-card">
+      <h3 id="create-session-filter-title" class="clear-session-modal-title">Create a new filter</h3>
+      <label for="create-session-filter-name-input" class="session-filter-field-label">Filter name</label>
+      <input id="create-session-filter-name-input" type="text" class="save-template-name-input" autocomplete="off" />
+      <span class="session-filter-field-label">Sessions in this filter</span>
+      <div id="create-session-filter-session-list" class="session-filter-session-list"></div>
+      <p id="create-session-filter-error" class="save-template-error hidden"></p>
+      <div class="clear-session-modal-actions">
+        <button id="create-session-filter-confirm-btn" class="clear-session-modal-btn" type="button">Save</button>
+        <button id="create-session-filter-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
       </div>
     </div>
   </div>
@@ -645,16 +676,34 @@
   <div id="whats-new-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="whats-new-title">
     <div class="clear-session-modal-card whats-new-modal-card">
       <h3 id="whats-new-title" class="clear-session-modal-title">What's new</h3>
-      <p id="whats-new-version" class="whats-new-version"></p>
-      <div id="whats-new-slide" class="whats-new-slide">
-        <h4 id="whats-new-slide-title" class="whats-new-slide-title"></h4>
-        <p id="whats-new-slide-body" class="whats-new-slide-body"></p>
+      <div class="whats-new-body">
+        <div id="whats-new-slides-view">
+          <div class="whats-new-meta-row">
+            <div class="whats-new-version-wrap">
+              <p id="whats-new-version" class="whats-new-version"></p>
+              <p id="whats-new-version-date" class="whats-new-version-date"></p>
+            </div>
+            <button type="button" id="whats-new-browse-btn" class="whats-new-browse-btn hidden">View Previous Updates</button>
+          </div>
+          <div class="whats-new-slide-area">
+            <div id="whats-new-slide" class="whats-new-slide">
+              <h4 id="whats-new-slide-title" class="whats-new-slide-title"></h4>
+              <p id="whats-new-slide-body" class="whats-new-slide-body"></p>
+            </div>
+            <div id="whats-new-dots" class="whats-new-dots" role="tablist" aria-label="Release highlights"></div>
+          </div>
+        </div>
+        <div id="whats-new-history-view" class="whats-new-history-view hidden">
+          <p class="whats-new-history-heading">Previous updates</p>
+          <div id="whats-new-history-list" class="whats-new-history-list" role="list"></div>
+        </div>
       </div>
-      <div id="whats-new-dots" class="whats-new-dots" role="tablist" aria-label="Release highlights"></div>
       <div class="clear-session-modal-actions whats-new-modal-actions">
-        <button id="whats-new-prev-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Back</button>
-        <button id="whats-new-next-btn" class="clear-session-modal-btn" type="button">Next</button>
-        <button id="whats-new-done-btn" class="clear-session-modal-btn hidden" type="button">Done</button>
+        <div class="whats-new-nav-row">
+          <button id="whats-new-prev-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button" disabled>Back</button>
+          <button id="whats-new-next-btn" class="clear-session-modal-btn" type="button">Next</button>
+          <button id="whats-new-done-btn" class="clear-session-modal-btn hidden" type="button">Done</button>
+        </div>
       </div>
     </div>
   </div>

@@ -40,6 +40,9 @@ const state = {
     address: '',
   },
   lastSeenWhatsNewVersion: null,
+  lastLaunchedAppVersion: null,
+  sessionListFilter: 'all',
+  sessionListFilters: [],
 };
 
 const licenseState = {
@@ -108,6 +111,8 @@ const licenseDeactivateBtn = document.getElementById('license-deactivate-btn');
 const focusView = document.getElementById('focus-view');
 const doneView = document.getElementById('done-view');
 const plannedSessionsList = document.getElementById('planned-sessions-list');
+const plannedSessionsFilterBtn = document.getElementById('planned-sessions-filter-btn');
+const plannedSessionsFilterMenu = document.getElementById('planned-sessions-filter-menu');
 const planSessionBtn = document.getElementById('plan-session-btn');
 const sessionList = document.getElementById('session-list');
 const startBtn = document.getElementById('start-btn');
@@ -130,10 +135,15 @@ const appAlertTitle = document.getElementById('app-alert-title');
 const appAlertMessage = document.getElementById('app-alert-message');
 const appAlertOkBtn = document.getElementById('app-alert-ok-btn');
 const whatsNewModal = document.getElementById('whats-new-modal');
+const whatsNewSlidesView = document.getElementById('whats-new-slides-view');
+const whatsNewHistoryView = document.getElementById('whats-new-history-view');
+const whatsNewHistoryList = document.getElementById('whats-new-history-list');
 const whatsNewVersion = document.getElementById('whats-new-version');
+const whatsNewVersionDate = document.getElementById('whats-new-version-date');
 const whatsNewSlideTitle = document.getElementById('whats-new-slide-title');
 const whatsNewSlideBody = document.getElementById('whats-new-slide-body');
 const whatsNewDots = document.getElementById('whats-new-dots');
+const whatsNewBrowseBtn = document.getElementById('whats-new-browse-btn');
 const whatsNewPrevBtn = document.getElementById('whats-new-prev-btn');
 const whatsNewNextBtn = document.getElementById('whats-new-next-btn');
 const whatsNewDoneBtn = document.getElementById('whats-new-done-btn');
@@ -204,6 +214,7 @@ const taskContextDuplicateBtn = document.getElementById('task-context-duplicate'
 const taskContextDeleteBtn = document.getElementById('task-context-delete');
 const fullscreenTaskToggleBtn = document.getElementById('fullscreen-task-toggle');
 const sessionContextMenu = document.getElementById('session-context-menu');
+const sessionContextPinBtn = document.getElementById('session-context-pin');
 const sessionContextSaveTemplateBtn = document.getElementById('session-context-save-template');
 const templateAutocomplete = document.getElementById('template-autocomplete');
 const saveTemplateModal = document.getElementById('save-template-modal');
@@ -212,6 +223,13 @@ const saveTemplateNameInput = document.getElementById('save-template-name-input'
 const saveTemplateError = document.getElementById('save-template-error');
 const saveTemplateConfirmBtn = document.getElementById('save-template-confirm-btn');
 const saveTemplateCancelBtn = document.getElementById('save-template-cancel-btn');
+const createSessionFilterModal = document.getElementById('create-session-filter-modal');
+const createSessionFilterNameInput = document.getElementById('create-session-filter-name-input');
+const createSessionFilterSessionList = document.getElementById('create-session-filter-session-list');
+const createSessionFilterError = document.getElementById('create-session-filter-error');
+const createSessionFilterConfirmBtn = document.getElementById('create-session-filter-confirm-btn');
+const createSessionFilterCancelBtn = document.getElementById('create-session-filter-cancel-btn');
+const createSessionFilterTitle = document.getElementById('create-session-filter-title');
 const templatesModal = document.getElementById('templates-modal');
 const templatesModalBody = document.getElementById('templates-modal-body');
 const templatesCloseBtn = document.getElementById('templates-close-btn');
@@ -276,6 +294,17 @@ let historyHighlightRunId = null;
 let historyModalTab = 'sessions';
 let historyReportSessionFilter = '';
 let historyReportSessionMenuOpen = false;
+let plannedSessionsFilterMenuOpen = false;
+
+const SESSION_LIST_FILTERS = ['all', 'pinned', 'recent'];
+const SESSION_LIST_FILTER_LABELS = {
+  all: 'All sessions',
+  pinned: 'Pinned sessions',
+  recent: 'Recent sessions',
+};
+const RECENT_SESSIONS_LIMIT = 15;
+let createSessionFilterSelectedIds = new Set();
+let editingSessionFilterId = null;
 
 const SESSION_HISTORY_MAX = 200;
 
@@ -1222,15 +1251,229 @@ function getTaskBillableDurationMs(task, durationMs, roundMinutes, roundScope) {
 }
 
 function normalizePlannedSession(session) {
+  const id = session.id || BRAINDUMP_SESSION_ID;
   return {
-    id: session.id || BRAINDUMP_SESSION_ID,
+    id,
     name: session.name || 'Session',
     tasks: (session.tasks || []).map(normalizeBraindumpTask),
     hourlyRateEnabled: !!session.hourlyRateEnabled,
     hourlyRate: parseHourlyRate(session.hourlyRate),
     billableRoundMinutes: normalizeBillableRoundMinutes(session.billableRoundMinutes),
     billableRoundScope: normalizeBillableRoundScope(session.billableRoundScope),
+    pinned: !!session.pinned && id !== BRAINDUMP_SESSION_ID,
   };
+}
+
+function normalizeSessionListFilter(value) {
+  if (isBuiltInSessionListFilter(value)) return value;
+  if (getCustomSessionFilter(value)) return value;
+  return 'all';
+}
+
+function isBuiltInSessionListFilter(value) {
+  return SESSION_LIST_FILTERS.includes(value);
+}
+
+function getCustomSessionFilter(id) {
+  return state.sessionListFilters.find((filter) => filter.id === id) || null;
+}
+
+function normalizeCustomSessionFilter(filter) {
+  const now = Date.now();
+  const rawIds = Array.isArray(filter?.sessionIds) ? filter.sessionIds : [];
+  const sessionIds = [...new Set(
+    rawIds.filter((id) => typeof id === 'string' && getPlannedSession(id)),
+  )];
+  return {
+    id: filter?.id || crypto.randomUUID(),
+    name: normalizeTemplateName(filter?.name) || 'Custom filter',
+    sessionIds,
+    createdAt: filter?.createdAt || now,
+    updatedAt: filter?.updatedAt || filter?.createdAt || now,
+    // Custom session filter params: extend normalizeCustomSessionFilter + modal UI here.
+  };
+}
+
+function isBuiltInSessionFilterLabel(name) {
+  const normalized = normalizeTemplateName(name).toLowerCase();
+  if (!normalized) return false;
+  return SESSION_LIST_FILTERS.some(
+    (id) => SESSION_LIST_FILTER_LABELS[id].toLowerCase() === normalized,
+  );
+}
+
+function isCustomSessionFilterNameTaken(name, excludeId = null) {
+  const normalized = normalizeTemplateName(name);
+  if (!normalized) return false;
+  if (isBuiltInSessionFilterLabel(normalized)) return true;
+  return state.sessionListFilters.some(
+    (filter) => filter.id !== excludeId && templateNamesMatch(filter.name, normalized),
+  );
+}
+
+function getPlannedSession(sessionId) {
+  return state.plannedSessions.find((session) => session.id === sessionId) || null;
+}
+
+function getPinnedPlannedSessions() {
+  return state.plannedSessions.filter(
+    (session) => session.id !== BRAINDUMP_SESSION_ID && session.pinned,
+  );
+}
+
+function getUnpinnedPlannedSessions() {
+  return state.plannedSessions.filter(
+    (session) => session.id === BRAINDUMP_SESSION_ID || !session.pinned,
+  );
+}
+
+function getRecentPlannedSessionIds(limit = RECENT_SESSIONS_LIMIT) {
+  const ids = [];
+  const seen = new Set();
+  state.sessionHistory.forEach((entry) => {
+    const id = getHistoryEntrySourceSessionId(entry);
+    if (seen.has(id)) return;
+    if (!getPlannedSession(id)) return;
+    seen.add(id);
+    ids.push(id);
+  });
+  return ids.slice(0, limit);
+}
+
+function getRecentPlannedSessions() {
+  return getRecentPlannedSessionIds()
+    .map((id) => getPlannedSession(id))
+    .filter(Boolean);
+}
+
+function getFirstUnpinnedIndex() {
+  for (let i = 1; i < state.plannedSessions.length; i += 1) {
+    if (!state.plannedSessions[i].pinned) return i;
+  }
+  return state.plannedSessions.length;
+}
+
+function normalizePlannedSessionOrder() {
+  ensureBraindumpSession();
+  const braindump = state.plannedSessions.find((session) => session.id === BRAINDUMP_SESSION_ID);
+  const pinned = state.plannedSessions.filter(
+    (session) => session.id !== BRAINDUMP_SESSION_ID && session.pinned,
+  );
+  const unpinned = state.plannedSessions.filter(
+    (session) => session.id !== BRAINDUMP_SESSION_ID && !session.pinned,
+  );
+  state.plannedSessions = [
+    ...(braindump ? [braindump] : []),
+    ...pinned,
+    ...unpinned,
+  ];
+}
+
+function getActiveSessionListFilterHeading() {
+  const filter = state.sessionListFilter;
+  if (filter === 'all') return null;
+  if (isBuiltInSessionListFilter(filter)) return SESSION_LIST_FILTER_LABELS[filter];
+  return getCustomSessionFilter(filter)?.name || null;
+}
+
+function appendPlannedSessionsFilterHeading(container) {
+  const heading = getActiveSessionListFilterHeading();
+  if (!heading) return;
+
+  const label = document.createElement('div');
+  label.className = 'planned-sessions-group-label';
+  label.textContent = heading;
+  container.appendChild(label);
+}
+
+function getPlannedSessionsRenderPlan() {
+  const filter = state.sessionListFilter;
+
+  if (filter === 'pinned') {
+    const pinned = getPinnedPlannedSessions();
+    return {
+      emptyMessage: pinned.length === 0 ? 'No pinned sessions.' : null,
+      sections: pinned.length > 0 ? [{
+        label: null,
+        sessions: pinned,
+        showDividerBefore: false,
+        showDividerAfter: false,
+      }] : [],
+    };
+  }
+
+  if (filter === 'recent') {
+    const recent = getRecentPlannedSessions();
+    return {
+      emptyMessage: recent.length === 0 ? 'No recent sessions.' : null,
+      sections: recent.length > 0 ? [{ label: null, sessions: recent, showDividerAfter: false }] : [],
+    };
+  }
+
+  if (!isBuiltInSessionListFilter(filter)) {
+    const custom = getCustomSessionFilter(filter);
+    if (custom) {
+      const sessions = custom.sessionIds
+        .map((id) => getPlannedSession(id))
+        .filter(Boolean);
+      return {
+        emptyMessage: sessions.length === 0 ? 'No sessions in this filter.' : null,
+        sections: sessions.length > 0
+          ? [{ label: null, sessions, showDividerAfter: false }]
+          : [],
+      };
+    }
+  }
+
+  const pinned = getPinnedPlannedSessions();
+  const braindump = state.plannedSessions.find((session) => session.id === BRAINDUMP_SESSION_ID);
+  const unpinnedRest = state.plannedSessions.filter(
+    (session) => session.id !== BRAINDUMP_SESSION_ID && !session.pinned,
+  );
+  const sections = [];
+  const hasBelowPinned = !!(braindump || unpinnedRest.length > 0);
+
+  if (pinned.length > 0) {
+    sections.push({
+      label: 'Pinned',
+      sessions: pinned,
+      showDividerBefore: true,
+      showDividerAfter: hasBelowPinned,
+    });
+  }
+  if (braindump) {
+    sections.push({ label: null, sessions: [braindump], showDividerAfter: false });
+  }
+  if (unpinnedRest.length > 0) {
+    sections.push({ label: null, sessions: unpinnedRest, showDividerAfter: false });
+  }
+
+  return { emptyMessage: null, sections };
+}
+
+function toggleSessionPin(sessionId) {
+  if (sessionId === BRAINDUMP_SESSION_ID) return;
+  const fromIndex = getPlannedSessionIndex(sessionId);
+  if (fromIndex < 1) return;
+
+  const [session] = state.plannedSessions.splice(fromIndex, 1);
+  session.pinned = !session.pinned;
+
+  if (session.pinned) {
+    const insertAt = getFirstUnpinnedIndex();
+    state.plannedSessions.splice(insertAt, 0, session);
+  } else {
+    const insertAt = getFirstUnpinnedIndex();
+    state.plannedSessions.splice(insertAt, 0, session);
+  }
+
+  persist();
+  renderEditView();
+}
+
+function canReorderPlannedSessions() {
+  if (!isBuiltInSessionListFilter(state.sessionListFilter)) return false;
+  return state.sessionListFilter === 'all' || state.sessionListFilter === 'pinned';
 }
 
 function normalizeListTemplate(template) {
@@ -1569,10 +1812,6 @@ function listIdForSession(sessionId) {
 
 function getPlannedSessionIdFromListId(listId) {
   return listId.slice('planned:'.length);
-}
-
-function getPlannedSession(sessionId) {
-  return state.plannedSessions.find((session) => session.id === sessionId) || null;
 }
 
 function getPlannedSessionRateSettings(sessionId) {
@@ -2437,12 +2676,17 @@ function movePlannedSession(sessionId, insertAt) {
   const fromIndex = getPlannedSessionIndex(sessionId);
   if (fromIndex < 1) return;
 
-  let toIndex = Math.max(1, Math.min(insertAt, state.plannedSessions.length));
+  const session = state.plannedSessions[fromIndex];
+  const isPinned = !!session.pinned;
+  const groupStart = isPinned ? 1 : getFirstUnpinnedIndex();
+  const groupEnd = isPinned ? getFirstUnpinnedIndex() : state.plannedSessions.length;
+
+  let toIndex = Math.max(groupStart, Math.min(insertAt, groupEnd));
   if (fromIndex === toIndex) return;
 
-  const [session] = state.plannedSessions.splice(fromIndex, 1);
+  const [movedSession] = state.plannedSessions.splice(fromIndex, 1);
   if (fromIndex < toIndex) toIndex -= 1;
-  state.plannedSessions.splice(toIndex, 0, session);
+  state.plannedSessions.splice(toIndex, 0, movedSession);
   persist();
   renderEditView();
 }
@@ -2548,6 +2792,7 @@ function isUndoRedoShortcutBlocked() {
   if (!billableModal.classList.contains('hidden')) return true;
   if (!completeTaskModal.classList.contains('hidden')) return true;
   if (!saveTemplateModal.classList.contains('hidden')) return true;
+  if (!createSessionFilterModal?.classList.contains('hidden')) return true;
   if (isTaskDetailModalOpen()) return true;
   return false;
 }
@@ -2605,6 +2850,9 @@ function persist(options = {}) {
     soundEffectsEnabled: window.slashItSounds.isEnabled(),
     invoiceSettings: state.invoiceSettings,
     lastSeenWhatsNewVersion: state.lastSeenWhatsNewVersion,
+    lastLaunchedAppVersion: state.lastLaunchedAppVersion,
+    sessionListFilter: state.sessionListFilter,
+    sessionListFilters: state.sessionListFilters,
   });
 }
 
@@ -3924,6 +4172,282 @@ function handleHistoryReportSessionOptionClick(event) {
   refreshHistoryModalPanels();
 }
 
+function renderPlannedSessionsFilterMenuOptions() {
+  if (!plannedSessionsFilterMenu) return;
+
+  const selected = state.sessionListFilter;
+  const builtInOptions = SESSION_LIST_FILTERS.map((filter) => {
+    const isSelected = selected === filter;
+    return `
+      <button
+        type="button"
+        class="planned-sessions-filter-option${isSelected ? ' planned-sessions-filter-option--selected' : ''}"
+        role="option"
+        aria-selected="${isSelected}"
+        data-session-list-filter="${filter}"
+      >
+        <span class="planned-sessions-filter-option-check" aria-hidden="true">${isSelected ? '✓' : ''}</span>
+        <span class="planned-sessions-filter-option-label">${escapeHtml(SESSION_LIST_FILTER_LABELS[filter])}</span>
+      </button>
+    `;
+  }).join('');
+
+  const customOptions = state.sessionListFilters.map((filter) => {
+    const isSelected = selected === filter.id;
+    return `
+      <div
+        class="planned-sessions-filter-option planned-sessions-filter-option--custom${isSelected ? ' planned-sessions-filter-option--selected' : ''}"
+        role="option"
+        aria-selected="${isSelected}"
+        data-session-list-filter="${escapeHtml(filter.id)}"
+      >
+        <span class="planned-sessions-filter-option-check" aria-hidden="true">${isSelected ? '✓' : ''}</span>
+        <span class="planned-sessions-filter-option-label">${escapeHtml(filter.name)}</span>
+        <button
+          type="button"
+          class="planned-sessions-filter-option-edit"
+          data-session-filter-action="edit"
+          data-session-filter-id="${escapeHtml(filter.id)}"
+        >Edit</button>
+      </div>
+    `;
+  }).join('');
+
+  plannedSessionsFilterMenu.innerHTML = `
+    ${builtInOptions}
+    <div class="planned-sessions-filter-divider" role="separator"></div>
+    <button
+      type="button"
+      class="planned-sessions-filter-option planned-sessions-filter-option--create"
+      data-session-filter-action="create"
+    >
+      <span class="planned-sessions-filter-option-check" aria-hidden="true"></span>
+      <span class="planned-sessions-filter-option-label">Create a new filter</span>
+    </button>
+    ${customOptions}
+  `;
+}
+
+function updatePlannedSessionsFilterButtonState() {
+  if (!plannedSessionsFilterBtn) return;
+  plannedSessionsFilterBtn.classList.toggle(
+    'planned-sessions-filter-btn--active',
+    state.sessionListFilter !== 'all',
+  );
+}
+
+function positionPlannedSessionsFilterMenu() {
+  if (!plannedSessionsFilterBtn || !plannedSessionsFilterMenu) return;
+
+  const rect = plannedSessionsFilterBtn.getBoundingClientRect();
+  plannedSessionsFilterMenu.style.top = `${rect.bottom + 4}px`;
+  plannedSessionsFilterMenu.style.left = `${Math.max(8, rect.right - 180)}px`;
+  plannedSessionsFilterMenu.style.width = `${Math.max(rect.width, 180)}px`;
+}
+
+function openPlannedSessionsFilterMenu() {
+  if (!plannedSessionsFilterMenu || !plannedSessionsFilterBtn) return;
+
+  renderPlannedSessionsFilterMenuOptions();
+  positionPlannedSessionsFilterMenu();
+  plannedSessionsFilterMenu.classList.remove('hidden');
+  plannedSessionsFilterBtn.setAttribute('aria-expanded', 'true');
+  plannedSessionsFilterMenuOpen = true;
+  requestAnimationFrame(() => {
+    document.addEventListener('click', handlePlannedSessionsFilterOutsideClick, true);
+  });
+}
+
+function closePlannedSessionsFilterMenu() {
+  if (!plannedSessionsFilterMenu || !plannedSessionsFilterBtn) return;
+
+  plannedSessionsFilterMenu.classList.add('hidden');
+  plannedSessionsFilterBtn.setAttribute('aria-expanded', 'false');
+  plannedSessionsFilterMenuOpen = false;
+  document.removeEventListener('click', handlePlannedSessionsFilterOutsideClick, true);
+}
+
+function handlePlannedSessionsFilterOutsideClick(event) {
+  if (plannedSessionsFilterBtn?.contains(event.target)
+    || plannedSessionsFilterMenu?.contains(event.target)) {
+    return;
+  }
+  closePlannedSessionsFilterMenu();
+}
+
+function handlePlannedSessionsFilterTriggerClick(event) {
+  event.stopPropagation();
+  if (plannedSessionsFilterMenuOpen) {
+    closePlannedSessionsFilterMenu();
+    return;
+  }
+
+  openPlannedSessionsFilterMenu();
+}
+
+function handlePlannedSessionsFilterOptionClick(event) {
+  const createBtn = event.target.closest('[data-session-filter-action="create"]');
+  if (createBtn) {
+    event.stopPropagation();
+    closePlannedSessionsFilterMenu();
+    openCreateSessionFilterModal();
+    return;
+  }
+
+  const editBtn = event.target.closest('[data-session-filter-action="edit"]');
+  if (editBtn) {
+    event.stopPropagation();
+    const filterId = editBtn.getAttribute('data-session-filter-id');
+    if (!filterId) return;
+    closePlannedSessionsFilterMenu();
+    openEditSessionFilterModal(filterId);
+    return;
+  }
+
+  const option = event.target.closest('.planned-sessions-filter-option');
+  if (!option || option.classList.contains('planned-sessions-filter-option--create')) return;
+  if (event.target.closest('.planned-sessions-filter-option-edit')) return;
+
+  event.stopPropagation();
+  const filterValue = option.getAttribute('data-session-list-filter');
+  if (!filterValue) return;
+  state.sessionListFilter = normalizeSessionListFilter(filterValue);
+  closePlannedSessionsFilterMenu();
+  updatePlannedSessionsFilterButtonState();
+  persist();
+  renderEditView();
+}
+
+function renderCreateSessionFilterSessionList() {
+  if (!createSessionFilterSessionList) return;
+
+  createSessionFilterSessionList.innerHTML = state.plannedSessions.map((session) => {
+    const isSelected = createSessionFilterSelectedIds.has(session.id);
+    return `
+      <button
+        type="button"
+        class="session-filter-session-option${isSelected ? ' session-filter-session-option--selected' : ''}"
+        data-session-id="${escapeHtml(session.id)}"
+      >
+        <span class="session-filter-session-option-check" aria-hidden="true">${isSelected ? '✓' : ''}</span>
+        <span class="session-filter-session-option-label">${escapeHtml(session.name)}</span>
+      </button>
+    `;
+  }).join('');
+}
+
+function resetSessionFilterModalForm() {
+  editingSessionFilterId = null;
+  createSessionFilterSelectedIds = new Set();
+  if (createSessionFilterNameInput) createSessionFilterNameInput.value = '';
+  if (createSessionFilterTitle) createSessionFilterTitle.textContent = 'Create a new filter';
+  if (createSessionFilterError) {
+    createSessionFilterError.classList.add('hidden');
+    createSessionFilterError.textContent = '';
+  }
+}
+
+function openCreateSessionFilterModal() {
+  if (!createSessionFilterModal) return;
+
+  resetSessionFilterModalForm();
+  renderCreateSessionFilterSessionList();
+  createSessionFilterModal.classList.remove('hidden');
+  requestAnimationFrame(() => {
+    createSessionFilterNameInput?.focus();
+  });
+}
+
+function openEditSessionFilterModal(filterId) {
+  if (!createSessionFilterModal) return;
+
+  const filter = getCustomSessionFilter(filterId);
+  if (!filter) return;
+
+  resetSessionFilterModalForm();
+  editingSessionFilterId = filterId;
+  createSessionFilterSelectedIds = new Set(filter.sessionIds);
+  if (createSessionFilterNameInput) createSessionFilterNameInput.value = filter.name;
+  if (createSessionFilterTitle) createSessionFilterTitle.textContent = 'Edit filter';
+  renderCreateSessionFilterSessionList();
+  createSessionFilterModal.classList.remove('hidden');
+  requestAnimationFrame(() => {
+    createSessionFilterNameInput?.focus();
+    createSessionFilterNameInput?.select();
+  });
+}
+
+function closeCreateSessionFilterModal() {
+  if (!createSessionFilterModal) return;
+
+  createSessionFilterModal.classList.add('hidden');
+  resetSessionFilterModalForm();
+}
+
+function confirmCreateSessionFilterModal() {
+  const name = normalizeTemplateName(createSessionFilterNameInput?.value);
+  if (!name) {
+    createSessionFilterError.textContent = 'Enter a filter name.';
+    createSessionFilterError.classList.remove('hidden');
+    return;
+  }
+  if (isCustomSessionFilterNameTaken(name, editingSessionFilterId)) {
+    createSessionFilterError.textContent = 'A filter with that name already exists.';
+    createSessionFilterError.classList.remove('hidden');
+    return;
+  }
+  if (createSessionFilterSelectedIds.size === 0) {
+    createSessionFilterError.textContent = 'Select at least one session.';
+    createSessionFilterError.classList.remove('hidden');
+    return;
+  }
+
+  if (editingSessionFilterId) {
+    const existing = getCustomSessionFilter(editingSessionFilterId);
+    if (!existing) {
+      closeCreateSessionFilterModal();
+      return;
+    }
+    const updated = normalizeCustomSessionFilter({
+      ...existing,
+      name,
+      sessionIds: [...createSessionFilterSelectedIds],
+      updatedAt: Date.now(),
+    });
+    Object.assign(existing, updated);
+  } else {
+    const now = Date.now();
+    const filter = normalizeCustomSessionFilter({
+      id: crypto.randomUUID(),
+      name,
+      sessionIds: [...createSessionFilterSelectedIds],
+      createdAt: now,
+      updatedAt: now,
+    });
+    state.sessionListFilters.push(filter);
+    state.sessionListFilter = filter.id;
+  }
+
+  closeCreateSessionFilterModal();
+  persist();
+  renderEditView();
+}
+
+function handleCreateSessionFilterSessionListClick(event) {
+  const option = event.target.closest('.session-filter-session-option');
+  if (!option) return;
+
+  const sessionId = option.getAttribute('data-session-id');
+  if (!sessionId) return;
+
+  if (createSessionFilterSelectedIds.has(sessionId)) {
+    createSessionFilterSelectedIds.delete(sessionId);
+  } else {
+    createSessionFilterSelectedIds.add(sessionId);
+  }
+  renderCreateSessionFilterSessionList();
+}
+
 function sanitizeFileNamePart(value) {
   return (value || '').replace(/[/\\?%*:|"<>]/g, '-').trim();
 }
@@ -4956,11 +5480,21 @@ function updateSessionDropIndicator(listEl, clientY) {
 }
 
 function getSessionInsertIndexFromDrop(listEl) {
+  const blocks = [...listEl.querySelectorAll(':scope > .planned-session')];
   const indicator = listEl.querySelector('.session-drop-indicator');
-  if (indicator?.dataset.insertAt != null) {
-    return Number(indicator.dataset.insertAt);
+  const domInsertAt = indicator?.dataset.insertAt != null
+    ? Number(indicator.dataset.insertAt)
+    : blocks.length;
+
+  if (blocks.length === 0) return 1;
+
+  if (domInsertAt >= blocks.length) {
+    const lastId = blocks[blocks.length - 1].dataset.sessionId;
+    return getPlannedSessionIndex(lastId) + 1;
   }
-  return state.plannedSessions.length;
+
+  const targetId = blocks[domInsertAt].dataset.sessionId;
+  return getPlannedSessionIndex(targetId);
 }
 
 function setupPlannedSessionsReorder() {
@@ -5195,7 +5729,20 @@ function showSessionContextMenu(e, sessionId) {
   e.stopPropagation();
   hideTaskContextMenu();
   hideTemplateAutocomplete();
+  closePlannedSessionsFilterMenu();
   sessionContextMenuTarget = { sessionId };
+
+  const session = getPlannedSession(sessionId);
+  const isBraindump = sessionId === BRAINDUMP_SESSION_ID;
+  if (sessionContextPinBtn) {
+    sessionContextPinBtn.classList.toggle('hidden', isBraindump);
+    if (!isBraindump) {
+      sessionContextPinBtn.querySelector('span').textContent = session?.pinned
+        ? 'Unpin session'
+        : 'Pin session';
+    }
+  }
+
   positionContextMenu(sessionContextMenu, e.clientX, e.clientY);
 }
 
@@ -5500,155 +6047,196 @@ function setupSessionAddTask(block, session) {
   });
 }
 
+function renderPlannedSessionBlock(session) {
+  const isExpanded = isSessionExpanded(session.id);
+  const listId = listIdForSession(session.id);
+  const block = document.createElement('div');
+  block.className = `planned-session ${isExpanded ? 'planned-session--expanded' : 'planned-session--collapsed'}`;
+  block.dataset.sessionId = session.id;
+  const sendLabel = `Send all tasks from ${session.name} to Queue`;
+  const isBraindump = session.id === BRAINDUMP_SESSION_ID;
+  const sendTutorialAttr = isBraindump ? ' data-tutorial="send-all-queue"' : '';
+  const allowReorder = canReorderPlannedSessions();
+
+  block.innerHTML = `
+    <div class="planned-session-header">
+      <button class="planned-session-toggle" type="button" aria-expanded="${isExpanded}" aria-label="${isExpanded ? 'Collapse' : 'Expand'} ${escapeHtml(session.name)}">
+        <span class="planned-session-toggle-icon" aria-hidden="true"></span>
+      </button>
+      <div class="planned-session-title">
+        ${renderPlannedSessionName(session, isExpanded)}
+      </div>
+      <div class="planned-session-header-actions">
+        ${renderSessionEarningsBadge(session)}
+        ${renderPlannedSessionDeleteButton(session)}
+        <div class="planned-session-billable-group">
+          ${renderSessionEstimateBadge(session)}
+          ${renderSessionBillableButton(session, isBraindump ? 'billable' : null)}
+        </div>
+        <button
+          type="button"
+          class="session-send-to-queue-btn"
+          data-session-id="${escapeHtml(session.id)}"
+          ${sendTutorialAttr}
+          ${session.tasks.length === 0 ? 'disabled' : ''}
+          title="${escapeHtml(sendLabel)}"
+          aria-label="${escapeHtml(sendLabel)}"
+        ><span class="task-arrow" aria-hidden="true"></span></button>
+      </div>
+    </div>
+    <div class="planned-session-body">
+      <ul class="task-list" data-list="${escapeHtml(listId)}"></ul>
+      <div class="planned-session-footer">
+        <div class="session-add-task">
+          ${renderSessionAddTask(session)}
+        </div>
+      </div>
+    </div>
+  `;
+
+  const toggleBtn = block.querySelector('.planned-session-toggle');
+  toggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleSession(session.id);
+  });
+
+  const header = block.querySelector('.planned-session-header');
+  if (!isBraindump && allowReorder) {
+    header.setAttribute('draggable', 'true');
+    header.addEventListener('dragstart', (e) => {
+      if (e.target.closest('button, input, .planned-session-name-input')) {
+        e.preventDefault();
+        return;
+      }
+      sessionReorderDragId = session.id;
+      block.classList.add('dragging-session');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', encodeSessionReorderPayload(session.id));
+    });
+  }
+
+  block.addEventListener('dragend', () => {
+    block.classList.remove('dragging-session');
+    sessionReorderDragId = null;
+    clearDropIndicators();
+    document.querySelectorAll('.planned-session-header.drag-over-session').forEach((el) => {
+      el.classList.remove('drag-over-session');
+    });
+  });
+
+  header.addEventListener('click', (e) => {
+    if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn, .session-billable-btn, .session-send-to-queue-btn, .session-estimate-badge, .session-earnings-badge')) return;
+    if (!isExpanded) expandSession(session.id);
+  });
+  header.addEventListener('contextmenu', (e) => {
+    if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn, .session-billable-btn, .session-send-to-queue-btn, .session-estimate-badge, .session-earnings-badge')) return;
+    showSessionContextMenu(e, session.id);
+  });
+
+  const deleteBtn = block.querySelector('.planned-session-delete-btn');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openDeleteSessionModal(session.id);
+    });
+  }
+
+  const sendBtn = block.querySelector('.session-send-to-queue-btn');
+  if (sendBtn) {
+    sendBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      addAllFromSession(session.id);
+    });
+  }
+
+  const billableBtn = block.querySelector('.session-billable-btn');
+  if (billableBtn) {
+    billableBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openBillableModal(session.id);
+    });
+  }
+
+  const nameInput = block.querySelector('.planned-session-name-input');
+  if (nameInput) {
+    const saveName = () => savePlannedSessionName(session.id, nameInput.value);
+    nameInput.addEventListener('blur', saveName);
+    nameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        nameInput.blur();
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        state.renamingSessionId = null;
+        renderEditView();
+      }
+    });
+    requestAnimationFrame(() => {
+      nameInput.focus();
+      nameInput.select();
+    });
+  } else if (!isBraindump) {
+    const nameEl = block.querySelector('.planned-session-name');
+    nameEl.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      state.renamingSessionId = session.id;
+      renderEditView();
+    });
+  }
+
+  const listEl = block.querySelector('.task-list');
+  setupSessionHeaderDropZone(block, listId, session.id, isExpanded);
+  if (isExpanded) {
+    renderTaskList(listEl, listId);
+    setupListDropZone(listEl, listId);
+    setupListSelectionClear(listEl);
+    setupSessionAddTask(block, session);
+  }
+
+  return block;
+}
+
 function renderPlannedSessions() {
   plannedSessionsList.innerHTML = '';
+  updatePlannedSessionsFilterButtonState();
 
-  state.plannedSessions.forEach((session, sessionIndex) => {
-    const isExpanded = isSessionExpanded(session.id);
-    const listId = listIdForSession(session.id);
-    const block = document.createElement('div');
-    block.className = `planned-session ${isExpanded ? 'planned-session--expanded' : 'planned-session--collapsed'}`;
-    block.dataset.sessionId = session.id;
-    const sendLabel = `Send all tasks from ${session.name} to Queue`;
-    const sendTutorialAttr = sessionIndex === 0 ? ' data-tutorial="send-all-queue"' : '';
+  const plan = getPlannedSessionsRenderPlan();
+  appendPlannedSessionsFilterHeading(plannedSessionsList);
 
-    block.innerHTML = `
-      <div class="planned-session-header">
-        <button class="planned-session-toggle" type="button" aria-expanded="${isExpanded}" aria-label="${isExpanded ? 'Collapse' : 'Expand'} ${escapeHtml(session.name)}">
-          <span class="planned-session-toggle-icon" aria-hidden="true"></span>
-        </button>
-        <div class="planned-session-title">
-          ${renderPlannedSessionName(session, isExpanded)}
-        </div>
-        <div class="planned-session-header-actions">
-          ${renderSessionEarningsBadge(session)}
-          ${renderPlannedSessionDeleteButton(session)}
-          <div class="planned-session-billable-group">
-            ${renderSessionEstimateBadge(session)}
-            ${renderSessionBillableButton(session, sessionIndex === 0 ? 'billable' : null)}
-          </div>
-          <button
-            type="button"
-            class="session-send-to-queue-btn"
-            data-session-id="${escapeHtml(session.id)}"
-            ${sendTutorialAttr}
-            ${session.tasks.length === 0 ? 'disabled' : ''}
-            title="${escapeHtml(sendLabel)}"
-            aria-label="${escapeHtml(sendLabel)}"
-          ><span class="task-arrow" aria-hidden="true"></span></button>
-        </div>
-      </div>
-      <div class="planned-session-body">
-        <ul class="task-list" data-list="${escapeHtml(listId)}"></ul>
-        <div class="planned-session-footer">
-          <div class="session-add-task">
-            ${renderSessionAddTask(session)}
-          </div>
-        </div>
-      </div>
-    `;
+  if (plan.emptyMessage) {
+    plannedSessionsList.insertAdjacentHTML(
+      'beforeend',
+      `<p class="planned-sessions-empty">${escapeHtml(plan.emptyMessage)}</p>`,
+    );
+    return;
+  }
 
-    const toggleBtn = block.querySelector('.planned-session-toggle');
-    toggleBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleSession(session.id);
+  plan.sections.forEach((section) => {
+    if (section.showDividerBefore) {
+      const topDivider = document.createElement('div');
+      topDivider.className = 'planned-sessions-group-divider';
+      topDivider.setAttribute('aria-hidden', 'true');
+      plannedSessionsList.appendChild(topDivider);
+    }
+
+    if (section.label) {
+      const label = document.createElement('div');
+      label.className = 'planned-sessions-group-label';
+      label.textContent = section.label;
+      plannedSessionsList.appendChild(label);
+    }
+
+    section.sessions.forEach((session) => {
+      plannedSessionsList.appendChild(renderPlannedSessionBlock(session));
     });
 
-    const header = block.querySelector('.planned-session-header');
-    if (session.id !== BRAINDUMP_SESSION_ID) {
-      header.setAttribute('draggable', 'true');
-      header.addEventListener('dragstart', (e) => {
-        if (e.target.closest('button, input, .planned-session-name-input')) {
-          e.preventDefault();
-          return;
-        }
-        sessionReorderDragId = session.id;
-        block.classList.add('dragging-session');
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', encodeSessionReorderPayload(session.id));
-      });
+    if (section.showDividerAfter) {
+      const divider = document.createElement('div');
+      divider.className = 'planned-sessions-group-divider';
+      divider.setAttribute('aria-hidden', 'true');
+      plannedSessionsList.appendChild(divider);
     }
-
-    block.addEventListener('dragend', () => {
-      block.classList.remove('dragging-session');
-      sessionReorderDragId = null;
-      clearDropIndicators();
-      document.querySelectorAll('.planned-session-header.drag-over-session').forEach((el) => {
-        el.classList.remove('drag-over-session');
-      });
-    });
-
-    header.addEventListener('click', (e) => {
-      if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn, .session-billable-btn, .session-send-to-queue-btn, .session-estimate-badge, .session-earnings-badge')) return;
-      if (!isExpanded) expandSession(session.id);
-    });
-    header.addEventListener('contextmenu', (e) => {
-      if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn, .session-billable-btn, .session-send-to-queue-btn, .session-estimate-badge, .session-earnings-badge')) return;
-      showSessionContextMenu(e, session.id);
-    });
-
-    const deleteBtn = block.querySelector('.planned-session-delete-btn');
-    if (deleteBtn) {
-      deleteBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openDeleteSessionModal(session.id);
-      });
-    }
-
-    const sendBtn = block.querySelector('.session-send-to-queue-btn');
-    if (sendBtn) {
-      sendBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        addAllFromSession(session.id);
-      });
-    }
-
-    const billableBtn = block.querySelector('.session-billable-btn');
-    if (billableBtn) {
-      billableBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openBillableModal(session.id);
-      });
-    }
-
-    const nameInput = block.querySelector('.planned-session-name-input');
-    if (nameInput) {
-      const saveName = () => savePlannedSessionName(session.id, nameInput.value);
-      nameInput.addEventListener('blur', saveName);
-      nameInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          nameInput.blur();
-        }
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          state.renamingSessionId = null;
-          renderEditView();
-        }
-      });
-      requestAnimationFrame(() => {
-        nameInput.focus();
-        nameInput.select();
-      });
-    } else if (session.id !== BRAINDUMP_SESSION_ID) {
-      const nameEl = block.querySelector('.planned-session-name');
-      nameEl.addEventListener('dblclick', (e) => {
-        e.stopPropagation();
-        state.renamingSessionId = session.id;
-        renderEditView();
-      });
-    }
-
-    const listEl = block.querySelector('.task-list');
-    setupSessionHeaderDropZone(block, listId, session.id, isExpanded);
-    if (isExpanded) {
-      renderTaskList(listEl, listId);
-      setupListDropZone(listEl, listId);
-      setupListSelectionClear(listEl);
-      setupSessionAddTask(block, session);
-    }
-
-    plannedSessionsList.appendChild(block);
   });
 
   setupPlannedSessionsReorder();
@@ -5675,6 +6263,7 @@ function isSettingsUiOpen() {
     || !historyModal.classList.contains('hidden')
     || !templatesModal.classList.contains('hidden')
     || !saveTemplateModal.classList.contains('hidden')
+    || !createSessionFilterModal?.classList.contains('hidden')
     || !billableModal.classList.contains('hidden')
     || !whatsNewModal.classList.contains('hidden');
 }
@@ -7009,7 +7598,19 @@ function closeAppAlert() {
 
 let whatsNewSlides = [];
 let whatsNewSlideIndex = 0;
-let whatsNewVersionLabel = '';
+let whatsNewAppVersion = '';
+let whatsNewDisplayVersion = '';
+let whatsNewView = 'slides';
+
+function renderWhatsNewVersionMeta(version) {
+  if (whatsNewVersion) whatsNewVersion.textContent = `Version ${version}`;
+  if (whatsNewVersionDate) {
+    const releaseDate = getReleaseDate(version);
+    const formattedDate = releaseDate ? formatReleaseDate(releaseDate) : '';
+    whatsNewVersionDate.textContent = formattedDate;
+    whatsNewVersionDate.classList.toggle('hidden', !formattedDate);
+  }
+}
 
 function renderWhatsNewSlide() {
   const slide = whatsNewSlides[whatsNewSlideIndex];
@@ -7032,12 +7633,77 @@ function renderWhatsNewDots() {
   });
 }
 
-function updateWhatsNewNav() {
-  const isFirst = whatsNewSlideIndex === 0;
-  const isLast = whatsNewSlideIndex >= whatsNewSlides.length - 1;
-  whatsNewPrevBtn.classList.toggle('hidden', isFirst);
-  whatsNewNextBtn.classList.toggle('hidden', isLast);
-  whatsNewDoneBtn.classList.toggle('hidden', !isLast);
+function updateWhatsNewBrowseButton() {
+  if (!whatsNewBrowseBtn) return;
+  const releases = getAllReleases();
+  const canBrowse = releases.length > 1;
+  whatsNewBrowseBtn.classList.toggle('hidden', !canBrowse || whatsNewView !== 'slides');
+  whatsNewBrowseBtn.textContent = 'View Previous Updates';
+}
+
+function updateWhatsNewViewUi() {
+  const isHistory = whatsNewView === 'history';
+  const isFirstSlide = whatsNewSlideIndex === 0;
+  const isLastSlide = whatsNewSlideIndex >= whatsNewSlides.length - 1;
+
+  whatsNewSlidesView?.classList.toggle('hidden', isHistory);
+  whatsNewHistoryView?.classList.toggle('hidden', !isHistory);
+
+  if (whatsNewPrevBtn) {
+    whatsNewPrevBtn.disabled = !isHistory && isFirstSlide;
+  }
+  whatsNewNextBtn?.classList.toggle('hidden', isHistory || isLastSlide);
+  whatsNewDoneBtn?.classList.toggle('hidden', isHistory ? false : !isLastSlide);
+  updateWhatsNewBrowseButton();
+}
+
+function renderWhatsNewHistoryList() {
+  if (!whatsNewHistoryList) return;
+  whatsNewHistoryList.innerHTML = getAllReleases().map((release) => {
+    const formattedDate = formatReleaseDate(release.releasedAt);
+    return `
+      <button
+        type="button"
+        class="whats-new-history-item"
+        role="listitem"
+        data-whats-new-version="${escapeHtml(release.version)}"
+      >
+        <span class="whats-new-history-item-version">Version ${escapeHtml(release.version)}</span>
+        <span class="whats-new-history-item-date">${escapeHtml(formattedDate)}</span>
+      </button>
+    `;
+  }).join('');
+}
+
+function loadWhatsNewRelease(version) {
+  const slides = getReleaseNotes(version);
+  if (!slides?.length) return false;
+
+  whatsNewDisplayVersion = version;
+  whatsNewSlides = slides;
+  whatsNewSlideIndex = 0;
+  whatsNewView = 'slides';
+  renderWhatsNewVersionMeta(version);
+  renderWhatsNewSlide();
+  renderWhatsNewDots();
+  updateWhatsNewViewUi();
+  return true;
+}
+
+function showWhatsNewHistory() {
+  whatsNewView = 'history';
+  renderWhatsNewHistoryList();
+  updateWhatsNewViewUi();
+  whatsNewPrevBtn?.focus();
+}
+
+function backToWhatsNewCurrentRelease() {
+  if (!whatsNewAppVersion) return;
+  loadWhatsNewRelease(whatsNewAppVersion);
+  requestAnimationFrame(() => {
+    if (whatsNewSlides.length > 1) whatsNewNextBtn?.focus();
+    else whatsNewDoneBtn?.focus();
+  });
 }
 
 function goToWhatsNewSlide(index) {
@@ -7045,7 +7711,7 @@ function goToWhatsNewSlide(index) {
   whatsNewSlideIndex = index;
   renderWhatsNewSlide();
   renderWhatsNewDots();
-  updateWhatsNewNav();
+  updateWhatsNewViewUi();
 }
 
 function goWhatsNewNext() {
@@ -7055,23 +7721,33 @@ function goWhatsNewNext() {
 }
 
 function goWhatsNewPrev() {
+  if (whatsNewView === 'history') {
+    backToWhatsNewCurrentRelease();
+    return;
+  }
   if (whatsNewSlideIndex > 0) {
     goToWhatsNewSlide(whatsNewSlideIndex - 1);
   }
 }
 
 function markWhatsNewSeen() {
-  if (!whatsNewVersionLabel) return;
-  state.lastSeenWhatsNewVersion = whatsNewVersionLabel;
+  if (!whatsNewAppVersion) return;
+  state.lastSeenWhatsNewVersion = whatsNewAppVersion;
   persist({ skipUndoCheckpoint: true });
+}
+
+function resetWhatsNewModalState() {
+  whatsNewSlides = [];
+  whatsNewSlideIndex = 0;
+  whatsNewAppVersion = '';
+  whatsNewDisplayVersion = '';
+  whatsNewView = 'slides';
 }
 
 function closeWhatsNewModal() {
   markWhatsNewSeen();
   whatsNewModal.classList.add('hidden');
-  whatsNewSlides = [];
-  whatsNewSlideIndex = 0;
-  whatsNewVersionLabel = '';
+  resetWhatsNewModalState();
 }
 
 async function openWhatsNewModal() {
@@ -7082,18 +7758,48 @@ async function openWhatsNewModal() {
     return;
   }
 
-  whatsNewSlides = slides;
-  whatsNewSlideIndex = 0;
-  whatsNewVersionLabel = version;
-  whatsNewVersion.textContent = `Version ${version}`;
-  renderWhatsNewSlide();
-  renderWhatsNewDots();
-  updateWhatsNewNav();
+  whatsNewAppVersion = version;
+  loadWhatsNewRelease(version);
   whatsNewModal.classList.remove('hidden');
   requestAnimationFrame(() => {
-    if (whatsNewSlides.length > 1) whatsNewNextBtn.focus();
-    else whatsNewDoneBtn.focus();
+    if (whatsNewSlides.length > 1) whatsNewNextBtn?.focus();
+    else whatsNewDoneBtn?.focus();
   });
+}
+
+function handleWhatsNewHistoryItemClick(event) {
+  const item = event.target.closest('.whats-new-history-item');
+  if (!item) return;
+  const version = item.getAttribute('data-whats-new-version');
+  if (!version || !loadWhatsNewRelease(version)) return;
+  requestAnimationFrame(() => {
+    if (whatsNewSlides.length > 1) whatsNewNextBtn?.focus();
+    else whatsNewDoneBtn?.focus();
+  });
+}
+
+function handleWhatsNewEscape() {
+  if (whatsNewView === 'history') {
+    backToWhatsNewCurrentRelease();
+    return true;
+  }
+  closeWhatsNewModal();
+  return true;
+}
+
+async function shouldDeferWhatsNewAutoShow() {
+  const [updateReady, updateDownloading] = await Promise.all([
+    window.slashIt.isUpdateReadyToInstall(),
+    window.slashIt.isUpdateDownloading(),
+  ]);
+  return updateReady || updateDownloading;
+}
+
+async function recordLaunchedAppVersion() {
+  const version = await window.slashIt.getAppVersion();
+  if (state.lastLaunchedAppVersion === version) return;
+  state.lastLaunchedAppVersion = version;
+  persist({ skipUndoCheckpoint: true });
 }
 
 async function maybeAutoShowWhatsNew() {
@@ -7101,6 +7807,11 @@ async function maybeAutoShowWhatsNew() {
   const slides = getReleaseNotes(version);
   if (!slides?.length) return;
   if (state.lastSeenWhatsNewVersion === version) return;
+  if (await shouldDeferWhatsNewAutoShow()) return;
+
+  // Only auto-show on the first launch of this version (e.g. after restart post-update).
+  if (state.lastLaunchedAppVersion === version) return;
+
   openWhatsNewModal();
 }
 
@@ -7632,6 +8343,13 @@ function applySavedData(saved) {
   state.lastSeenWhatsNewVersion = typeof saved.lastSeenWhatsNewVersion === 'string'
     ? saved.lastSeenWhatsNewVersion
     : null;
+  state.lastLaunchedAppVersion = typeof saved.lastLaunchedAppVersion === 'string'
+    ? saved.lastLaunchedAppVersion
+    : null;
+  state.sessionListFilters = Array.isArray(saved.sessionListFilters)
+    ? saved.sessionListFilters.map(normalizeCustomSessionFilter)
+    : [];
+  state.sessionListFilter = normalizeSessionListFilter(saved.sessionListFilter);
 
   if (saved.timerBarSize === 'hidden') {
     state.timerBarSize = state.timerBarSizeBeforeHide;
@@ -8322,6 +9040,16 @@ saveTemplateCancelBtn.addEventListener('click', closeSaveTemplateModal);
 saveTemplateModal.addEventListener('click', (e) => {
   if (e.target === saveTemplateModal) closeSaveTemplateModal();
 });
+createSessionFilterConfirmBtn?.addEventListener('click', confirmCreateSessionFilterModal);
+createSessionFilterCancelBtn?.addEventListener('click', closeCreateSessionFilterModal);
+createSessionFilterModal?.addEventListener('click', (e) => {
+  if (e.target === createSessionFilterModal) closeCreateSessionFilterModal();
+});
+createSessionFilterSessionList?.addEventListener('click', handleCreateSessionFilterSessionListClick);
+createSessionFilterNameInput?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') confirmCreateSessionFilterModal();
+  if (e.key === 'Escape') closeCreateSessionFilterModal();
+});
 saveTemplateNameInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') confirmSaveTemplateModal();
   if (e.key === 'Escape') closeSaveTemplateModal();
@@ -8366,6 +9094,8 @@ appAlertModal.addEventListener('click', (e) => {
 whatsNewPrevBtn.addEventListener('click', goWhatsNewPrev);
 whatsNewNextBtn.addEventListener('click', goWhatsNewNext);
 whatsNewDoneBtn.addEventListener('click', closeWhatsNewModal);
+whatsNewBrowseBtn?.addEventListener('click', showWhatsNewHistory);
+whatsNewHistoryList?.addEventListener('click', handleWhatsNewHistoryItemClick);
 whatsNewModal.addEventListener('click', (e) => {
   if (e.target === whatsNewModal) closeWhatsNewModal();
 });
@@ -8541,6 +9271,16 @@ sessionContextSaveTemplateBtn.addEventListener('click', () => {
   saveSessionAsTemplateFromContext(sessionId);
 });
 
+sessionContextPinBtn?.addEventListener('click', () => {
+  if (!sessionContextMenuTarget) return;
+  const { sessionId } = sessionContextMenuTarget;
+  hideSessionContextMenu();
+  toggleSessionPin(sessionId);
+});
+
+plannedSessionsFilterBtn?.addEventListener('click', handlePlannedSessionsFilterTriggerClick);
+plannedSessionsFilterMenu?.addEventListener('click', handlePlannedSessionsFilterOptionClick);
+
 document.addEventListener('click', (e) => {
   if (!taskContextMenu.classList.contains('hidden')
     && !taskContextMenu.contains(e.target)) {
@@ -8593,6 +9333,10 @@ document.addEventListener('keydown', (e) => {
       closeSaveTemplateModal();
       return;
     }
+    if (!createSessionFilterModal.classList.contains('hidden')) {
+      closeCreateSessionFilterModal();
+      return;
+    }
     if (!completeTaskModal.classList.contains('hidden')) {
       closeCompleteTaskModal();
       return;
@@ -8626,6 +9370,10 @@ document.addEventListener('keydown', (e) => {
       closeHistoryReportSessionMenu();
       return;
     }
+    if (plannedSessionsFilterMenuOpen) {
+      closePlannedSessionsFilterMenu();
+      return;
+    }
     if (!historyModal.classList.contains('hidden')) {
       closeHistoryModal();
       return;
@@ -8649,7 +9397,7 @@ document.addEventListener('keydown', (e) => {
       return;
     }
     if (!whatsNewModal.classList.contains('hidden')) {
-      closeWhatsNewModal();
+      handleWhatsNewEscape();
       return;
     }
     if (!clearSessionModal.classList.contains('hidden')) {
@@ -8750,6 +9498,7 @@ function loadPlannedSessionsFromSaved(saved) {
   if (Array.isArray(saved.plannedSessions) && saved.plannedSessions.length > 0) {
     state.plannedSessions = saved.plannedSessions.map(normalizePlannedSession);
     ensureBraindumpSession();
+    normalizePlannedSessionOrder();
     loadExpandedSessionIds(saved);
     return;
   }
@@ -8772,7 +9521,9 @@ async function init() {
   routeToSavedMode(saved);
   isInitializing = false;
   void refreshLicenseStatus();
-  void maybeAutoShowWhatsNew();
+  void maybeAutoShowWhatsNew().finally(() => {
+    void recordLaunchedAppVersion();
+  });
 }
 
 init();

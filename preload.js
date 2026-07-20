@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld('slashIt', {
   },
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  isUpdateReadyToInstall: () => ipcRenderer.invoke('is-update-ready-to-install'),
+  isUpdateDownloading: () => ipcRenderer.invoke('is-update-downloading'),
   onOpenWhatsNew: (callback) => ipcRenderer.on('open-whats-new', callback),
   pickTaskAttachments: () => ipcRenderer.invoke('pick-task-attachments'),
   openTaskAttachment: (attachment) => ipcRenderer.invoke('open-task-attachment', attachment),

@@ -33,7 +33,13 @@ const { createDataStore } = require('./data-store');
 const { createAttachmentStore } = require('./attachment-store');
 const { createLicenseStore } = require('./license-store');
 const { createLicenseService } = require('./license-service');
-const { setupAutoUpdater, checkForUpdates, isQuittingForUpdate } = require('./auto-updater');
+const {
+  setupAutoUpdater,
+  checkForUpdates,
+  isQuittingForUpdate,
+  isUpdateReadyToInstall,
+  isUpdateDownloading,
+} = require('./auto-updater');
 
 const CELEBRATION_DURATION_MS = 3500;
 
@@ -706,6 +712,10 @@ app.on('before-quit', (event) => {
 ipcMain.handle('check-for-updates', () => checkForUpdates({ manual: true }));
 
 ipcMain.handle('get-app-version', () => app.getVersion());
+
+ipcMain.handle('is-update-ready-to-install', () => isUpdateReadyToInstall());
+
+ipcMain.handle('is-update-downloading', () => isUpdateDownloading());
 
 ipcMain.handle('set-window-mode', (_event, mode, options = {}) => {
   applyWindowSize(mode, options);
