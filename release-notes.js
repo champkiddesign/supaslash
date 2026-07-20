@@ -12,7 +12,7 @@ const RELEASES = {
       },
       {
         title: 'Update & polish fixes',
-        description: 'What\'s New now appears after restarting into a new version, the update prompt no longer looks like a box within a box, and the queue action is now labeled Move back.',
+        description: 'What\'s New now appears after restarting into a new version, the update prompt no longer looks like a box within a box, the queue action is now labeled Move back, and switching tasks in the timebar tray preserves each task\'s elapsed time.',
       },
     ],
   },

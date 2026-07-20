@@ -8754,9 +8754,10 @@ function startTimer() {
 function stopTimer() {
   if (state.isRunning && state.sessionStartMs) {
     state.elapsedMs = Date.now() - state.sessionStartMs;
-    saveCurrentTaskProgress();
   }
+  saveCurrentTaskProgress();
   state.isRunning = false;
+  state.sessionStartMs = null;
   if (state.timerInterval) {
     clearInterval(state.timerInterval);
     state.timerInterval = null;
@@ -8841,9 +8842,8 @@ function switchToTask(index) {
   if (state.mode !== 'focus') return;
   const task = state.sessionTasks[index];
   if (!task || task.completed) return;
-  if (index === getFocusTaskIndex()) return;
+  if (index === state.focusTaskIndex) return;
 
-  saveCurrentTaskProgress();
   stopTimer();
 
   task.skipped = false;
