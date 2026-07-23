@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('slashIt', {
   onDrawerPointerEnter: (callback) => ipcRenderer.on('drawer-pointer-enter', callback),
   onDrawerPointerLeave: (callback) => ipcRenderer.on('drawer-pointer-leave', callback),
   onDrawerSelectTask: (callback) => ipcRenderer.on('drawer-select-task', (_event, index) => callback(index)),
+  onDrawerAddTask: (callback) => ipcRenderer.on('drawer-add-task', (_event, payload) => callback(payload)),
+  onDrawerAddFormOpen: (callback) => ipcRenderer.on('drawer-add-form-open', (_event, open) => callback(open)),
   setScreenOverlay: (visible) => ipcRenderer.invoke('set-screen-overlay', visible),
   triggerCelebration: () => ipcRenderer.invoke('trigger-celebration'),
   stopCelebration: () => ipcRenderer.invoke('stop-celebration'),

@@ -106,3 +106,80 @@ body {
 .session-drawer-task--clickable:hover {
   background: rgba(255, 85, 0, 0.12);
 }
+
+.session-drawer-add {
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.session-drawer-add-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: 'N27', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #9a9a9a;
+  transition: color 0.15s;
+}
+
+.session-drawer-add-trigger:hover {
+  color: #ffffff;
+}
+
+.session-drawer-add-trigger-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.session-drawer-add-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.session-drawer-add.hidden,
+.session-drawer-add-trigger.hidden,
+.session-drawer-add-form.hidden {
+  display: none;
+}
+
+.session-drawer-add-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #ffffff;
+  font-family: 'N27', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 12px;
+}
+
+.session-drawer-add-input::placeholder {
+  color: #7a7a7a;
+}
+
+.session-drawer-add-limit {
+  width: 42px;
+  flex-shrink: 0;
+  padding: 4px 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #9a9a9a;
+  font-family: 'N27', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 11px;
+  text-align: right;
+}
+
+.session-drawer-add-limit::placeholder {
+  color: #5a5a5a;
+}

@@ -1,4 +1,6 @@
 const BRAINDUMP_SESSION_ID = 'braindump';
+const QUICK_START_SESSION_ID = 'quick-start';
+const QUICK_START_DEFAULT_NAME = 'Quick Start';
 
 const state = {
   sessionTasks: [],
@@ -32,6 +34,11 @@ const state = {
   activeSessionStartedAt: null,
   listTemplates: [],
   fullscreenTaskPanelOpen: false,
+  drawerAddFormOpen: false,
+  labsFeatures: {
+    trayAddTask: false,
+    quickStart: false,
+  },
   invoiceSettings: {
     name: '',
     logoDataUrl: '',
@@ -43,6 +50,12 @@ const state = {
   lastLaunchedAppVersion: null,
   sessionListFilter: 'all',
   sessionListFilters: [],
+  quickStartRateSettings: {
+    hourlyRateEnabled: false,
+    hourlyRate: null,
+    billableRoundMinutes: null,
+    billableRoundScope: 'session',
+  },
 };
 
 const licenseState = {
@@ -70,6 +83,7 @@ const settingsCheckUpdatesBtn = document.getElementById('settings-check-updates-
 const settingsWhatsNewBtn = document.getElementById('settings-whats-new-btn');
 const settingsHistoryBtn = document.getElementById('settings-history-btn');
 const settingsTemplatesBtn = document.getElementById('settings-templates-btn');
+const settingsLabsBtn = document.getElementById('settings-labs-btn');
 const settingsTutorialBtn = document.getElementById('settings-tutorial-btn');
 const tutorialOverlay = document.getElementById('tutorial-overlay');
 const tutorialDots = document.getElementById('tutorial-dots');
@@ -111,9 +125,18 @@ const licenseDeactivateBtn = document.getElementById('license-deactivate-btn');
 const focusView = document.getElementById('focus-view');
 const doneView = document.getElementById('done-view');
 const plannedSessionsList = document.getElementById('planned-sessions-list');
+const plannedSessionsCollapseAllBtn = document.getElementById('planned-sessions-collapse-all-btn');
 const plannedSessionsFilterBtn = document.getElementById('planned-sessions-filter-btn');
 const plannedSessionsFilterMenu = document.getElementById('planned-sessions-filter-menu');
 const planSessionBtn = document.getElementById('plan-session-btn');
+const quickStartBtn = document.getElementById('quick-start-btn');
+const quickStartModal = document.getElementById('quick-start-modal');
+const quickStartSessionNameInput = document.getElementById('quick-start-session-name');
+const quickStartBillableBtn = document.getElementById('quick-start-billable-btn');
+const quickStartTaskList = document.getElementById('quick-start-task-list');
+const quickStartAddTaskBtn = document.getElementById('quick-start-add-task-btn');
+const quickStartConfirmBtn = document.getElementById('quick-start-confirm-btn');
+const quickStartCancelBtn = document.getElementById('quick-start-cancel-btn');
 const sessionList = document.getElementById('session-list');
 const startBtn = document.getElementById('start-btn');
 const clearSessionBtn = document.getElementById('clear-session-btn');
@@ -168,13 +191,17 @@ const timerModeLabel = document.getElementById('timer-mode-label');
 const focusStack = document.getElementById('focus-stack');
 const sessionDrawer = document.getElementById('session-drawer');
 const sessionDrawerList = document.getElementById('session-drawer-list');
+const sessionDrawerAddTrigger = document.getElementById('session-drawer-add-trigger');
+const sessionDrawerAddForm = document.getElementById('session-drawer-add-form');
+const sessionDrawerAddInput = document.getElementById('session-drawer-add-input');
+const sessionDrawerAddLimit = document.getElementById('session-drawer-add-limit');
 const timerBar = document.getElementById('timer-bar');
 const timerTaskZone = document.getElementById('timer-task-zone');
 const currentTaskEl = document.getElementById('current-task');
 const completeBtn = document.getElementById('complete-btn');
 const skipBtn = document.getElementById('skip-btn');
 const expiredActions = document.getElementById('expired-actions');
-const overtimeBtn = document.getElementById('overtime-btn');
+const expiredCompleteBtn = document.getElementById('expired-complete-btn');
 const extendBtn = document.getElementById('extend-btn');
 const extendPanel = document.getElementById('extend-panel');
 const extendInput = document.getElementById('extend-input');
@@ -225,14 +252,27 @@ const saveTemplateConfirmBtn = document.getElementById('save-template-confirm-bt
 const saveTemplateCancelBtn = document.getElementById('save-template-cancel-btn');
 const createSessionFilterModal = document.getElementById('create-session-filter-modal');
 const createSessionFilterNameInput = document.getElementById('create-session-filter-name-input');
+const createSessionFilterTypeOptions = document.getElementById('create-session-filter-type-options');
+const createSessionFilterMembershipFields = document.getElementById('create-session-filter-membership-fields');
+const createSessionFilterSessionsLabel = document.getElementById('create-session-filter-sessions-label');
 const createSessionFilterSessionList = document.getElementById('create-session-filter-session-list');
+const createSessionFilterPhraseFields = document.getElementById('create-session-filter-phrase-fields');
+const createSessionFilterPhraseLabel = document.getElementById('create-session-filter-phrase-label');
+const createSessionFilterPhraseInput = document.getElementById('create-session-filter-phrase-input');
 const createSessionFilterError = document.getElementById('create-session-filter-error');
 const createSessionFilterConfirmBtn = document.getElementById('create-session-filter-confirm-btn');
+const createSessionFilterDeleteBtn = document.getElementById('create-session-filter-delete-btn');
 const createSessionFilterCancelBtn = document.getElementById('create-session-filter-cancel-btn');
 const createSessionFilterTitle = document.getElementById('create-session-filter-title');
+const deleteSessionFilterModal = document.getElementById('delete-session-filter-modal');
+const deleteSessionFilterConfirmBtn = document.getElementById('delete-session-filter-confirm-btn');
+const deleteSessionFilterCancelBtn = document.getElementById('delete-session-filter-cancel-btn');
 const templatesModal = document.getElementById('templates-modal');
 const templatesModalBody = document.getElementById('templates-modal-body');
 const templatesCloseBtn = document.getElementById('templates-close-btn');
+const labsModal = document.getElementById('labs-modal');
+const labsModalBody = document.getElementById('labs-modal-body');
+const labsCloseBtn = document.getElementById('labs-close-btn');
 const completeTaskModal = document.getElementById('complete-task-modal');
 const completeTaskNameEl = document.getElementById('complete-task-name');
 const completeTaskDurationInput = document.getElementById('complete-task-duration-input');
@@ -269,6 +309,7 @@ let pendingDeleteSessionId = null;
 let pendingDeleteHistoryEntryId = null;
 let pendingBillableSessionId = null;
 let billableSnapshot = null;
+let quickStartBillableDraft = null;
 let pendingSaveTemplate = null;
 let pendingCompleteTask = null;
 let pendingTaskDetail = null;
@@ -302,8 +343,11 @@ const SESSION_LIST_FILTER_LABELS = {
   pinned: 'Pinned sessions',
   recent: 'Recent sessions',
 };
+const CUSTOM_SESSION_FILTER_TYPES = ['include', 'exclude', 'contains', 'notContains', 'exact'];
+const CUSTOM_SESSION_FILTER_MEMBERSHIP_TYPES = new Set(['include', 'exclude']);
 const RECENT_SESSIONS_LIMIT = 15;
 let createSessionFilterSelectedIds = new Set();
+let createSessionFilterType = 'include';
 let editingSessionFilterId = null;
 
 const SESSION_HISTORY_MAX = 200;
@@ -460,7 +504,8 @@ function getNextDoneHeadline() {
 function getRandomFunSessionName() {
   return FUN_SESSION_NAMES[Math.floor(Math.random() * FUN_SESSION_NAMES.length)];
 }
-const FOCUS_DRAWER_SLOT = 180 + 16 + 6 + 8;
+const FOCUS_DRAWER_SLOT = 180 + 16 + 6 + 8 + 44;
+const DRAWER_ADD_FOOTER_HEIGHT = 40;
 
 function getTimerBarScale() {
   return state.timerBarSize === 'small' ? FOCUS_BAR_SCALE_SMALL : 1;
@@ -718,7 +763,15 @@ function getDrawerPayload() {
     return { text: task.text, status, durationText, index };
   });
 
-  return { drawerWidth, drawerHeight, sessionTitle: state.activeSessionName || 'Braindump', sessionDurationText: formatTime(getSessionDisplayMs()), tasks };
+  return {
+    drawerWidth,
+    drawerHeight,
+    sessionTitle: state.activeSessionName || 'Braindump',
+    sessionDurationText: formatTime(getSessionDisplayMs()),
+    tasks,
+    addFormOpen: !!state.drawerAddFormOpen && isLabsFeatureEnabled('trayAddTask'),
+    trayAddEnabled: isLabsFeatureEnabled('trayAddTask'),
+  };
 }
 
 function getDrawerContentHeight() {
@@ -756,7 +809,98 @@ function getDrawerContentHeight() {
   document.body.appendChild(tempList);
   const listHeight = tempList.scrollHeight;
   document.body.removeChild(tempList);
-  return Math.min(180, listHeight) + titleHeight + 16;
+  const addFooter = isLabsFeatureEnabled('trayAddTask') ? DRAWER_ADD_FOOTER_HEIGHT : 0;
+  return Math.min(180, listHeight) + titleHeight + 16 + addFooter;
+}
+
+function getActiveQueueSourceMeta() {
+  const focusTask = state.sessionTasks[getFocusTaskIndex()];
+  if (focusTask?.sourceSessionId) {
+    return {
+      sourceSessionId: focusTask.sourceSessionId,
+      sourceSessionName: focusTask.sourceSessionName || 'Session',
+    };
+  }
+  const any = state.sessionTasks.find((task) => task.sourceSessionId);
+  if (any) {
+    return {
+      sourceSessionId: any.sourceSessionId,
+      sourceSessionName: any.sourceSessionName || 'Session',
+    };
+  }
+  return {
+    sourceSessionId: BRAINDUMP_SESSION_ID,
+    sourceSessionName: state.activeSessionName || 'Braindump',
+  };
+}
+
+function appendTaskFromTray({ text, limitValue } = {}) {
+  if (state.mode !== 'focus') return false;
+  if (!isLabsFeatureEnabled('trayAddTask')) return false;
+  const parsed = parseTaskInput(text || '', limitValue || '');
+  if (!parsed.text) return false;
+
+  const sourceMeta = getActiveQueueSourceMeta();
+  state.sessionTasks.push(toSessionTaskFromBraindump({
+    text: parsed.text,
+    limitMs: parsed.limitMs,
+  }, sourceMeta));
+  persist();
+
+  if (drawerOpen) {
+    void window.slashIt.updateSessionDrawer(getDrawerPayload());
+  }
+  if (state.fullscreenTaskPanelOpen) {
+    renderSessionDrawer();
+    syncFullscreenDrawerAddForm({ focus: true });
+  }
+  return true;
+}
+
+function setDrawerAddFormOpen(open) {
+  state.drawerAddFormOpen = !!open;
+  if (state.drawerAddFormOpen) {
+    clearTimeout(drawerCloseTimer);
+  }
+  if (drawerOpen) {
+    void window.slashIt.updateSessionDrawer(getDrawerPayload());
+  }
+}
+
+function syncFullscreenDrawerAddForm({ focus = false } = {}) {
+  const enabled = isLabsFeatureEnabled('trayAddTask');
+  const open = enabled && !!state.drawerAddFormOpen;
+  document.getElementById('session-drawer-add')?.classList.toggle('hidden', !enabled);
+  sessionDrawerAddTrigger?.classList.toggle('hidden', !enabled || open);
+  sessionDrawerAddForm?.classList.toggle('hidden', !enabled || !open);
+  if (open && focus) {
+    requestAnimationFrame(() => {
+      sessionDrawerAddInput?.focus();
+      sessionDrawerAddInput?.select();
+    });
+  }
+}
+
+function openFullscreenDrawerAddForm() {
+  if (!isLabsFeatureEnabled('trayAddTask')) return;
+  state.drawerAddFormOpen = true;
+  syncFullscreenDrawerAddForm({ focus: true });
+}
+
+function closeFullscreenDrawerAddForm() {
+  state.drawerAddFormOpen = false;
+  if (sessionDrawerAddInput) sessionDrawerAddInput.value = '';
+  if (sessionDrawerAddLimit) sessionDrawerAddLimit.value = '';
+  syncFullscreenDrawerAddForm();
+}
+
+function submitFullscreenDrawerAddTask() {
+  const text = sessionDrawerAddInput?.value || '';
+  const limitValue = sessionDrawerAddLimit?.value || '';
+  if (!appendTaskFromTray({ text, limitValue })) return;
+  if (sessionDrawerAddInput) sessionDrawerAddInput.value = '';
+  if (sessionDrawerAddLimit) sessionDrawerAddLimit.value = '';
+  requestAnimationFrame(() => sessionDrawerAddInput?.focus());
 }
 
 function getDrawerTaskStatus(task, index, focusIndex) {
@@ -795,6 +939,7 @@ function renderSessionDrawer() {
     `;
     sessionDrawerList.appendChild(li);
   });
+  syncFullscreenDrawerAddForm();
 }
 
 if (sessionDrawerList) {
@@ -811,6 +956,7 @@ if (sessionDrawerList) {
 
 function closeFullscreenTaskPanel() {
   state.fullscreenTaskPanelOpen = false;
+  state.drawerAddFormOpen = false;
   updateFullscreenTaskPanel();
 }
 
@@ -858,10 +1004,12 @@ function closeSessionDrawer({ immediate = false } = {}) {
 
   clearTimeout(drawerCloseTimer);
   drawerOpen = false;
+  state.drawerAddFormOpen = false;
   void window.slashIt.hideSessionDrawer(immediate);
 }
 
 function scheduleCloseSessionDrawer() {
+  if (state.drawerAddFormOpen) return;
   clearTimeout(drawerCloseTimer);
   drawerCloseTimer = setTimeout(() => {
     closeSessionDrawer();
@@ -1264,6 +1412,35 @@ function normalizePlannedSession(session) {
   };
 }
 
+function normalizeQuickStartRateSettings(settings) {
+  const source = settings && typeof settings === 'object' ? settings : {};
+  return {
+    hourlyRateEnabled: !!source.hourlyRateEnabled,
+    hourlyRate: parseHourlyRate(source.hourlyRate),
+    billableRoundMinutes: normalizeBillableRoundMinutes(source.billableRoundMinutes),
+    billableRoundScope: normalizeBillableRoundScope(source.billableRoundScope),
+  };
+}
+
+function createQuickStartBillableDraft() {
+  const settings = normalizeQuickStartRateSettings(state.quickStartRateSettings);
+  return {
+    id: QUICK_START_SESSION_ID,
+    name: QUICK_START_DEFAULT_NAME,
+    hourlyRateEnabled: settings.hourlyRateEnabled,
+    hourlyRate: settings.hourlyRate,
+    billableRoundMinutes: settings.billableRoundMinutes,
+    billableRoundScope: settings.billableRoundScope,
+  };
+}
+
+function getBillableModalTarget() {
+  if (pendingBillableSessionId === QUICK_START_SESSION_ID && quickStartBillableDraft) {
+    return quickStartBillableDraft;
+  }
+  return getPlannedSession(pendingBillableSessionId);
+}
+
 function normalizeSessionListFilter(value) {
   if (isBuiltInSessionListFilter(value)) return value;
   if (getCustomSessionFilter(value)) return value;
@@ -1278,20 +1455,64 @@ function getCustomSessionFilter(id) {
   return state.sessionListFilters.find((filter) => filter.id === id) || null;
 }
 
+function normalizeCustomSessionFilterType(value) {
+  if (CUSTOM_SESSION_FILTER_TYPES.includes(value)) return value;
+  return 'include';
+}
+
+function isMembershipSessionFilterType(type) {
+  return CUSTOM_SESSION_FILTER_MEMBERSHIP_TYPES.has(type);
+}
+
+function normalizeCustomSessionFilterPhrase(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 function normalizeCustomSessionFilter(filter) {
   const now = Date.now();
+  const type = normalizeCustomSessionFilterType(filter?.type);
   const rawIds = Array.isArray(filter?.sessionIds) ? filter.sessionIds : [];
-  const sessionIds = [...new Set(
-    rawIds.filter((id) => typeof id === 'string' && getPlannedSession(id)),
-  )];
+  const sessionIds = isMembershipSessionFilterType(type)
+    ? [...new Set(rawIds.filter((id) => typeof id === 'string' && getPlannedSession(id)))]
+    : [];
+  const phrase = isMembershipSessionFilterType(type)
+    ? ''
+    : normalizeCustomSessionFilterPhrase(filter?.phrase);
   return {
     id: filter?.id || crypto.randomUUID(),
     name: normalizeTemplateName(filter?.name) || 'Custom filter',
+    type,
     sessionIds,
+    phrase,
     createdAt: filter?.createdAt || now,
     updatedAt: filter?.updatedAt || filter?.createdAt || now,
-    // Custom session filter params: extend normalizeCustomSessionFilter + modal UI here.
   };
+}
+
+function sessionNameMatchesFilterPhrase(sessionName, phrase, type) {
+  const name = (sessionName || '').trim().toLowerCase();
+  const needle = (phrase || '').trim().toLowerCase();
+  if (!needle) return false;
+  if (type === 'exact') return name === needle;
+  if (type === 'contains') return name.includes(needle);
+  if (type === 'notContains') return !name.includes(needle);
+  return false;
+}
+
+function getSessionsForCustomFilter(filter) {
+  if (!filter) return [];
+
+  if (isMembershipSessionFilterType(filter.type)) {
+    const selected = new Set(filter.sessionIds);
+    if (filter.type === 'include') {
+      return filter.sessionIds.map((id) => getPlannedSession(id)).filter(Boolean);
+    }
+    return state.plannedSessions.filter((session) => !selected.has(session.id));
+  }
+
+  return state.plannedSessions.filter((session) => (
+    sessionNameMatchesFilterPhrase(session.name, filter.phrase, filter.type)
+  ));
 }
 
 function isBuiltInSessionFilterLabel(name) {
@@ -1413,9 +1634,7 @@ function getPlannedSessionsRenderPlan() {
   if (!isBuiltInSessionListFilter(filter)) {
     const custom = getCustomSessionFilter(filter);
     if (custom) {
-      const sessions = custom.sessionIds
-        .map((id) => getPlannedSession(id))
-        .filter(Boolean);
+      const sessions = getSessionsForCustomFilter(custom);
       return {
         emptyMessage: sessions.length === 0 ? 'No sessions in this filter.' : null,
         sections: sessions.length > 0
@@ -1815,6 +2034,15 @@ function getPlannedSessionIdFromListId(listId) {
 }
 
 function getPlannedSessionRateSettings(sessionId) {
+  if (sessionId === QUICK_START_SESSION_ID) {
+    const settings = state.quickStartRateSettings || {};
+    return {
+      enabled: !!settings.hourlyRateEnabled,
+      rate: settings.hourlyRate,
+      roundMinutes: settings.billableRoundMinutes,
+      roundScope: normalizeBillableRoundScope(settings.billableRoundScope),
+    };
+  }
   const session = getPlannedSession(sessionId || BRAINDUMP_SESSION_ID);
   if (!session) return { enabled: false, rate: null, roundMinutes: null, roundScope: 'session' };
   return {
@@ -2274,6 +2502,188 @@ function createPlannedSession() {
   renderEditView();
 }
 
+function updateQuickStartBillableButton() {
+  if (!quickStartBillableBtn || !quickStartBillableDraft) return;
+  const enabled = !!quickStartBillableDraft.hourlyRateEnabled;
+  quickStartBillableBtn.classList.toggle('session-billable-btn--active', enabled);
+}
+
+function reindexQuickStartTaskRows() {
+  if (!quickStartTaskList) return;
+  quickStartTaskList.querySelectorAll('[data-task-row]').forEach((row, index) => {
+    row.dataset.taskRow = String(index);
+    const removeBtn = row.querySelector('[data-quick-start-remove-task]');
+    if (removeBtn) removeBtn.dataset.quickStartRemoveTask = String(index);
+  });
+}
+
+function appendQuickStartTaskRow({ focus = true } = {}) {
+  if (!quickStartTaskList) return null;
+  const index = quickStartTaskList.querySelectorAll('[data-task-row]').length;
+  const row = document.createElement('div');
+  row.className = 'template-editor-row';
+  row.dataset.taskRow = String(index);
+  row.innerHTML = `
+    <input class="template-editor-input template-editor-task-text" type="text" value="" placeholder="Task" autocomplete="off" />
+    <input class="template-editor-input template-editor-limit template-editor-task-limit" type="text" value="" placeholder="20m" autocomplete="off" />
+    <button type="button" class="template-row-btn template-row-btn--danger" data-quick-start-remove-task="${index}" aria-label="Remove task">×</button>
+  `;
+  quickStartTaskList.appendChild(row);
+  const textInput = row.querySelector('.template-editor-task-text');
+  if (focus && textInput) textInput.focus();
+  updateQuickStartConfirmEnabled();
+  return row;
+}
+
+function resetQuickStartTaskList() {
+  if (!quickStartTaskList) return;
+  quickStartTaskList.innerHTML = `
+    <div class="template-editor-row" data-task-row="0">
+      <input class="template-editor-input template-editor-task-text" type="text" value="" placeholder="Task" autocomplete="off" />
+      <input class="template-editor-input template-editor-limit template-editor-task-limit" type="text" value="" placeholder="20m" autocomplete="off" />
+      <button type="button" class="template-row-btn template-row-btn--danger" data-quick-start-remove-task="0" aria-label="Remove task">×</button>
+    </div>
+  `;
+}
+
+function collectQuickStartTasks() {
+  if (!quickStartTaskList) return [];
+  return [...quickStartTaskList.querySelectorAll('[data-task-row]')].map((row) => {
+    const text = row.querySelector('.template-editor-task-text')?.value || '';
+    const limitValue = row.querySelector('.template-editor-task-limit')?.value || '';
+    const parsed = parseTaskInput(text, limitValue);
+    return { text: parsed.text, limitMs: parsed.limitMs };
+  }).filter((task) => task.text);
+}
+
+function updateQuickStartConfirmEnabled() {
+  if (!quickStartConfirmBtn) return;
+  quickStartConfirmBtn.disabled = collectQuickStartTasks().length === 0;
+}
+
+function openQuickStartModal() {
+  if (!isLabsFeatureEnabled('quickStart')) return;
+  quickStartBillableDraft = createQuickStartBillableDraft();
+  if (quickStartSessionNameInput) quickStartSessionNameInput.value = '';
+  resetQuickStartTaskList();
+  updateQuickStartBillableButton();
+  updateQuickStartConfirmEnabled();
+  quickStartModal.classList.remove('hidden');
+  requestAnimationFrame(() => {
+    quickStartTaskList?.querySelector('.template-editor-task-text')?.focus();
+  });
+}
+
+function updateQuickStartButtonVisibility() {
+  if (!quickStartBtn) return;
+  const enabled = isLabsFeatureEnabled('quickStart');
+  quickStartBtn.classList.toggle('hidden', !enabled);
+  if (!enabled && quickStartModal && !quickStartModal.classList.contains('hidden')) {
+    closeQuickStartModal();
+  }
+}
+
+function closeQuickStartModal() {
+  if (!billableModal.classList.contains('hidden') && pendingBillableSessionId === QUICK_START_SESSION_ID) {
+    closeBillableModal(true);
+  }
+  quickStartModal.classList.add('hidden');
+  quickStartBillableDraft = null;
+}
+
+function handleQuickStartTaskListKeydown(e) {
+  if (e.key !== 'Enter' && e.code !== 'NumpadEnter') return;
+
+  const target = e.target;
+  if (!target.matches('.template-editor-task-text, .template-editor-task-limit')) return;
+
+  const row = target.closest('[data-task-row]');
+  if (!row) return;
+
+  const text = row.querySelector('.template-editor-task-text')?.value?.trim();
+  if (!text) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  if (e.shiftKey) {
+    if (!quickStartConfirmBtn?.disabled) startQuickStartSession();
+    return;
+  }
+
+  appendQuickStartTaskRow({ focus: true });
+}
+
+function handleQuickStartSessionNameKeydown(e) {
+  if (e.key !== 'Enter' && e.code !== 'NumpadEnter') return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  if (e.shiftKey) {
+    if (!quickStartConfirmBtn?.disabled) startQuickStartSession();
+    return;
+  }
+
+  quickStartTaskList?.querySelector('.template-editor-task-text')?.focus();
+}
+
+function handleQuickStartModalClick(e) {
+  const removeBtn = e.target.closest('[data-quick-start-remove-task]');
+  if (removeBtn) {
+    const row = removeBtn.closest('[data-task-row]');
+    if (!row || !quickStartTaskList) return;
+    const rows = quickStartTaskList.querySelectorAll('[data-task-row]');
+    if (rows.length <= 1) {
+      row.querySelector('.template-editor-task-text').value = '';
+      row.querySelector('.template-editor-task-limit').value = '';
+      updateQuickStartConfirmEnabled();
+      row.querySelector('.template-editor-task-text')?.focus();
+      return;
+    }
+    row.remove();
+    reindexQuickStartTaskRows();
+    updateQuickStartConfirmEnabled();
+    return;
+  }
+
+  if (e.target.closest('#quick-start-add-task-btn')) {
+    appendQuickStartTaskRow({ focus: true });
+  }
+}
+
+function startQuickStartSession() {
+  if (!isLabsFeatureEnabled('quickStart')) return;
+  const tasks = collectQuickStartTasks();
+  if (tasks.length === 0) return;
+
+  const name = (quickStartSessionNameInput?.value || '').trim() || QUICK_START_DEFAULT_NAME;
+  const draft = quickStartBillableDraft || createQuickStartBillableDraft();
+  const rateSettings = normalizeQuickStartRateSettings(draft);
+
+  if (rateSettings.hourlyRateEnabled && !(rateSettings.hourlyRate > 0)) {
+    showAppAlert('Enter an hourly rate to track billable time.', { title: 'Hourly rate required' });
+    openBillableModal(QUICK_START_SESSION_ID);
+    return;
+  }
+
+  if (hasArchivableProgress()) {
+    archiveCurrentSession('abandoned');
+  }
+
+  state.quickStartRateSettings = rateSettings;
+  state.sessionTasks = tasks.map((task) => toSessionTaskFromBraindump(task, {
+    sourceSessionId: QUICK_START_SESSION_ID,
+    sourceSessionName: name,
+  }));
+  state.currentIndex = 0;
+  resetSessionProgressState();
+  clearSelection();
+  closeQuickStartModal();
+  persist();
+  beginFreshSession();
+}
+
 function updateSourceSessionNameForSession(sessionId, name) {
   state.plannedSessions.forEach((session) => {
     session.tasks.forEach((task) => {
@@ -2387,8 +2797,16 @@ function updateBillableModalUI(session) {
   });
 }
 
+function commitBillableRateFromInput() {
+  const session = getBillableModalTarget();
+  if (!session || !billableRateInput) return;
+  session.hourlyRate = parseHourlyRate(billableRateInput.value);
+}
+
 function openBillableModal(sessionId) {
-  const session = getPlannedSession(sessionId);
+  const session = sessionId === QUICK_START_SESSION_ID && quickStartBillableDraft
+    ? quickStartBillableDraft
+    : getPlannedSession(sessionId);
   if (!session) return;
 
   pendingBillableSessionId = sessionId;
@@ -2399,7 +2817,14 @@ function openBillableModal(sessionId) {
     billableRoundScope: session.billableRoundScope,
   };
 
-  billableModalTitle.textContent = `Billable · ${session.name}`;
+  const displayName = sessionId === QUICK_START_SESSION_ID
+    ? (quickStartSessionNameInput?.value?.trim() || QUICK_START_DEFAULT_NAME)
+    : session.name;
+  billableModalTitle.textContent = `Billable · ${displayName}`;
+  billableModal.classList.toggle(
+    'clear-session-modal--stacked',
+    sessionId === QUICK_START_SESSION_ID && !quickStartModal.classList.contains('hidden'),
+  );
   updateBillableModalUI(session);
   billableModal.classList.remove('hidden');
 
@@ -2413,7 +2838,7 @@ function openBillableModal(sessionId) {
 
 function closeBillableModal(revert = false) {
   if (revert && pendingBillableSessionId && billableSnapshot) {
-    const session = getPlannedSession(pendingBillableSessionId);
+    const session = getBillableModalTarget();
     if (session) {
       session.hourlyRateEnabled = billableSnapshot.hourlyRateEnabled;
       session.hourlyRate = billableSnapshot.hourlyRate;
@@ -2422,10 +2847,16 @@ function closeBillableModal(revert = false) {
     }
   }
 
+  const wasQuickStart = pendingBillableSessionId === QUICK_START_SESSION_ID;
   pendingBillableSessionId = null;
   billableSnapshot = null;
   billableModal.classList.add('hidden');
-  renderEditView();
+  billableModal.classList.remove('clear-session-modal--stacked');
+  if (wasQuickStart) {
+    updateQuickStartBillableButton();
+  } else {
+    renderEditView();
+  }
 
   if (state.mode === 'focus') {
     if (state.timerView === 'earnings' && !canShowEarningsView()) {
@@ -2436,27 +2867,42 @@ function closeBillableModal(revert = false) {
 }
 
 function saveBillableModal() {
-  const session = getPlannedSession(pendingBillableSessionId);
+  const session = getBillableModalTarget();
   if (!session) {
     closeBillableModal(false);
     return;
   }
 
-  session.hourlyRate = parseHourlyRate(billableRateInput.value);
-  persist();
+  commitBillableRateFromInput();
+  if (session.hourlyRateEnabled && !(session.hourlyRate > 0)) {
+    showAppAlert('Enter an hourly rate to track billable time.', { title: 'Hourly rate required' });
+    requestAnimationFrame(() => {
+      billableRateInput.focus();
+      billableRateInput.select();
+    });
+    return;
+  }
+
+  if (pendingBillableSessionId === QUICK_START_SESSION_ID) {
+    state.quickStartRateSettings = normalizeQuickStartRateSettings(session);
+  } else {
+    persist();
+  }
   closeBillableModal(false);
 }
 
 function setBillableRoundMinutes(roundMinutes) {
-  const session = getPlannedSession(pendingBillableSessionId);
+  const session = getBillableModalTarget();
   if (!session) return;
+  commitBillableRateFromInput();
   session.billableRoundMinutes = normalizeBillableRoundMinutes(roundMinutes);
   updateBillableModalUI(session);
 }
 
 function setBillableRoundScope(roundScope) {
-  const session = getPlannedSession(pendingBillableSessionId);
+  const session = getBillableModalTarget();
   if (!session) return;
+  commitBillableRateFromInput();
   session.billableRoundScope = normalizeBillableRoundScope(roundScope);
   updateBillableModalUI(session);
 }
@@ -2790,6 +3236,7 @@ function isUndoRedoShortcutBlocked() {
   if (!clearSessionModal.classList.contains('hidden')) return true;
   if (!deleteSessionModal.classList.contains('hidden')) return true;
   if (!billableModal.classList.contains('hidden')) return true;
+  if (!quickStartModal?.classList.contains('hidden')) return true;
   if (!completeTaskModal.classList.contains('hidden')) return true;
   if (!saveTemplateModal.classList.contains('hidden')) return true;
   if (!createSessionFilterModal?.classList.contains('hidden')) return true;
@@ -2853,6 +3300,8 @@ function persist(options = {}) {
     lastLaunchedAppVersion: state.lastLaunchedAppVersion,
     sessionListFilter: state.sessionListFilter,
     sessionListFilters: state.sessionListFilters,
+    labsFeatures: state.labsFeatures,
+    quickStartRateSettings: state.quickStartRateSettings,
   });
 }
 
@@ -4032,7 +4481,10 @@ function getReportSessionOptions() {
   state.sessionHistory.forEach((entry) => {
     const id = getHistoryEntrySourceSessionId(entry);
     if (!byId.has(id)) {
-      byId.set(id, { id, label: getHistoryEntryDisplayName(entry) });
+      const label = id === QUICK_START_SESSION_ID
+        ? formatHistorySessionName(QUICK_START_DEFAULT_NAME)
+        : getHistoryEntryDisplayName(entry);
+      byId.set(id, { id, label });
     }
   });
 
@@ -4336,15 +4788,52 @@ function renderCreateSessionFilterSessionList() {
   }).join('');
 }
 
+function updateCreateSessionFilterTypeUi() {
+  const isMembership = isMembershipSessionFilterType(createSessionFilterType);
+  createSessionFilterTypeOptions?.querySelectorAll('[data-filter-type]').forEach((btn) => {
+    const selected = btn.getAttribute('data-filter-type') === createSessionFilterType;
+    btn.classList.toggle('session-filter-type-option--selected', selected);
+    btn.setAttribute('aria-checked', selected ? 'true' : 'false');
+  });
+
+  createSessionFilterMembershipFields?.classList.toggle('hidden', !isMembership);
+  createSessionFilterPhraseFields?.classList.toggle('hidden', isMembership);
+
+  if (createSessionFilterSessionsLabel) {
+    createSessionFilterSessionsLabel.textContent = createSessionFilterType === 'exclude'
+      ? 'Sessions to exclude'
+      : 'Sessions in this filter';
+  }
+
+  if (createSessionFilterPhraseLabel) {
+    if (createSessionFilterType === 'contains') {
+      createSessionFilterPhraseLabel.textContent = 'If session contains';
+    } else if (createSessionFilterType === 'notContains') {
+      createSessionFilterPhraseLabel.textContent = 'If session does not contain';
+    } else {
+      createSessionFilterPhraseLabel.textContent = 'If session matches exactly';
+    }
+  }
+}
+
+function setCreateSessionFilterType(type) {
+  createSessionFilterType = normalizeCustomSessionFilterType(type);
+  updateCreateSessionFilterTypeUi();
+}
+
 function resetSessionFilterModalForm() {
   editingSessionFilterId = null;
   createSessionFilterSelectedIds = new Set();
+  createSessionFilterType = 'include';
   if (createSessionFilterNameInput) createSessionFilterNameInput.value = '';
+  if (createSessionFilterPhraseInput) createSessionFilterPhraseInput.value = '';
   if (createSessionFilterTitle) createSessionFilterTitle.textContent = 'Create a new filter';
+  if (createSessionFilterDeleteBtn) createSessionFilterDeleteBtn.classList.add('hidden');
   if (createSessionFilterError) {
     createSessionFilterError.classList.add('hidden');
     createSessionFilterError.textContent = '';
   }
+  updateCreateSessionFilterTypeUi();
 }
 
 function openCreateSessionFilterModal() {
@@ -4366,9 +4855,13 @@ function openEditSessionFilterModal(filterId) {
 
   resetSessionFilterModalForm();
   editingSessionFilterId = filterId;
+  createSessionFilterType = normalizeCustomSessionFilterType(filter.type);
   createSessionFilterSelectedIds = new Set(filter.sessionIds);
   if (createSessionFilterNameInput) createSessionFilterNameInput.value = filter.name;
+  if (createSessionFilterPhraseInput) createSessionFilterPhraseInput.value = filter.phrase || '';
   if (createSessionFilterTitle) createSessionFilterTitle.textContent = 'Edit filter';
+  if (createSessionFilterDeleteBtn) createSessionFilterDeleteBtn.classList.remove('hidden');
+  updateCreateSessionFilterTypeUi();
   renderCreateSessionFilterSessionList();
   createSessionFilterModal.classList.remove('hidden');
   requestAnimationFrame(() => {
@@ -4380,8 +4873,39 @@ function openEditSessionFilterModal(filterId) {
 function closeCreateSessionFilterModal() {
   if (!createSessionFilterModal) return;
 
+  closeDeleteSessionFilterModal();
   createSessionFilterModal.classList.add('hidden');
   resetSessionFilterModalForm();
+}
+
+function openDeleteSessionFilterModal() {
+  if (!editingSessionFilterId || !deleteSessionFilterModal) return;
+  deleteSessionFilterModal.classList.remove('hidden');
+}
+
+function closeDeleteSessionFilterModal() {
+  deleteSessionFilterModal?.classList.add('hidden');
+}
+
+function confirmDeleteSessionFilterModal() {
+  if (!editingSessionFilterId) return;
+  const filterId = editingSessionFilterId;
+  const index = state.sessionListFilters.findIndex((filter) => filter.id === filterId);
+  if (index === -1) {
+    closeDeleteSessionFilterModal();
+    closeCreateSessionFilterModal();
+    return;
+  }
+
+  state.sessionListFilters.splice(index, 1);
+  if (state.sessionListFilter === filterId) {
+    state.sessionListFilter = 'all';
+  }
+
+  closeDeleteSessionFilterModal();
+  closeCreateSessionFilterModal();
+  persist();
+  renderEditView();
 }
 
 function confirmCreateSessionFilterModal() {
@@ -4396,11 +4920,28 @@ function confirmCreateSessionFilterModal() {
     createSessionFilterError.classList.remove('hidden');
     return;
   }
-  if (createSessionFilterSelectedIds.size === 0) {
+
+  const type = normalizeCustomSessionFilterType(createSessionFilterType);
+  const isMembership = isMembershipSessionFilterType(type);
+  const phrase = normalizeCustomSessionFilterPhrase(createSessionFilterPhraseInput?.value);
+
+  if (isMembership && createSessionFilterSelectedIds.size === 0) {
     createSessionFilterError.textContent = 'Select at least one session.';
     createSessionFilterError.classList.remove('hidden');
     return;
   }
+  if (!isMembership && !phrase) {
+    createSessionFilterError.textContent = 'Enter a word or phrase.';
+    createSessionFilterError.classList.remove('hidden');
+    return;
+  }
+
+  const payload = {
+    name,
+    type,
+    sessionIds: isMembership ? [...createSessionFilterSelectedIds] : [],
+    phrase: isMembership ? '' : phrase,
+  };
 
   if (editingSessionFilterId) {
     const existing = getCustomSessionFilter(editingSessionFilterId);
@@ -4410,8 +4951,7 @@ function confirmCreateSessionFilterModal() {
     }
     const updated = normalizeCustomSessionFilter({
       ...existing,
-      name,
-      sessionIds: [...createSessionFilterSelectedIds],
+      ...payload,
       updatedAt: Date.now(),
     });
     Object.assign(existing, updated);
@@ -4419,8 +4959,7 @@ function confirmCreateSessionFilterModal() {
     const now = Date.now();
     const filter = normalizeCustomSessionFilter({
       id: crypto.randomUUID(),
-      name,
-      sessionIds: [...createSessionFilterSelectedIds],
+      ...payload,
       createdAt: now,
       updatedAt: now,
     });
@@ -4446,6 +4985,50 @@ function handleCreateSessionFilterSessionListClick(event) {
     createSessionFilterSelectedIds.add(sessionId);
   }
   renderCreateSessionFilterSessionList();
+}
+
+function handleCreateSessionFilterTypeClick(event) {
+  const option = event.target.closest('[data-filter-type]');
+  if (!option) return;
+  setCreateSessionFilterType(option.getAttribute('data-filter-type'));
+}
+
+function getVisiblePlannedSessionIds() {
+  return getPlannedSessionsRenderPlan().sections.flatMap((section) => (
+    (section.sessions || []).map((session) => session.id)
+  ));
+}
+
+function updateCollapseAllSessionsButton() {
+  if (!plannedSessionsCollapseAllBtn) return;
+  const visibleIds = getVisiblePlannedSessionIds();
+  const anyExpanded = visibleIds.some((id) => state.expandedSessionIds.has(id));
+  const label = anyExpanded ? 'Collapse all sessions' : 'Expand all sessions';
+  plannedSessionsCollapseAllBtn.setAttribute('aria-label', label);
+  plannedSessionsCollapseAllBtn.title = label;
+  plannedSessionsCollapseAllBtn.classList.toggle('planned-sessions-collapse-all-btn--expanded', anyExpanded);
+  const icon = plannedSessionsCollapseAllBtn.querySelector('.planned-sessions-collapse-all-icon');
+  if (icon) {
+    icon.innerHTML = anyExpanded
+      ? '<polyline points="7 11 12 6 17 11"/><polyline points="7 18 12 13 17 18"/>'
+      : '<polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/>';
+  }
+}
+
+function toggleCollapseExpandAllSessions() {
+  const visibleIds = getVisiblePlannedSessionIds();
+  if (visibleIds.length === 0) return;
+
+  const anyExpanded = visibleIds.some((id) => state.expandedSessionIds.has(id));
+  if (anyExpanded) {
+    visibleIds.forEach((id) => state.expandedSessionIds.delete(id));
+  } else {
+    visibleIds.forEach((id) => {
+      if (getPlannedSession(id)) state.expandedSessionIds.add(id);
+    });
+  }
+  persist();
+  renderEditView();
 }
 
 function sanitizeFileNamePart(value) {
@@ -4801,13 +5384,24 @@ function toggleHistoryTaskBillable(entryId, taskIndex, enabled) {
   if (enabled) {
     const sessionId = task.sourceSessionId || BRAINDUMP_SESSION_ID;
     const settings = getPlannedSessionRateSettings(sessionId);
-    if (!settings.enabled || !settings.rate) {
+    const canApplyQuickStart = sessionId === QUICK_START_SESSION_ID && !!settings.rate;
+    if ((!settings.enabled || !settings.rate) && !canApplyQuickStart) {
       const session = getPlannedSession(sessionId);
-      const name = session?.name || task.sourceSessionName || 'this session';
-      showAppAlert(`Set an hourly rate on ${name} first (use the $ button on the session).`, { title: 'Hourly rate required' });
+      const name = session?.name
+        || task.sourceSessionName
+        || (sessionId === QUICK_START_SESSION_ID ? QUICK_START_DEFAULT_NAME : 'this session');
+      const hint = sessionId === QUICK_START_SESSION_ID
+        ? 'Set an hourly rate in Quick Start (use the $ button) first.'
+        : `Set an hourly rate on ${name} first (use the $ button on the session).`;
+      showAppAlert(hint, { title: 'Hourly rate required' });
       return;
     }
-    applyBillableSettingsToHistoryTask(task, settings);
+    applyBillableSettingsToHistoryTask(task, {
+      enabled: true,
+      rate: settings.rate,
+      roundMinutes: settings.roundMinutes,
+      roundScope: settings.roundScope,
+    });
   } else {
     clearBillableSettingsFromHistoryTask(task);
   }
@@ -6200,6 +6794,7 @@ function renderPlannedSessionBlock(session) {
 function renderPlannedSessions() {
   plannedSessionsList.innerHTML = '';
   updatePlannedSessionsFilterButtonState();
+  updateCollapseAllSessionsButton();
 
   const plan = getPlannedSessionsRenderPlan();
   appendPlannedSessionsFilterHeading(plannedSessionsList);
@@ -6262,9 +6857,11 @@ function isSettingsUiOpen() {
     || !invoiceSettingsModal.classList.contains('hidden')
     || !historyModal.classList.contains('hidden')
     || !templatesModal.classList.contains('hidden')
+    || !labsModal?.classList.contains('hidden')
     || !saveTemplateModal.classList.contains('hidden')
     || !createSessionFilterModal?.classList.contains('hidden')
     || !billableModal.classList.contains('hidden')
+    || !quickStartModal?.classList.contains('hidden')
     || !whatsNewModal.classList.contains('hidden');
 }
 
@@ -6509,7 +7106,7 @@ const TUTORIAL_STEPS = [
     id: 'create-session',
     selector: '[data-tutorial="create-session"]',
     title: 'Spin up a new session!',
-    body: 'Got a client project? A side hustle? A "finally organize the garage" vibe? Hit <strong>+ Create New Session</strong> and give your chaos a name. Future-you will send a thank-you note.',
+    body: 'Got a client project? A side hustle? A "finally organize the garage" vibe? Hit <strong>+ New Session</strong> and give your chaos a name. Future-you will send a thank-you note.',
   },
   {
     id: 'settings-menu',
@@ -7447,6 +8044,7 @@ function renderHistoryEntry(entry) {
     : 'history-status-badge--completed';
   const taskSummary = `${entry.completedCount} of ${entry.totalCount} task${entry.totalCount === 1 ? '' : 's'}`;
   const hasBillableTasks = entryHasBillableTasks(entry);
+  const isQuickStart = getHistoryEntrySourceSessionId(entry) === QUICK_START_SESSION_ID;
   const entryEarnings = hasBillableTasks ? getHistoryEntryEarnings(entry) : 0;
   const earningsSummary = hasBillableTasks && entryEarnings > 0
     ? ` · ${formatCurrency(entryEarnings)}`
@@ -7460,6 +8058,7 @@ function renderHistoryEntry(entry) {
             <span class="history-entry-name">${escapeHtml(getHistoryEntryDisplayName(entry))}</span>
             <span class="history-status-badge ${statusClass}">${statusLabel}</span>
             ${hasBillableTasks ? '<span class="history-status-badge history-status-badge--billable">Billable</span>' : ''}
+            ${isQuickStart ? '<span class="history-status-badge history-status-badge--quick-start">Quick Start</span>' : ''}
           </div>
           <div class="history-entry-meta">
             ${escapeHtml(formatRelativeBackupTime(entry.endedAt))} · ${escapeHtml(formatTime(getHistoryEntryTotalMs(entry)))} · ${escapeHtml(taskSummary)}${escapeHtml(earningsSummary)}
@@ -8188,6 +8787,128 @@ function closeTemplatesModal() {
   templateEditorState = null;
 }
 
+const LABS_FEATURES = [
+  {
+    id: 'trayAddTask',
+    title: 'Add task from tray',
+    description: 'Quickly add pending tasks from the floating timebar tray without stopping your session or switching away from the current task. Press Enter to keep adding more.',
+  },
+  {
+    id: 'quickStart',
+    title: 'Quick Start',
+    description: 'Skip the Sessions list and jump straight into a focus run. Add tasks, optional time limits, a name, and billable settings, then Start Session. Quick Start runs stay out of your Sessions list but still appear in Session history.',
+  },
+];
+const LABS_FEATURES_STORAGE_KEY = 'supaslash-labs-features';
+
+function normalizeLabsFeatures(saved) {
+  const source = saved && typeof saved === 'object' ? saved : {};
+  return {
+    trayAddTask: !!source.trayAddTask,
+    quickStart: !!source.quickStart,
+  };
+}
+
+function readLabsFeaturesFromStorage() {
+  try {
+    const raw = localStorage.getItem(LABS_FEATURES_STORAGE_KEY);
+    if (!raw) return null;
+    return normalizeLabsFeatures(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+function writeLabsFeaturesToStorage(features) {
+  try {
+    localStorage.setItem(LABS_FEATURES_STORAGE_KEY, JSON.stringify(normalizeLabsFeatures(features)));
+  } catch {
+    // Ignore quota / private-mode failures; file persist remains the backup.
+  }
+}
+
+function resolveLabsFeatures(savedFromFile) {
+  const fromFile = normalizeLabsFeatures(savedFromFile);
+  const fromLocal = readLabsFeaturesFromStorage();
+  // localStorage wins when present so toggles survive full-file rewrites that omit labsFeatures.
+  return normalizeLabsFeatures({
+    ...fromFile,
+    ...(fromLocal || {}),
+  });
+}
+
+function isLabsFeatureEnabled(featureId) {
+  return !!state.labsFeatures?.[featureId];
+}
+
+function setLabsFeatureEnabled(featureId, enabled) {
+  if (!LABS_FEATURES.some((feature) => feature.id === featureId)) return;
+
+  state.labsFeatures = {
+    ...normalizeLabsFeatures(state.labsFeatures),
+    [featureId]: !!enabled,
+  };
+  writeLabsFeaturesToStorage(state.labsFeatures);
+
+  if (featureId === 'trayAddTask' && !enabled) {
+    state.drawerAddFormOpen = false;
+    closeFullscreenDrawerAddForm();
+  }
+
+  if (featureId === 'quickStart') {
+    updateQuickStartButtonVisibility();
+  }
+
+  persist();
+  if (drawerOpen) {
+    void window.slashIt.updateSessionDrawer(getDrawerPayload());
+  }
+  if (state.fullscreenTaskPanelOpen) {
+    renderSessionDrawer();
+  }
+  renderLabsModal();
+}
+
+function renderLabsModal() {
+  if (!labsModalBody) return;
+  labsModalBody.innerHTML = LABS_FEATURES.map((feature) => {
+    const enabled = isLabsFeatureEnabled(feature.id);
+    return `
+      <div class="labs-feature">
+        <div class="labs-feature-header">
+          <h4 class="labs-feature-title">${escapeHtml(feature.title)}</h4>
+          <button
+            type="button"
+            class="labs-feature-toggle"
+            role="switch"
+            aria-checked="${enabled ? 'true' : 'false'}"
+            data-labs-feature="${escapeHtml(feature.id)}"
+          >${enabled ? 'On' : 'Off'}</button>
+        </div>
+        <p class="labs-feature-desc">${escapeHtml(feature.description)}</p>
+      </div>
+    `;
+  }).join('');
+}
+
+function openLabsModal() {
+  hideSettingsMenu();
+  renderLabsModal();
+  labsModal.classList.remove('hidden');
+}
+
+function closeLabsModal() {
+  labsModal?.classList.add('hidden');
+}
+
+function handleLabsModalClick(event) {
+  const toggle = event.target.closest('[data-labs-feature]');
+  if (!toggle) return;
+  const featureId = toggle.getAttribute('data-labs-feature');
+  if (!featureId) return;
+  setLabsFeatureEnabled(featureId, !isLabsFeatureEnabled(featureId));
+}
+
 function collectListEditorTasks() {
   const rows = templatesModalBody?.querySelectorAll('[data-task-row]') || [];
   return [...rows].map((row) => {
@@ -8301,7 +9022,7 @@ function migrateLegacyTaskTemplates(savedTaskTemplates) {
   });
 }
 
-function applySavedData(saved) {
+function applySavedData(saved, { mergeLabsFromLocal = true } = {}) {
   state.sessionTasks = (saved.sessionTasks || saved.tasks || []).map(normalizeSessionTask);
   loadPlannedSessionsFromSaved(saved);
   state.activeSessionName = saved.activeSessionName || null;
@@ -8350,6 +9071,12 @@ function applySavedData(saved) {
     ? saved.sessionListFilters.map(normalizeCustomSessionFilter)
     : [];
   state.sessionListFilter = normalizeSessionListFilter(saved.sessionListFilter);
+  state.labsFeatures = mergeLabsFromLocal
+    ? resolveLabsFeatures(saved.labsFeatures)
+    : normalizeLabsFeatures(saved.labsFeatures);
+  writeLabsFeaturesToStorage(state.labsFeatures);
+  updateQuickStartButtonVisibility();
+  state.quickStartRateSettings = normalizeQuickStartRateSettings(saved.quickStartRateSettings);
 
   if (saved.timerBarSize === 'hidden') {
     state.timerBarSize = state.timerBarSizeBeforeHide;
@@ -8396,7 +9123,7 @@ async function applyRestoredData(saved) {
   state.limitExpired = false;
   state.limitExpiredKind = null;
   setExpiredUI(false);
-  applySavedData(saved);
+  applySavedData(saved, { mergeLabsFromLocal: false });
   routeToSavedMode(saved);
   persist();
 }
@@ -8416,6 +9143,7 @@ function renderEditView() {
   clearSessionBtn.disabled = state.sessionTasks.length === 0;
   moveBackToListBtn.disabled = state.sessionTasks.length === 0;
   clearSessionCompletedBtn.disabled = getCompletedCount() === 0;
+  updateQuickStartButtonVisibility();
   if (isTutorialActive()) {
     requestAnimationFrame(() => positionTutorialDots());
   }
@@ -8612,6 +9340,7 @@ function isEditShortcutBlocked() {
   if (!clearSessionModal.classList.contains('hidden')) return true;
   if (!deleteSessionModal.classList.contains('hidden')) return true;
   if (!billableModal.classList.contains('hidden')) return true;
+  if (!quickStartModal?.classList.contains('hidden')) return true;
   if (isTaskDetailModalOpen()) return true;
   if (isSettingsUiOpen()) return true;
   return false;
@@ -8644,6 +9373,30 @@ function handleEditModeEnterShortcuts(e) {
     e.preventDefault();
     e.stopPropagation();
     startSlashing();
+  }
+}
+
+function handleEditModeShortcuts(e) {
+  if (state.mode !== 'edit') return;
+  if (isEditShortcutBlocked()) return;
+
+  const meta = e.metaKey || e.ctrlKey || e.getModifierState('Meta') || e.getModifierState('Control');
+  const key = e.key.toLowerCase();
+
+  if (meta && !e.shiftKey && !e.altKey && key === 'n') {
+    e.preventDefault();
+    e.stopPropagation();
+    createPlannedSession();
+    return;
+  }
+
+  if (!meta && !e.shiftKey && !e.altKey && key === 'q') {
+    if (isTaskInputFocused()) return;
+    if (!isLabsFeatureEnabled('quickStart')) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    openQuickStartModal();
   }
 }
 
@@ -8854,17 +9607,6 @@ function switchToTask(index) {
   startTimer();
 }
 
-function startOvertime() {
-  state.taskOvertimeMode = true;
-  const taskIndex = getFocusTaskIndex();
-  if (taskIndex >= 0) state.sessionTasks[taskIndex].taskOvertimeMode = true;
-  state.limitExpiredKind = null;
-  extendPanel.classList.add('hidden');
-  setExpiredUI(false);
-  if (!state.isRunning) startTimer();
-  persist();
-}
-
 function extendTime() {
   showExtendPanel();
 }
@@ -8879,7 +9621,7 @@ function confirmExtend() {
   const current = getCurrentTask();
   if (!current) return;
   const taskIndex = getFocusTaskIndex();
-  state.sessionTasks[taskIndex].limitMs = (state.sessionTasks[taskIndex].limitMs || 0) + extraMs;
+  state.sessionTasks[taskIndex].limitMs = state.elapsedMs + extraMs;
   state.taskOvertimeMode = false;
   state.sessionTasks[taskIndex].taskOvertimeMode = false;
 
@@ -8971,11 +9713,26 @@ function backToEdit() {
 }
 
 planSessionBtn.addEventListener('click', createPlannedSession);
+quickStartBtn?.addEventListener('click', openQuickStartModal);
+quickStartCancelBtn?.addEventListener('click', closeQuickStartModal);
+quickStartConfirmBtn?.addEventListener('click', startQuickStartSession);
+quickStartBillableBtn?.addEventListener('click', () => {
+  if (!quickStartBillableDraft) quickStartBillableDraft = createQuickStartBillableDraft();
+  openBillableModal(QUICK_START_SESSION_ID);
+});
+quickStartModal?.addEventListener('click', (e) => {
+  if (e.target === quickStartModal) closeQuickStartModal();
+  else handleQuickStartModalClick(e);
+});
+quickStartTaskList?.addEventListener('keydown', handleQuickStartTaskListKeydown, true);
+quickStartTaskList?.addEventListener('input', updateQuickStartConfirmEnabled);
+quickStartSessionNameInput?.addEventListener('keydown', handleQuickStartSessionNameKeydown, true);
 
 startBtn.addEventListener('click', startSlashing);
 
 document.addEventListener('keydown', handleUndoRedoShortcuts, true);
 document.addEventListener('keydown', handleEditModeEnterShortcuts, true);
+document.addEventListener('keydown', handleEditModeShortcuts, true);
 
 settingsBtn.addEventListener('click', (e) => {
   e.stopPropagation();
@@ -8995,6 +9752,7 @@ settingsWhatsNewBtn.addEventListener('click', () => {
   openWhatsNewModal();
 });
 settingsTemplatesBtn.addEventListener('click', openTemplatesModal);
+settingsLabsBtn?.addEventListener('click', openLabsModal);
 settingsHistoryBtn.addEventListener('click', () => openHistoryModal());
 settingsShortcutsBtn.addEventListener('click', openShortcutsModal);
 settingsTutorialBtn.addEventListener('click', startTutorial);
@@ -9035,20 +9793,40 @@ templatesModalBody.addEventListener('click', handleTemplatesModalClick);
 templatesModal.addEventListener('click', (e) => {
   if (e.target === templatesModal) closeTemplatesModal();
 });
+labsCloseBtn?.addEventListener('click', closeLabsModal);
+labsModal?.addEventListener('click', (e) => {
+  if (e.target === labsModal) closeLabsModal();
+  else handleLabsModalClick(e);
+});
 saveTemplateConfirmBtn.addEventListener('click', confirmSaveTemplateModal);
 saveTemplateCancelBtn.addEventListener('click', closeSaveTemplateModal);
 saveTemplateModal.addEventListener('click', (e) => {
   if (e.target === saveTemplateModal) closeSaveTemplateModal();
 });
 createSessionFilterConfirmBtn?.addEventListener('click', confirmCreateSessionFilterModal);
+createSessionFilterDeleteBtn?.addEventListener('click', openDeleteSessionFilterModal);
 createSessionFilterCancelBtn?.addEventListener('click', closeCreateSessionFilterModal);
 createSessionFilterModal?.addEventListener('click', (e) => {
   if (e.target === createSessionFilterModal) closeCreateSessionFilterModal();
 });
+createSessionFilterTypeOptions?.addEventListener('click', handleCreateSessionFilterTypeClick);
 createSessionFilterSessionList?.addEventListener('click', handleCreateSessionFilterSessionListClick);
 createSessionFilterNameInput?.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') confirmCreateSessionFilterModal();
   if (e.key === 'Escape') closeCreateSessionFilterModal();
+});
+createSessionFilterPhraseInput?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') confirmCreateSessionFilterModal();
+  if (e.key === 'Escape') closeCreateSessionFilterModal();
+});
+deleteSessionFilterConfirmBtn?.addEventListener('click', confirmDeleteSessionFilterModal);
+deleteSessionFilterCancelBtn?.addEventListener('click', closeDeleteSessionFilterModal);
+deleteSessionFilterModal?.addEventListener('click', (e) => {
+  if (e.target === deleteSessionFilterModal) closeDeleteSessionFilterModal();
+});
+plannedSessionsCollapseAllBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleCollapseExpandAllSessions();
 });
 saveTemplateNameInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') confirmSaveTemplateModal();
@@ -9102,8 +9880,11 @@ whatsNewModal.addEventListener('click', (e) => {
 window.slashIt.onOpenWhatsNew(() => openWhatsNewModal());
 
 billableToggleBtn.addEventListener('click', () => {
-  const session = getPlannedSession(pendingBillableSessionId);
+  const session = getBillableModalTarget();
   if (!session) return;
+  if (session.hourlyRateEnabled) {
+    commitBillableRateFromInput();
+  }
   session.hourlyRateEnabled = !session.hourlyRateEnabled;
   updateBillableModalUI(session);
   if (session.hourlyRateEnabled) {
@@ -9334,6 +10115,10 @@ document.addEventListener('keydown', (e) => {
       return;
     }
     if (!createSessionFilterModal.classList.contains('hidden')) {
+      if (deleteSessionFilterModal && !deleteSessionFilterModal.classList.contains('hidden')) {
+        closeDeleteSessionFilterModal();
+        return;
+      }
       closeCreateSessionFilterModal();
       return;
     }
@@ -9348,6 +10133,10 @@ document.addEventListener('keydown', (e) => {
         return;
       }
       closeTemplatesModal();
+      return;
+    }
+    if (labsModal && !labsModal.classList.contains('hidden')) {
+      closeLabsModal();
       return;
     }
     if (!shortcutsModal.classList.contains('hidden')) {
@@ -9394,6 +10183,10 @@ document.addEventListener('keydown', (e) => {
     }
     if (!billableModal.classList.contains('hidden')) {
       closeBillableModal(true);
+      return;
+    }
+    if (!quickStartModal?.classList.contains('hidden')) {
+      closeQuickStartModal();
       return;
     }
     if (!whatsNewModal.classList.contains('hidden')) {
@@ -9463,9 +10256,36 @@ window.slashIt.onDrawerPointerLeave(() => {
   scheduleCloseSessionDrawer();
 });
 window.slashIt.onDrawerSelectTask((index) => switchToTask(index));
+window.slashIt.onDrawerAddTask((payload) => {
+  appendTaskFromTray(payload || {});
+});
+window.slashIt.onDrawerAddFormOpen((open) => {
+  setDrawerAddFormOpen(!!open);
+});
+
+sessionDrawerAddTrigger?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  openFullscreenDrawerAddForm();
+});
+sessionDrawerAddForm?.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    e.stopPropagation();
+    closeFullscreenDrawerAddForm();
+    return;
+  }
+  if (e.key !== 'Enter' && e.code !== 'NumpadEnter') return;
+  e.preventDefault();
+  e.stopPropagation();
+  submitFullscreenDrawerAddTask();
+});
+sessionDrawerAddForm?.addEventListener('submit', (e) => {
+  e.preventDefault();
+  submitFullscreenDrawerAddTask();
+});
 completeBtn.addEventListener('click', completeCurrentTask);
 skipBtn.addEventListener('click', skipCurrentTask);
-overtimeBtn.addEventListener('click', startOvertime);
+expiredCompleteBtn.addEventListener('click', completeCurrentTask);
 extendBtn.addEventListener('click', extendTime);
 extendConfirmBtn.addEventListener('click', confirmExtend);
 extendCancelBtn.addEventListener('click', hideExtendPanel);
@@ -9511,7 +10331,17 @@ function loadPlannedSessionsFromSaved(saved) {
   state.expandedSessionIds = new Set();
 }
 
+const APP_PRELOADER_MIN_MS = 200;
+
+function dismissAppPreloader() {
+  const preloader = document.getElementById('app-preloader');
+  if (!preloader) return;
+  preloader.classList.add('app-preloader--fade-out');
+  preloader.addEventListener('transitionend', () => preloader.remove(), { once: true });
+}
+
 async function init() {
+  const initStartedAt = performance.now();
   const [saved, cachedLicense] = await Promise.all([
     window.slashIt.loadData(),
     window.slashIt.license.getCachedStatus(),
@@ -9520,6 +10350,13 @@ async function init() {
   applySavedData(saved);
   routeToSavedMode(saved);
   isInitializing = false;
+
+  const elapsed = performance.now() - initStartedAt;
+  if (elapsed < APP_PRELOADER_MIN_MS) {
+    await new Promise((resolve) => setTimeout(resolve, APP_PRELOADER_MIN_MS - elapsed));
+  }
+  dismissAppPreloader();
+
   void refreshLicenseStatus();
   void maybeAutoShowWhatsNew().finally(() => {
     void recordLaunchedAppVersion();

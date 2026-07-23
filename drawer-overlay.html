@@ -13,6 +13,16 @@
       <span id="session-drawer-title-time" class="session-drawer-task-time"></span>
     </div>
     <ul id="session-drawer-list" class="session-drawer-list"></ul>
+    <div id="session-drawer-add" class="session-drawer-add hidden">
+      <button id="session-drawer-add-trigger" type="button" class="session-drawer-add-trigger">
+        <span class="session-drawer-add-trigger-icon" aria-hidden="true">+</span>
+        <span>New task</span>
+      </button>
+      <form id="session-drawer-add-form" class="session-drawer-add-form hidden" autocomplete="off">
+        <input id="session-drawer-add-input" class="session-drawer-add-input" type="text" placeholder="New task…" />
+        <input id="session-drawer-add-limit" class="session-drawer-add-limit" type="text" placeholder="20m" maxlength="8" aria-label="Time limit" />
+      </form>
+    </div>
   </div>
   <div class="drawer-hover-bridge" aria-hidden="true"></div>
   <script src="sounds.js"></script>

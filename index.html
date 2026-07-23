@@ -8,6 +8,16 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <div id="app-preloader" class="app-preloader" aria-hidden="true">
+    <img
+      src="assets/supaslash-logo.png"
+      alt=""
+      class="app-preloader-logo"
+      width="447"
+      height="125"
+    />
+  </div>
+
   <div class="drag-region"></div>
 
   <!-- Edit Mode -->
@@ -18,7 +28,8 @@
           <img src="assets/supaslash-logo.png" alt="" class="app-logo-image" width="447" height="125" />
         </div>
         <div class="edit-header-actions">
-          <button id="plan-session-btn" class="plan-session-btn plan-session-btn--header" type="button" data-tutorial="create-session">+ Create New Session</button>
+          <button id="quick-start-btn" class="plan-session-btn plan-session-btn--header plan-session-btn--quick-start hidden" type="button">Quick Start</button>
+          <button id="plan-session-btn" class="plan-session-btn plan-session-btn--header" type="button" data-tutorial="create-session">+ New Session</button>
           <button id="settings-btn" class="settings-btn icon-btn" type="button" data-tutorial="settings-menu" aria-label="Menu" aria-haspopup="true" aria-expanded="false">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
             <line x1="4" y1="7" x2="20" y2="7"/>
@@ -37,6 +48,12 @@
         <div class="section-header">
           <h2 class="section-label section-label--bright" data-tutorial="sessions-panel">Sessions:</h2>
           <div class="section-header-actions">
+            <button id="planned-sessions-collapse-all-btn" class="planned-sessions-collapse-all-btn" type="button" aria-label="Expand all sessions" title="Expand all sessions">
+              <svg class="planned-sessions-collapse-all-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <polyline points="7 13 12 18 17 13"/>
+                <polyline points="7 6 12 11 17 6"/>
+              </svg>
+            </button>
             <div class="planned-sessions-filter-wrap">
               <button id="planned-sessions-filter-btn" class="planned-sessions-filter-btn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Filter sessions">
                 <svg class="planned-sessions-filter-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -128,8 +145,55 @@
       </div>
     </div>
 
+    <div id="quick-start-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="quick-start-modal-title">
+      <div class="clear-session-modal-card quick-start-modal-card">
+        <div class="quick-start-modal-heading">
+          <h3 id="quick-start-modal-title" class="clear-session-modal-title">Quick Start</h3>
+          <button
+            type="button"
+            id="quick-start-info-btn"
+            class="quick-start-info-btn"
+            aria-label="Quick Start keyboard shortcuts"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+            <span class="quick-start-info-tooltip" role="tooltip">
+              Press <kbd class="shortcut-key">Enter</kbd> to add the next task.
+              Press <kbd class="shortcut-key">⇧ Enter</kbd> to start your session.
+            </span>
+          </button>
+        </div>
+        <div class="quick-start-modal-body">
+          <div class="quick-start-session-row">
+            <label class="template-editor-label" for="quick-start-session-name">Session name</label>
+            <div class="quick-start-session-name-row">
+              <input id="quick-start-session-name" class="template-editor-input" type="text" placeholder="Quick Start" autocomplete="off" />
+              <button type="button" id="quick-start-billable-btn" class="session-billable-btn" title="Billable settings" aria-label="Billable settings">$</button>
+            </div>
+          </div>
+          <span class="template-editor-label">Tasks</span>
+          <div class="template-editor-task-list" id="quick-start-task-list">
+            <div class="template-editor-row" data-task-row="0">
+              <input class="template-editor-input template-editor-task-text" type="text" value="" placeholder="Task" autocomplete="off" />
+              <input class="template-editor-input template-editor-limit template-editor-task-limit" type="text" value="" placeholder="20m" autocomplete="off" />
+              <button type="button" class="template-row-btn template-row-btn--danger" data-quick-start-remove-task="0" aria-label="Remove task">×</button>
+            </div>
+          </div>
+          <button type="button" class="templates-add-btn" id="quick-start-add-task-btn">+ Add task</button>
+        </div>
+        <div class="clear-session-modal-actions">
+          <button id="quick-start-confirm-btn" class="clear-session-modal-btn" type="button" disabled>Start Session</button>
+          <button id="quick-start-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <div id="settings-menu" class="settings-menu hidden" role="menu" aria-label="Settings">
       <button type="button" id="settings-templates-btn" class="settings-menu-item" role="menuitem">Templates</button>
+      <button type="button" id="settings-labs-btn" class="settings-menu-item" role="menuitem">Labs</button>
       <button type="button" id="settings-history-btn" class="settings-menu-item" role="menuitem">Session history</button>
       <button type="button" id="settings-invoice-btn" class="settings-menu-item" role="menuitem">Personal Profile</button>
       <div class="settings-menu-divider" role="separator"></div>
@@ -150,6 +214,22 @@
       <div class="clear-session-modal-card shortcuts-modal-card">
         <h3 id="shortcuts-modal-title" class="clear-session-modal-title">Keyboard shortcuts</h3>
         <dl class="shortcuts-list">
+          <div class="shortcuts-row">
+            <dt>Create new session</dt>
+            <dd><kbd class="shortcut-key">⌘ N</kbd></dd>
+          </div>
+          <div class="shortcuts-row">
+            <dt>Quick Start session (Labs)</dt>
+            <dd><kbd class="shortcut-key">Q</kbd></dd>
+          </div>
+          <div class="shortcuts-row">
+            <dt>Add next task in Quick Start modal</dt>
+            <dd><kbd class="shortcut-key">Enter</kbd></dd>
+          </div>
+          <div class="shortcuts-row">
+            <dt>Start session from Quick Start modal</dt>
+            <dd><kbd class="shortcut-key">⇧ Enter</kbd></dd>
+          </div>
           <div class="shortcuts-row">
             <dt>Insert task or list template (from New Task input)</dt>
             <dd><kbd class="shortcut-key">/</kbd> then pick</dd>
@@ -296,6 +376,16 @@
           </button>
           <div id="session-drawer" class="session-drawer session-drawer--fullscreen-panel hidden" aria-hidden="true">
             <ul id="session-drawer-list" class="session-drawer-list"></ul>
+            <div id="session-drawer-add" class="session-drawer-add hidden">
+              <button id="session-drawer-add-trigger" type="button" class="session-drawer-add-trigger">
+                <span class="session-drawer-add-trigger-icon" aria-hidden="true">+</span>
+                <span>New task</span>
+              </button>
+              <form id="session-drawer-add-form" class="session-drawer-add-form hidden" autocomplete="off">
+                <input id="session-drawer-add-input" class="session-drawer-add-input" type="text" placeholder="New task…" />
+                <input id="session-drawer-add-limit" class="session-drawer-add-limit" type="text" placeholder="20m" maxlength="8" aria-label="Time limit" />
+              </form>
+            </div>
           </div>
         </div>
         <div id="timer-actions" class="timer-actions">
@@ -342,7 +432,7 @@
         </div>
       </div>
       <div id="expired-actions" class="expired-actions hidden">
-        <button id="overtime-btn" class="expired-btn" type="button">Overtime</button>
+        <button id="expired-complete-btn" class="expired-btn expired-btn-accent" type="button">Complete</button>
         <button id="extend-btn" class="expired-btn" type="button">Extend</button>
       </div>
       <div id="extend-panel" class="extend-panel hidden">
@@ -527,12 +617,38 @@
       <h3 id="create-session-filter-title" class="clear-session-modal-title">Create a new filter</h3>
       <label for="create-session-filter-name-input" class="session-filter-field-label">Filter name</label>
       <input id="create-session-filter-name-input" type="text" class="save-template-name-input" autocomplete="off" />
-      <span class="session-filter-field-label">Sessions in this filter</span>
-      <div id="create-session-filter-session-list" class="session-filter-session-list"></div>
+      <span class="session-filter-field-label">Filter type</span>
+      <div id="create-session-filter-type-options" class="session-filter-type-options" role="radiogroup" aria-label="Filter type">
+        <button type="button" class="session-filter-type-option session-filter-type-option--selected" data-filter-type="include" role="radio" aria-checked="true">Include sessions</button>
+        <button type="button" class="session-filter-type-option" data-filter-type="exclude" role="radio" aria-checked="false">Exclude sessions</button>
+        <button type="button" class="session-filter-type-option" data-filter-type="contains" role="radio" aria-checked="false">Contains</button>
+        <button type="button" class="session-filter-type-option" data-filter-type="notContains" role="radio" aria-checked="false">Does not contain</button>
+        <button type="button" class="session-filter-type-option" data-filter-type="exact" role="radio" aria-checked="false">Matches exactly</button>
+      </div>
+      <div id="create-session-filter-membership-fields">
+        <span id="create-session-filter-sessions-label" class="session-filter-field-label">Sessions in this filter</span>
+        <div id="create-session-filter-session-list" class="session-filter-session-list"></div>
+      </div>
+      <div id="create-session-filter-phrase-fields" class="hidden">
+        <label for="create-session-filter-phrase-input" id="create-session-filter-phrase-label" class="session-filter-field-label">Word or phrase</label>
+        <input id="create-session-filter-phrase-input" type="text" class="save-template-name-input" autocomplete="off" placeholder="Session name…" />
+      </div>
       <p id="create-session-filter-error" class="save-template-error hidden"></p>
       <div class="clear-session-modal-actions">
         <button id="create-session-filter-confirm-btn" class="clear-session-modal-btn" type="button">Save</button>
+        <button id="create-session-filter-delete-btn" class="clear-session-modal-btn clear-session-modal-btn--danger hidden" type="button">Delete</button>
         <button id="create-session-filter-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="delete-session-filter-modal" class="clear-session-modal clear-session-modal--stacked hidden" role="dialog" aria-modal="true" aria-labelledby="delete-session-filter-title">
+    <div class="clear-session-modal-card">
+      <h3 id="delete-session-filter-title" class="clear-session-modal-title">Delete filter</h3>
+      <p id="delete-session-filter-message" class="delete-session-message">Delete this custom filter? This cannot be undone.</p>
+      <div class="clear-session-modal-actions">
+        <button id="delete-session-filter-confirm-btn" class="clear-session-modal-btn" type="button">Delete filter</button>
+        <button id="delete-session-filter-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
       </div>
     </div>
   </div>
@@ -544,6 +660,17 @@
       <div id="templates-modal-body" class="templates-modal-body"></div>
       <div class="templates-modal-actions">
         <button id="templates-close-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="labs-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="labs-modal-title">
+    <div class="clear-session-modal-card labs-modal-card">
+      <h3 id="labs-modal-title" class="clear-session-modal-title">Labs</h3>
+      <p class="labs-modal-desc">These are beta features. They may change or have bugs while we finish them. Turn any on to try them early.</p>
+      <div id="labs-modal-body" class="labs-modal-body"></div>
+      <div class="labs-modal-actions">
+        <button id="labs-close-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Close</button>
       </div>
     </div>
   </div>

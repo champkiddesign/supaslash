@@ -47,7 +47,7 @@ const FOCUS_WIDTH_MARGIN = 40;
 const FOCUS_BAR_HEIGHT = 56;
 const FOCUS_DRAWER_GAP = 6;
 const FOCUS_DRAWER_BRIDGE = 14;
-const FOCUS_DRAWER_SLOT = 180 + 16 + 6 + 8;
+const FOCUS_DRAWER_SLOT = 180 + 16 + 6 + 8 + 44;
 const FOCUS_SHELL_HEIGHT = FOCUS_BAR_HEIGHT + FOCUS_DRAWER_SLOT;
 const FOCUS_DRAWER_OPEN_ANIM_MS = 220;
 const FOCUS_DRAWER_CLOSE_ANIM_MS = 160;
@@ -325,7 +325,30 @@ function attachFocusMoveListener() {
   });
 }
 
-function showSessionDrawerOverlay({ drawerWidth, drawerHeight, tasks, sessionTitle, sessionDurationText }) {
+function setDrawerOverlayKeyboardCapture(enabled) {
+  const overlay = drawerOverlayWindow;
+  if (!isLiveWindow(overlay)) return;
+
+  if (enabled) {
+    overlay.setFocusable(true);
+    // Bring the tray forward so typing goes here instead of the app behind it.
+    if (process.platform === 'darwin') {
+      app.focus({ steal: true });
+    }
+    overlay.show();
+    overlay.focus();
+    overlay.webContents.focus();
+    overlay.webContents.send('drawer-keyboard-ready');
+  } else {
+    overlay.setFocusable(false);
+    // Keep the tray visible without holding keyboard focus.
+    if (overlay.isVisible()) {
+      overlay.showInactive();
+    }
+  }
+}
+
+function showSessionDrawerOverlay({ drawerWidth, drawerHeight, tasks, sessionTitle, sessionDurationText, addFormOpen, trayAddEnabled }) {
   const bar = getTimerBarBounds();
   if (!bar) return;
 
@@ -337,8 +360,19 @@ function showSessionDrawerOverlay({ drawerWidth, drawerHeight, tasks, sessionTit
   const present = () => {
     if (overlay.isDestroyed()) return;
     overlay.setBounds({ x, y, width: drawerWidth, height });
-    overlay.webContents.send('drawer-data', { tasks, sessionTitle, sessionDurationText });
-    overlay.showInactive();
+    overlay.webContents.send('drawer-data', {
+      tasks,
+      sessionTitle,
+      sessionDurationText,
+      addFormOpen: !!addFormOpen,
+      trayAddEnabled: !!trayAddEnabled,
+    });
+    if (addFormOpen) {
+      setDrawerOverlayKeyboardCapture(true);
+    } else {
+      overlay.setFocusable(false);
+      overlay.showInactive();
+    }
     overlay.setAlwaysOnTop(true, 'floating', 2);
     if (isLiveWindow(mainWindow)) {
       mainWindow.setAlwaysOnTop(true, 'floating', 1);
@@ -359,6 +393,7 @@ function showSessionDrawerOverlay({ drawerWidth, drawerHeight, tasks, sessionTit
 function hideSessionDrawerOverlay({ immediate = false } = {}) {
   const overlay = drawerOverlayWindow;
   if (!isLiveWindow(overlay) || !overlay.isVisible()) return;
+  setDrawerOverlayKeyboardCapture(false);
   overlay.webContents.send('drawer-close');
   if (immediate) {
     overlay.hide();
@@ -779,7 +814,18 @@ ipcMain.handle('update-session-drawer', (_event, payload) => {
       tasks: payload.tasks,
       sessionTitle: payload.sessionTitle,
       sessionDurationText: payload.sessionDurationText,
+      addFormOpen: !!payload.addFormOpen,
+      trayAddEnabled: !!payload.trayAddEnabled,
     });
+    if (payload.drawerWidth && payload.drawerHeight) {
+      const bar = getTimerBarBounds();
+      if (bar) {
+        const x = bar.x + Math.round((bar.width - payload.drawerWidth) / 2);
+        const y = bar.y - payload.drawerHeight - FOCUS_DRAWER_GAP - FOCUS_DRAWER_BRIDGE;
+        const height = payload.drawerHeight + FOCUS_DRAWER_BRIDGE;
+        drawerOverlayWindow.setBounds({ x, y, width: payload.drawerWidth, height });
+      }
+    }
   }
   return true;
 });
@@ -794,6 +840,15 @@ ipcMain.on('drawer-pointer-leave', () => {
 
 ipcMain.on('drawer-select-task', (_event, index) => {
   if (isLiveWindow(mainWindow)) mainWindow.webContents.send('drawer-select-task', index);
+});
+
+ipcMain.on('drawer-add-task', (_event, payload) => {
+  if (isLiveWindow(mainWindow)) mainWindow.webContents.send('drawer-add-task', payload);
+});
+
+ipcMain.on('drawer-add-form-open', (_event, open) => {
+  setDrawerOverlayKeyboardCapture(!!open);
+  if (isLiveWindow(mainWindow)) mainWindow.webContents.send('drawer-add-form-open', open);
 });
 
 ipcMain.handle('set-screen-overlay', (_event, visible) => {

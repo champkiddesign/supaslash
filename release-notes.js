@@ -1,4 +1,25 @@
 const RELEASES = {
+  '1.0.12': {
+    releasedAt: '2026-07-22',
+    slides: [
+      {
+        title: 'Smarter custom filters',
+        description: 'Create filters that include or exclude specific sessions, or match session names that contain, do not contain, or exactly match a word or phrase. Delete filters you no longer need from the edit filter modal.',
+      },
+      {
+        title: 'Labs',
+        description: 'Try experimental features early from Menu → Labs. Turn them on or off anytime — they may change or have bugs while we finish them. New: Quick Start jumps straight into a focus session without building a list first, and you can still add tasks from the timebar tray without interrupting your focus.',
+      },
+      {
+        title: 'Collapse & expand all',
+        description: 'Collapse or expand every session in the Sessions list with one click, right next to the filter button.',
+      },
+      {
+        title: 'Under the hood',
+        description: 'Under the hood improvements, quality of life changes, and bug fixes.',
+      },
+    ],
+  },
   '1.0.11': {
     releasedAt: '2026-07-19',
     slides: [
