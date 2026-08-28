@@ -5,6 +5,7 @@ const QUICK_START_DEFAULT_NAME = 'Quick Start';
 const state = {
   sessionTasks: [],
   plannedSessions: [],
+  archivedPlannedSessions: [],
   expandedSessionIds: new Set(),
   activeAddSessionIds: new Set(),
   addFocusSessionId: null,
@@ -38,6 +39,8 @@ const state = {
   labsFeatures: {
     trayAddTask: false,
     quickStart: false,
+    pinnedFilters: false,
+    analytics: false,
   },
   invoiceSettings: {
     name: '',
@@ -50,6 +53,7 @@ const state = {
   lastLaunchedAppVersion: null,
   sessionListFilter: 'all',
   sessionListFilters: [],
+  pinnedSessionListFilters: [],
   quickStartRateSettings: {
     hourlyRateEnabled: false,
     hourlyRate: null,
@@ -82,8 +86,30 @@ const settingsLicenseBtn = document.getElementById('settings-license-btn');
 const settingsCheckUpdatesBtn = document.getElementById('settings-check-updates-btn');
 const settingsWhatsNewBtn = document.getElementById('settings-whats-new-btn');
 const settingsHistoryBtn = document.getElementById('settings-history-btn');
+const settingsAnalyticsBtn = document.getElementById('settings-analytics-btn');
 const settingsTemplatesBtn = document.getElementById('settings-templates-btn');
 const settingsLabsBtn = document.getElementById('settings-labs-btn');
+const analyticsModal = document.getElementById('analytics-modal');
+const analyticsCloseBtn = document.getElementById('analytics-close-btn');
+const analyticsCustomDates = document.getElementById('analytics-custom-dates');
+const analyticsRangeStartInput = document.getElementById('analytics-range-start');
+const analyticsRangeEndInput = document.getElementById('analytics-range-end');
+const analyticsSessionTrigger = document.getElementById('analytics-session-trigger');
+const analyticsSessionMenu = document.getElementById('analytics-session-menu');
+const analyticsSessionValue = document.getElementById('analytics-session-value');
+const analyticsDailyMetricSelect = document.getElementById('analytics-daily-metric');
+const analyticsSessionMetricSelect = document.getElementById('analytics-session-metric');
+const analyticsSessionPctHeader = document.getElementById('analytics-session-pct-header');
+const analyticsCompletedGroupingSelect = document.getElementById('analytics-completed-grouping');
+const analyticsCardCompleted = document.getElementById('analytics-card-completed');
+const analyticsCardEstimate = document.getElementById('analytics-card-estimate');
+const analyticsCardBraindump = document.getElementById('analytics-card-braindump');
+const analyticsDailyChart = document.getElementById('analytics-daily-chart');
+const analyticsEstActualChart = document.getElementById('analytics-est-actual-chart');
+const analyticsSessionTableBody = document.getElementById('analytics-session-table-body');
+const analyticsSessionTableFoot = document.getElementById('analytics-session-table-foot');
+const analyticsCompletedTableBody = document.getElementById('analytics-completed-table-body');
+const analyticsCompletedTableFoot = document.getElementById('analytics-completed-table-foot');
 const settingsTutorialBtn = document.getElementById('settings-tutorial-btn');
 const tutorialOverlay = document.getElementById('tutorial-overlay');
 const tutorialDots = document.getElementById('tutorial-dots');
@@ -145,10 +171,15 @@ const clearSessionModal = document.getElementById('clear-session-modal');
 const clearSessionAllBtn = document.getElementById('clear-session-all-btn');
 const clearSessionCompletedBtn = document.getElementById('clear-session-completed-btn');
 const clearSessionCancelBtn = document.getElementById('clear-session-cancel-btn');
-const deleteSessionModal = document.getElementById('delete-session-modal');
-const deleteSessionMessage = document.getElementById('delete-session-message');
-const deleteSessionConfirmBtn = document.getElementById('delete-session-confirm-btn');
-const deleteSessionCancelBtn = document.getElementById('delete-session-cancel-btn');
+const archiveSessionModal = document.getElementById('archive-session-modal');
+const archiveSessionMessage = document.getElementById('archive-session-message');
+const archiveSessionConfirmBtn = document.getElementById('archive-session-confirm-btn');
+const archiveSessionDeleteBtn = document.getElementById('archive-session-delete-btn');
+const archiveSessionCancelBtn = document.getElementById('archive-session-cancel-btn');
+const deleteSessionForeverModal = document.getElementById('delete-session-forever-modal');
+const deleteSessionForeverMessage = document.getElementById('delete-session-forever-message');
+const deleteSessionForeverConfirmBtn = document.getElementById('delete-session-forever-confirm-btn');
+const deleteSessionForeverCancelBtn = document.getElementById('delete-session-forever-cancel-btn');
 const deleteHistoryModal = document.getElementById('delete-history-modal');
 const deleteHistoryMessage = document.getElementById('delete-history-message');
 const deleteHistoryConfirmBtn = document.getElementById('delete-history-confirm-btn');
@@ -218,8 +249,11 @@ const historyList = document.getElementById('history-list');
 const historyCloseBtn = document.getElementById('history-close-btn');
 const historyTabSessionsBtn = document.getElementById('history-tab-sessions-btn');
 const historyTabReportBtn = document.getElementById('history-tab-report-btn');
+const historyTabArchiveBtn = document.getElementById('history-tab-archive-btn');
 const historySessionsPanel = document.getElementById('history-sessions-panel');
 const historyReportPanel = document.getElementById('history-report-panel');
+const historyArchivePanel = document.getElementById('history-archive-panel');
+const historyArchiveList = document.getElementById('history-archive-list');
 const historyDateToolbar = document.getElementById('history-date-toolbar');
 const historyReportStartInput = document.getElementById('history-report-start');
 const historyReportEndInput = document.getElementById('history-report-end');
@@ -241,6 +275,7 @@ const taskContextDuplicateBtn = document.getElementById('task-context-duplicate'
 const taskContextDeleteBtn = document.getElementById('task-context-delete');
 const fullscreenTaskToggleBtn = document.getElementById('fullscreen-task-toggle');
 const sessionContextMenu = document.getElementById('session-context-menu');
+const sessionContextFocusBtn = document.getElementById('session-context-focus');
 const sessionContextPinBtn = document.getElementById('session-context-pin');
 const sessionContextSaveTemplateBtn = document.getElementById('session-context-save-template');
 const templateAutocomplete = document.getElementById('template-autocomplete');
@@ -305,7 +340,9 @@ const taskDetailDoneBtn = document.getElementById('task-detail-done-btn');
 
 let taskContextMenuTarget = null;
 let sessionContextMenuTarget = null;
-let pendingDeleteSessionId = null;
+let pendingArchiveSessionId = null;
+let pendingDeleteForeverSessionId = null;
+let pendingDeleteForeverSource = null;
 let pendingDeleteHistoryEntryId = null;
 let pendingBillableSessionId = null;
 let billableSnapshot = null;
@@ -331,11 +368,20 @@ let focusBarWidthCache = null;
 let lastEarningsSplitDisplayText = '';
 let isInitializing = true;
 let expandedHistoryEntryIds = new Set();
+let expandedArchivedSessionIds = new Set();
 let historyHighlightRunId = null;
 let historyModalTab = 'sessions';
+let metaKeyHeld = false;
 let historyReportSessionFilter = '';
 let historyReportSessionMenuOpen = false;
 let plannedSessionsFilterMenuOpen = false;
+let sessionFocusId = null;
+let analyticsPreset = 'last14';
+let analyticsSessionFilter = '';
+let analyticsSessionMenuOpen = false;
+let analyticsDailyMetric = 'tasks';
+let analyticsSessionMetric = 'tasks';
+let analyticsCompletedGrouping = 'none';
 
 const SESSION_LIST_FILTERS = ['all', 'pinned', 'recent'];
 const SESSION_LIST_FILTER_LABELS = {
@@ -844,6 +890,7 @@ function appendTaskFromTray({ text, limitValue } = {}) {
   state.sessionTasks.push(toSessionTaskFromBraindump({
     text: parsed.text,
     limitMs: parsed.limitMs,
+    createdAt: Date.now(),
   }, sourceMeta));
   persist();
 
@@ -1306,6 +1353,13 @@ function applyTaskDetailFields(normalized, task) {
   return normalized;
 }
 
+function applyTaskCreatedAt(normalized, task) {
+  if (typeof task?.createdAt === 'number' && Number.isFinite(task.createdAt)) {
+    normalized.createdAt = task.createdAt;
+  }
+  return normalized;
+}
+
 function taskHasNotes(task) {
   return typeof task.notes === 'string' && task.notes.trim().length > 0;
 }
@@ -1330,14 +1384,15 @@ function normalizeSessionTask(task) {
   if (task.historyRecorded) {
     normalized.historyRecorded = true;
   }
+  applyTaskCreatedAt(normalized, task);
   return applyTaskDetailFields(normalized, task);
 }
 
 function normalizeBraindumpTask(task) {
-  return applyTaskDetailFields({
+  return applyTaskDetailFields(applyTaskCreatedAt({
     text: task.text || '',
     limitMs: task.limitMs ?? null,
-  }, task);
+  }, task), task);
 }
 
 function parseHourlyRate(value) {
@@ -1409,6 +1464,14 @@ function normalizePlannedSession(session) {
     billableRoundMinutes: normalizeBillableRoundMinutes(session.billableRoundMinutes),
     billableRoundScope: normalizeBillableRoundScope(session.billableRoundScope),
     pinned: !!session.pinned && id !== BRAINDUMP_SESSION_ID,
+  };
+}
+
+function normalizeArchivedPlannedSession(session) {
+  const normalized = normalizePlannedSession(session);
+  return {
+    ...normalized,
+    archivedAt: session.archivedAt || Date.now(),
   };
 }
 
@@ -1515,6 +1578,66 @@ function getSessionsForCustomFilter(filter) {
   ));
 }
 
+function normalizePinnedSessionListFilters(saved) {
+  if (!Array.isArray(saved)) return [];
+  const validIds = new Set(state.sessionListFilters.map((filter) => filter.id));
+  const seen = new Set();
+  return saved.filter((id) => {
+    if (typeof id !== 'string' || !validIds.has(id) || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+function getPinnedSessionListFilters() {
+  return state.pinnedSessionListFilters
+    .map((id) => getCustomSessionFilter(id))
+    .filter(Boolean);
+}
+
+function shouldShowPinnedSessionListFiltersSection() {
+  return isLabsFeatureEnabled('pinnedFilters')
+    && !isSessionFocusActive()
+    && isBuiltInSessionListFilter(state.sessionListFilter)
+    && getPinnedSessionListFilters().length > 0;
+}
+
+function isSessionListFilterPinned(filterId) {
+  return state.pinnedSessionListFilters.includes(filterId);
+}
+
+function togglePinnedSessionListFilter(filterId) {
+  if (!getCustomSessionFilter(filterId)) return;
+
+  const index = state.pinnedSessionListFilters.indexOf(filterId);
+  if (index >= 0) {
+    state.pinnedSessionListFilters.splice(index, 1);
+  } else {
+    state.pinnedSessionListFilters.push(filterId);
+  }
+
+  persist();
+  renderEditView();
+  if (plannedSessionsFilterMenuOpen) {
+    renderPlannedSessionsFilterMenuOptions();
+  }
+}
+
+function removePinnedSessionListFilter(filterId) {
+  const index = state.pinnedSessionListFilters.indexOf(filterId);
+  if (index >= 0) {
+    state.pinnedSessionListFilters.splice(index, 1);
+  }
+}
+
+function applySessionListFilter(filterValue) {
+  state.sessionListFilter = normalizeSessionListFilter(filterValue);
+  closePlannedSessionsFilterMenu();
+  updatePlannedSessionsFilterButtonState();
+  persist();
+  renderEditView();
+}
+
 function isBuiltInSessionFilterLabel(name) {
   const normalized = normalizeTemplateName(name).toLowerCase();
   if (!normalized) return false;
@@ -1534,6 +1657,10 @@ function isCustomSessionFilterNameTaken(name, excludeId = null) {
 
 function getPlannedSession(sessionId) {
   return state.plannedSessions.find((session) => session.id === sessionId) || null;
+}
+
+function getArchivedPlannedSession(sessionId) {
+  return state.archivedPlannedSessions.find((session) => session.id === sessionId) || null;
 }
 
 function getPinnedPlannedSessions() {
@@ -1598,6 +1725,8 @@ function getActiveSessionListFilterHeading() {
 }
 
 function appendPlannedSessionsFilterHeading(container) {
+  if (isSessionFocusActive()) return;
+
   const heading = getActiveSessionListFilterHeading();
   if (!heading) return;
 
@@ -1607,7 +1736,104 @@ function appendPlannedSessionsFilterHeading(container) {
   container.appendChild(label);
 }
 
+function isSessionFocusActive() {
+  return !!sessionFocusId;
+}
+
+function enterSessionFocus(sessionId) {
+  if (!getPlannedSession(sessionId)) return;
+  sessionFocusId = sessionId;
+  state.expandedSessionIds.add(sessionId);
+  renderEditView();
+}
+
+function exitSessionFocus() {
+  if (!sessionFocusId) return;
+  sessionFocusId = null;
+  renderEditView();
+}
+
+function clearSessionFocusIfRemoved(sessionId) {
+  if (sessionFocusId === sessionId) sessionFocusId = null;
+}
+
+function appendPlannedSessionsFocusBar(container) {
+  if (!sessionFocusId) return;
+  if (!getPlannedSession(sessionFocusId)) return;
+
+  const bar = document.createElement('div');
+  bar.className = 'planned-sessions-focus-bar';
+
+  const exitBtn = document.createElement('button');
+  exitBtn.type = 'button';
+  exitBtn.className = 'planned-sessions-focus-exit-btn';
+  exitBtn.textContent = 'Exit Session Focus';
+  exitBtn.addEventListener('click', () => {
+    exitSessionFocus();
+  });
+
+  bar.appendChild(exitBtn);
+  container.appendChild(bar);
+}
+
+function renderPinnedSessionListFilterRow(filter) {
+  const isActive = state.sessionListFilter === filter.id;
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = `pinned-session-filter${isActive ? ' pinned-session-filter--active' : ''}`;
+  row.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  row.innerHTML = `
+    <span class="pinned-session-filter-icon" aria-hidden="true">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+      </svg>
+    </span>
+    <span class="planned-session-name">${escapeHtml(filter.name)}</span>
+  `;
+  row.addEventListener('click', () => {
+    applySessionListFilter(filter.id);
+  });
+  return row;
+}
+
+function appendPinnedSessionListFiltersSection(container, hasContentBelow) {
+  if (!shouldShowPinnedSessionListFiltersSection()) return false;
+
+  const filters = getPinnedSessionListFilters();
+  if (filters.length === 0) return false;
+
+  filters.forEach((filter) => {
+    container.appendChild(renderPinnedSessionListFilterRow(filter));
+  });
+
+  if (hasContentBelow) {
+    const divider = document.createElement('div');
+    divider.className = 'planned-sessions-group-divider';
+    divider.setAttribute('aria-hidden', 'true');
+    container.appendChild(divider);
+  }
+
+  return true;
+}
+
 function getPlannedSessionsRenderPlan() {
+  if (sessionFocusId) {
+    const session = getPlannedSession(sessionFocusId);
+    if (!session) {
+      sessionFocusId = null;
+    } else {
+      return {
+        emptyMessage: null,
+        sections: [{
+          label: null,
+          sessions: [session],
+          showDividerBefore: false,
+          showDividerAfter: false,
+        }],
+      };
+    }
+  }
+
   const filter = state.sessionListFilter;
 
   if (filter === 'pinned') {
@@ -1656,7 +1882,7 @@ function getPlannedSessionsRenderPlan() {
     sections.push({
       label: 'Pinned',
       sessions: pinned,
-      showDividerBefore: true,
+      showDividerBefore: !shouldShowPinnedSessionListFiltersSection(),
       showDividerAfter: hasBelowPinned,
     });
   }
@@ -1691,6 +1917,7 @@ function toggleSessionPin(sessionId) {
 }
 
 function canReorderPlannedSessions() {
+  if (isSessionFocusActive()) return false;
   if (!isBuiltInSessionListFilter(state.sessionListFilter)) return false;
   return state.sessionListFilter === 'all' || state.sessionListFilter === 'pinned';
 }
@@ -1835,7 +2062,11 @@ function moveTemplateAutocompleteHighlight(delta) {
 function insertTaskIntoSession(sessionId, task) {
   const session = getPlannedSession(sessionId);
   if (!session) return;
-  session.tasks.push({ text: task.text, limitMs: task.limitMs ?? null });
+  session.tasks.push(normalizeBraindumpTask({
+    text: task.text,
+    limitMs: task.limitMs ?? null,
+    createdAt: Date.now(),
+  }));
   state.addFocusSessionId = sessionId;
   state.lastAddSessionId = sessionId;
   state.activeAddSessionIds.add(sessionId);
@@ -1846,7 +2077,11 @@ function insertTaskIntoSession(sessionId, task) {
 function insertTasksIntoSession(sessionId, tasks) {
   const session = getPlannedSession(sessionId);
   if (!session || tasks.length === 0) return;
-  session.tasks.push(...tasks.map(normalizeBraindumpTask));
+  const now = Date.now();
+  session.tasks.push(...tasks.map((task, index) => normalizeBraindumpTask({
+    ...task,
+    createdAt: typeof task?.createdAt === 'number' ? task.createdAt : now + index,
+  })));
   state.addFocusSessionId = sessionId;
   state.lastAddSessionId = sessionId;
   state.activeAddSessionIds.add(sessionId);
@@ -1862,7 +2097,11 @@ function insertTaskIntoQueue(sessionId, task) {
   state.sessionTasks.splice(
     insertAt,
     0,
-    toSessionTaskFromBraindump({ text: task.text, limitMs: task.limitMs ?? null }, sourceMeta),
+    toSessionTaskFromBraindump({
+      text: task.text,
+      limitMs: task.limitMs ?? null,
+      createdAt: Date.now(),
+    }, sourceMeta),
   );
   state.lastAddSessionId = sessionId;
   persist();
@@ -1874,10 +2113,14 @@ function insertTasksIntoQueue(sessionId, tasks) {
   if (!session || tasks.length === 0) return;
   const sourceMeta = getSourceMetaFromSession(session);
   const insertAt = getSessionActiveInsertIndex();
+  const now = Date.now();
   state.sessionTasks.splice(
     insertAt,
     0,
-    ...tasks.map((task) => toSessionTaskFromBraindump(task, sourceMeta)),
+    ...tasks.map((task, index) => toSessionTaskFromBraindump({
+      ...task,
+      createdAt: typeof task?.createdAt === 'number' ? task.createdAt : now + index,
+    }, sourceMeta)),
   );
   state.lastAddSessionId = sessionId;
   persist();
@@ -2490,6 +2733,12 @@ function ensureBraindumpSession() {
 }
 
 function createPlannedSession() {
+  if (state.sessionListFilter !== 'all') {
+    state.sessionListFilter = 'all';
+    closePlannedSessionsFilterMenu();
+    updatePlannedSessionsFilterButtonState();
+  }
+
   const id = crypto.randomUUID();
   state.plannedSessions.push({
     id,
@@ -2672,7 +2921,11 @@ function startQuickStartSession() {
   }
 
   state.quickStartRateSettings = rateSettings;
-  state.sessionTasks = tasks.map((task) => toSessionTaskFromBraindump(task, {
+  const startedAt = Date.now();
+  state.sessionTasks = tasks.map((task, index) => toSessionTaskFromBraindump({
+    ...task,
+    createdAt: startedAt + index,
+  }, {
     sourceSessionId: QUICK_START_SESSION_ID,
     sourceSessionName: name,
   }));
@@ -2720,11 +2973,11 @@ function savePlannedSessionName(sessionId, name) {
   }
 }
 
-function deletePlannedSession(sessionId) {
-  if (sessionId === BRAINDUMP_SESSION_ID) return;
+function removePlannedSessionFromList(sessionId) {
+  if (sessionId === BRAINDUMP_SESSION_ID) return null;
 
   const sessionIndex = state.plannedSessions.findIndex((session) => session.id === sessionId);
-  if (sessionIndex === -1) return;
+  if (sessionIndex === -1) return null;
 
   const session = state.plannedSessions[sessionIndex];
   session.tasks.forEach((task) => state.selectedTasks.delete(task));
@@ -2740,31 +2993,147 @@ function deletePlannedSession(sessionId) {
     state.renamingSessionId = null;
   }
 
-  persist();
-  renderEditView();
-  closeDeleteSessionModal();
+  return session;
 }
 
-function openDeleteSessionModal(sessionId) {
+function archivePlannedSession(sessionId) {
+  const session = removePlannedSessionFromList(sessionId);
+  if (!session) return;
+
+  clearSessionFocusIfRemoved(sessionId);
+
+  state.archivedPlannedSessions.unshift(normalizeArchivedPlannedSession({
+    ...session,
+    archivedAt: Date.now(),
+  }));
+
+  persist();
+  renderEditView();
+  closeArchiveSessionModal();
+  if (!historyModal.classList.contains('hidden')) {
+    refreshHistoryModalPanels();
+  }
+}
+
+function openArchiveSessionModal(sessionId) {
   if (sessionId === BRAINDUMP_SESSION_ID) return;
 
   const session = getPlannedSession(sessionId);
   if (!session) return;
 
-  pendingDeleteSessionId = sessionId;
+  pendingArchiveSessionId = sessionId;
   const taskCount = session.tasks.length;
   const taskLabel = taskCount === 1 ? 'task' : 'tasks';
 
-  deleteSessionMessage.textContent = taskCount === 0
-    ? `Delete ${session.name}? This cannot be undone.`
-    : `Delete ${session.name} and its ${taskCount} ${taskLabel}? This cannot be undone.`;
+  archiveSessionMessage.textContent = taskCount === 0
+    ? `Archive ${session.name}? You can restore it from Session History.`
+    : `Archive ${session.name} and its ${taskCount} ${taskLabel}? You can restore it from Session History.`;
 
-  deleteSessionModal.classList.remove('hidden');
+  archiveSessionModal.classList.remove('hidden');
 }
 
-function closeDeleteSessionModal() {
-  pendingDeleteSessionId = null;
-  deleteSessionModal.classList.add('hidden');
+function closeArchiveSessionModal() {
+  pendingArchiveSessionId = null;
+  archiveSessionModal.classList.add('hidden');
+  if (!deleteSessionForeverModal.classList.contains('hidden')) {
+    closeDeleteSessionForeverModal();
+  }
+}
+
+function deletePlannedSessionForever(sessionId) {
+  if (!removePlannedSessionFromList(sessionId)) return;
+
+  clearSessionFocusIfRemoved(sessionId);
+
+  persist();
+  renderEditView();
+  closeArchiveSessionModal();
+  closeDeleteSessionForeverModal();
+  if (!historyModal.classList.contains('hidden')) {
+    refreshHistoryModalPanels();
+  }
+}
+
+function deleteArchivedPlannedSessionForever(sessionId) {
+  const archiveIndex = state.archivedPlannedSessions.findIndex((session) => session.id === sessionId);
+  if (archiveIndex === -1) return;
+
+  state.archivedPlannedSessions.splice(archiveIndex, 1);
+  expandedArchivedSessionIds.delete(sessionId);
+
+  persist();
+  closeDeleteSessionForeverModal();
+  refreshHistoryModalPanels();
+}
+
+function openDeleteSessionForeverModal(sessionId, source) {
+  let session = null;
+  let message = '';
+
+  if (source === 'planned') {
+    session = getPlannedSession(sessionId);
+    if (!session) return;
+    const taskCount = session.tasks.length;
+    const taskLabel = taskCount === 1 ? 'task' : 'tasks';
+    message = taskCount === 0
+      ? `Delete ${session.name} forever? This cannot be undone.`
+      : `Delete ${session.name} and its ${taskCount} ${taskLabel} forever? This cannot be undone.`;
+  } else {
+    session = getArchivedPlannedSession(sessionId);
+    if (!session) return;
+    const taskCount = session.tasks.length;
+    const taskLabel = taskCount === 1 ? 'task' : 'tasks';
+    message = taskCount === 0
+      ? `Delete ${session.name} forever? This cannot be undone.`
+      : `Delete ${session.name} and its ${taskCount} ${taskLabel} forever? This cannot be undone.`;
+  }
+
+  pendingDeleteForeverSessionId = sessionId;
+  pendingDeleteForeverSource = source;
+  deleteSessionForeverMessage.textContent = message;
+  deleteSessionForeverModal.classList.remove('hidden');
+}
+
+function closeDeleteSessionForeverModal() {
+  pendingDeleteForeverSessionId = null;
+  pendingDeleteForeverSource = null;
+  deleteSessionForeverModal.classList.add('hidden');
+}
+
+function confirmDeleteSessionForever() {
+  if (!pendingDeleteForeverSessionId || !pendingDeleteForeverSource) return;
+
+  if (pendingDeleteForeverSource === 'planned') {
+    deletePlannedSessionForever(pendingDeleteForeverSessionId);
+  } else {
+    deleteArchivedPlannedSessionForever(pendingDeleteForeverSessionId);
+  }
+}
+
+function openDeletePlannedSessionForeverFromArchiveModal() {
+  if (!pendingArchiveSessionId) return;
+  openDeleteSessionForeverModal(pendingArchiveSessionId, 'planned');
+}
+
+function restoreArchivedPlannedSession(sessionId) {
+  const archiveIndex = state.archivedPlannedSessions.findIndex((session) => session.id === sessionId);
+  if (archiveIndex === -1) return;
+
+  if (getPlannedSession(sessionId)) {
+    showAppAlert('A session with this name already exists in your list.', { title: 'Cannot restore' });
+    return;
+  }
+
+  const archived = state.archivedPlannedSessions.splice(archiveIndex, 1)[0];
+  const { archivedAt: _archivedAt, ...sessionData } = archived;
+  state.plannedSessions.push(normalizePlannedSession(sessionData));
+  normalizePlannedSessionOrder();
+  state.expandedSessionIds.add(sessionId);
+  expandedArchivedSessionIds.delete(sessionId);
+
+  persist();
+  if (state.mode === 'edit') renderEditView();
+  refreshHistoryModalPanels();
 }
 
 function updateBillableModalUI(session) {
@@ -2936,9 +3305,9 @@ function renderSessionEarningsBadge(session) {
   return `<span class="session-earnings-badge" title="Earnings from queued tasks">${escapeHtml(formatCurrency(earnings))}</span>`;
 }
 
-function confirmDeletePlannedSession() {
-  if (!pendingDeleteSessionId) return;
-  deletePlannedSession(pendingDeleteSessionId);
+function confirmArchivePlannedSession() {
+  if (!pendingArchiveSessionId) return;
+  archivePlannedSession(pendingArchiveSessionId);
 }
 
 function getTasksForList(listId) {
@@ -3147,6 +3516,7 @@ function captureUndoSnapshot() {
   return {
     sessionTasks: structuredClone(state.sessionTasks),
     plannedSessions: structuredClone(state.plannedSessions),
+    archivedPlannedSessions: structuredClone(state.archivedPlannedSessions),
     sessionHistory: structuredClone(state.sessionHistory),
     listTemplates: structuredClone(state.listTemplates),
     invoiceSettings: structuredClone(state.invoiceSettings),
@@ -3168,6 +3538,7 @@ function resetUndoHistory() {
 function applyUndoSnapshot(snapshot) {
   state.sessionTasks = structuredClone(snapshot.sessionTasks);
   state.plannedSessions = structuredClone(snapshot.plannedSessions);
+  state.archivedPlannedSessions = structuredClone(snapshot.archivedPlannedSessions || []);
   state.sessionHistory = structuredClone(snapshot.sessionHistory);
   state.listTemplates = structuredClone(snapshot.listTemplates);
   state.invoiceSettings = structuredClone(snapshot.invoiceSettings);
@@ -3234,7 +3605,8 @@ function isUndoRedoShortcutBlocked() {
   if (isTaskInputFocused()) return true;
   if (!licenseModal.classList.contains('hidden') && !isAppLicensed()) return true;
   if (!clearSessionModal.classList.contains('hidden')) return true;
-  if (!deleteSessionModal.classList.contains('hidden')) return true;
+  if (!deleteSessionForeverModal.classList.contains('hidden')) return true;
+  if (!archiveSessionModal.classList.contains('hidden')) return true;
   if (!billableModal.classList.contains('hidden')) return true;
   if (!quickStartModal?.classList.contains('hidden')) return true;
   if (!completeTaskModal.classList.contains('hidden')) return true;
@@ -3274,6 +3646,7 @@ function persist(options = {}) {
   window.slashIt.saveData({
     sessionTasks: state.sessionTasks,
     plannedSessions: state.plannedSessions,
+    archivedPlannedSessions: state.archivedPlannedSessions,
     expandedSessionIds: [...state.expandedSessionIds],
     activeSessionName: state.activeSessionName,
     totalSessionMs: state.totalSessionMs,
@@ -3300,6 +3673,7 @@ function persist(options = {}) {
     lastLaunchedAppVersion: state.lastLaunchedAppVersion,
     sessionListFilter: state.sessionListFilter,
     sessionListFilters: state.sessionListFilters,
+    pinnedSessionListFilters: state.pinnedSessionListFilters,
     labsFeatures: state.labsFeatures,
     quickStartRateSettings: state.quickStartRateSettings,
   });
@@ -4167,8 +4541,8 @@ async function duplicateTaskWithAttachments(listId, taskIndex) {
   if (!task) return;
 
   const copy = listId === 'session'
-    ? normalizeSessionTask(task)
-    : normalizeBraindumpTask(task);
+    ? normalizeSessionTask({ ...task, createdAt: Date.now() })
+    : normalizeBraindumpTask({ ...task, createdAt: Date.now() });
 
   if (copy.attachments?.length) {
     const result = await window.slashIt.copyTaskAttachments(copy.attachments);
@@ -4628,7 +5002,7 @@ function renderPlannedSessionsFilterMenuOptions() {
   if (!plannedSessionsFilterMenu) return;
 
   const selected = state.sessionListFilter;
-  const builtInOptions = SESSION_LIST_FILTERS.map((filter) => {
+  const renderBuiltInOption = (filter) => {
     const isSelected = selected === filter;
     return `
       <button
@@ -4642,10 +5016,32 @@ function renderPlannedSessionsFilterMenuOptions() {
         <span class="planned-sessions-filter-option-label">${escapeHtml(SESSION_LIST_FILTER_LABELS[filter])}</span>
       </button>
     `;
-  }).join('');
+  };
 
+  const allSessionsOption = renderBuiltInOption('all');
+  const otherBuiltInOptions = SESSION_LIST_FILTERS
+    .filter((filter) => filter !== 'all')
+    .map((filter) => renderBuiltInOption(filter))
+    .join('');
+
+  const showPinControls = isLabsFeatureEnabled('pinnedFilters');
   const customOptions = state.sessionListFilters.map((filter) => {
     const isSelected = selected === filter.id;
+    const isPinned = isSessionListFilterPinned(filter.id);
+    const pinBtn = showPinControls ? `
+        <button
+          type="button"
+          class="planned-sessions-filter-option-pin${isPinned ? ' planned-sessions-filter-option-pin--pinned' : ''}"
+          data-session-filter-action="pin"
+          data-session-filter-id="${escapeHtml(filter.id)}"
+          aria-label="${isPinned ? 'Unpin filter' : 'Pin filter'}"
+          title="${isPinned ? 'Unpin filter' : 'Pin filter'}"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="${isPinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3.76z"/>
+          </svg>
+        </button>
+      ` : '';
     return `
       <div
         class="planned-sessions-filter-option planned-sessions-filter-option--custom${isSelected ? ' planned-sessions-filter-option--selected' : ''}"
@@ -4655,6 +5051,7 @@ function renderPlannedSessionsFilterMenuOptions() {
       >
         <span class="planned-sessions-filter-option-check" aria-hidden="true">${isSelected ? '✓' : ''}</span>
         <span class="planned-sessions-filter-option-label">${escapeHtml(filter.name)}</span>
+        ${pinBtn}
         <button
           type="button"
           class="planned-sessions-filter-option-edit"
@@ -4666,17 +5063,22 @@ function renderPlannedSessionsFilterMenuOptions() {
   }).join('');
 
   plannedSessionsFilterMenu.innerHTML = `
-    ${builtInOptions}
-    <div class="planned-sessions-filter-divider" role="separator"></div>
-    <button
-      type="button"
-      class="planned-sessions-filter-option planned-sessions-filter-option--create"
-      data-session-filter-action="create"
-    >
-      <span class="planned-sessions-filter-option-check" aria-hidden="true"></span>
-      <span class="planned-sessions-filter-option-label">Create a new filter</span>
-    </button>
-    ${customOptions}
+    <div class="planned-sessions-filter-menu-fixed">
+      ${allSessionsOption}
+    </div>
+    <div class="planned-sessions-filter-menu-scroll">
+      ${otherBuiltInOptions}
+      <div class="planned-sessions-filter-divider" role="separator"></div>
+      <button
+        type="button"
+        class="planned-sessions-filter-option planned-sessions-filter-option--create"
+        data-session-filter-action="create"
+      >
+        <span class="planned-sessions-filter-option-check" aria-hidden="true"></span>
+        <span class="planned-sessions-filter-option-label">Create a new filter</span>
+      </button>
+      ${customOptions}
+    </div>
   `;
 }
 
@@ -4746,6 +5148,15 @@ function handlePlannedSessionsFilterOptionClick(event) {
     return;
   }
 
+  const pinBtn = event.target.closest('[data-session-filter-action="pin"]');
+  if (pinBtn) {
+    event.stopPropagation();
+    const filterId = pinBtn.getAttribute('data-session-filter-id');
+    if (!filterId) return;
+    togglePinnedSessionListFilter(filterId);
+    return;
+  }
+
   const editBtn = event.target.closest('[data-session-filter-action="edit"]');
   if (editBtn) {
     event.stopPropagation();
@@ -4759,15 +5170,12 @@ function handlePlannedSessionsFilterOptionClick(event) {
   const option = event.target.closest('.planned-sessions-filter-option');
   if (!option || option.classList.contains('planned-sessions-filter-option--create')) return;
   if (event.target.closest('.planned-sessions-filter-option-edit')) return;
+  if (event.target.closest('.planned-sessions-filter-option-pin')) return;
 
   event.stopPropagation();
   const filterValue = option.getAttribute('data-session-list-filter');
   if (!filterValue) return;
-  state.sessionListFilter = normalizeSessionListFilter(filterValue);
-  closePlannedSessionsFilterMenu();
-  updatePlannedSessionsFilterButtonState();
-  persist();
-  renderEditView();
+  applySessionListFilter(filterValue);
 }
 
 function renderCreateSessionFilterSessionList() {
@@ -4898,6 +5306,7 @@ function confirmDeleteSessionFilterModal() {
   }
 
   state.sessionListFilters.splice(index, 1);
+  removePinnedSessionListFilter(filterId);
   if (state.sessionListFilter === filterId) {
     state.sessionListFilter = 'all';
   }
@@ -5442,6 +5851,7 @@ function historyTaskToPlannedTask(task) {
     limitMs: task.limitMs,
     notes: task.notes,
     attachments: task.attachments,
+    createdAt: Date.now(),
   });
 }
 
@@ -5761,7 +6171,7 @@ function getSourceMetaFromListId(listId) {
 }
 
 function toSessionTaskFromBraindump(task, sourceMeta = null) {
-  const sessionTask = normalizeSessionTask({
+  const payload = {
     text: task.text,
     completed: false,
     limitMs: task.limitMs ?? null,
@@ -5771,7 +6181,9 @@ function toSessionTaskFromBraindump(task, sourceMeta = null) {
     skipped: false,
     notes: task.notes,
     attachments: task.attachments,
-  });
+  };
+  if (typeof task?.createdAt === 'number') payload.createdAt = task.createdAt;
+  const sessionTask = normalizeSessionTask(payload);
   if (sourceMeta) {
     sessionTask.sourceSessionId = sourceMeta.sourceSessionId;
     sessionTask.sourceSessionName = sourceMeta.sourceSessionName;
@@ -5780,12 +6192,14 @@ function toSessionTaskFromBraindump(task, sourceMeta = null) {
 }
 
 function toBraindumpTaskFromSession(task) {
-  return normalizeBraindumpTask({
+  const payload = {
     text: task.text,
     limitMs: task.limitMs ?? null,
     notes: task.notes,
     attachments: task.attachments,
-  });
+  };
+  if (typeof task?.createdAt === 'number') payload.createdAt = task.createdAt;
+  return normalizeBraindumpTask(payload);
 }
 
 function convertTaskForMove(task, fromList, toList) {
@@ -6328,6 +6742,11 @@ function showSessionContextMenu(e, sessionId) {
 
   const session = getPlannedSession(sessionId);
   const isBraindump = sessionId === BRAINDUMP_SESSION_ID;
+  if (sessionContextFocusBtn) {
+    sessionContextFocusBtn.querySelector('span').textContent = sessionFocusId === sessionId
+      ? 'Exit session focus'
+      : 'Session focus';
+  }
   if (sessionContextPinBtn) {
     sessionContextPinBtn.classList.toggle('hidden', isBraindump);
     if (!isBraindump) {
@@ -6507,9 +6926,30 @@ function renderPlannedSessionName(session, isExpanded) {
   return `<span class="planned-session-name">${escapeHtml(session.name)}</span>`;
 }
 
-function renderPlannedSessionDeleteButton(session) {
+function renderPlannedSessionArchiveButton(session) {
   if (session.id === BRAINDUMP_SESSION_ID) return '';
-  return `<button class="planned-session-delete-btn" type="button" aria-label="Delete session" title="Delete session">×</button>`;
+  const quickDelete = metaKeyHeld;
+  const label = quickDelete ? 'Delete session' : 'Archive session';
+  const title = quickDelete ? 'Delete session forever' : 'Archive session';
+  const icon = quickDelete ? '×' : '✓';
+  const quickDeleteClass = quickDelete ? ' planned-session-archive-btn--quick-delete' : '';
+  return `<button class="planned-session-archive-btn${quickDeleteClass}" type="button" aria-label="${label}" title="${title}">${icon}</button>`;
+}
+
+function updatePlannedSessionArchiveButtons() {
+  document.querySelectorAll('.planned-session-archive-btn').forEach((btn) => {
+    const quickDelete = metaKeyHeld;
+    btn.textContent = quickDelete ? '×' : '✓';
+    btn.classList.toggle('planned-session-archive-btn--quick-delete', quickDelete);
+    btn.setAttribute('aria-label', quickDelete ? 'Delete session' : 'Archive session');
+    btn.setAttribute('title', quickDelete ? 'Delete session forever' : 'Archive session');
+  });
+}
+
+function setMetaKeyHeld(held) {
+  if (metaKeyHeld === held) return;
+  metaKeyHeld = held;
+  updatePlannedSessionArchiveButtons();
 }
 
 function renderSessionAddTask(session) {
@@ -6662,7 +7102,7 @@ function renderPlannedSessionBlock(session) {
       </div>
       <div class="planned-session-header-actions">
         ${renderSessionEarningsBadge(session)}
-        ${renderPlannedSessionDeleteButton(session)}
+        ${renderPlannedSessionArchiveButton(session)}
         <div class="planned-session-billable-group">
           ${renderSessionEstimateBadge(session)}
           ${renderSessionBillableButton(session, isBraindump ? 'billable' : null)}
@@ -6719,19 +7159,23 @@ function renderPlannedSessionBlock(session) {
   });
 
   header.addEventListener('click', (e) => {
-    if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn, .session-billable-btn, .session-send-to-queue-btn, .session-estimate-badge, .session-earnings-badge')) return;
+    if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-archive-btn, .session-billable-btn, .session-send-to-queue-btn, .session-estimate-badge, .session-earnings-badge')) return;
     if (!isExpanded) expandSession(session.id);
   });
   header.addEventListener('contextmenu', (e) => {
-    if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-delete-btn, .session-billable-btn, .session-send-to-queue-btn, .session-estimate-badge, .session-earnings-badge')) return;
+    if (e.target.closest('.planned-session-name-input, .planned-session-toggle, .planned-session-archive-btn, .session-billable-btn, .session-send-to-queue-btn, .session-estimate-badge, .session-earnings-badge')) return;
     showSessionContextMenu(e, session.id);
   });
 
-  const deleteBtn = block.querySelector('.planned-session-delete-btn');
-  if (deleteBtn) {
-    deleteBtn.addEventListener('click', (e) => {
+  const archiveBtn = block.querySelector('.planned-session-archive-btn');
+  if (archiveBtn) {
+    archiveBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      openDeleteSessionModal(session.id);
+      if (e.metaKey || metaKeyHeld) {
+        deletePlannedSessionForever(session.id);
+      } else {
+        openArchiveSessionModal(session.id);
+      }
     });
   }
 
@@ -6798,6 +7242,12 @@ function renderPlannedSessions() {
 
   const plan = getPlannedSessionsRenderPlan();
   appendPlannedSessionsFilterHeading(plannedSessionsList);
+  appendPlannedSessionsFocusBar(plannedSessionsList);
+
+  const hasSessionContent = !!plan.emptyMessage || plan.sections.some(
+    (section) => (section.sessions || []).length > 0,
+  );
+  appendPinnedSessionListFiltersSection(plannedSessionsList, hasSessionContent);
 
   if (plan.emptyMessage) {
     plannedSessionsList.insertAdjacentHTML(
@@ -7544,15 +7994,19 @@ function renderHistoryReportPanel() {
 }
 
 function setHistoryModalTab(tab) {
-  historyModalTab = tab === 'report' ? 'report' : 'sessions';
+  historyModalTab = tab === 'report' ? 'report' : tab === 'archive' ? 'archive' : 'sessions';
   closeHistoryReportSessionMenu();
 
   historyTabSessionsBtn?.classList.toggle('history-modal-tab--active', historyModalTab === 'sessions');
   historyTabReportBtn?.classList.toggle('history-modal-tab--active', historyModalTab === 'report');
+  historyTabArchiveBtn?.classList.toggle('history-modal-tab--active', historyModalTab === 'archive');
   historyTabSessionsBtn?.setAttribute('aria-selected', historyModalTab === 'sessions' ? 'true' : 'false');
   historyTabReportBtn?.setAttribute('aria-selected', historyModalTab === 'report' ? 'true' : 'false');
+  historyTabArchiveBtn?.setAttribute('aria-selected', historyModalTab === 'archive' ? 'true' : 'false');
   historySessionsPanel?.classList.toggle('hidden', historyModalTab !== 'sessions');
   historyReportPanel?.classList.toggle('hidden', historyModalTab !== 'report');
+  historyArchivePanel?.classList.toggle('hidden', historyModalTab !== 'archive');
+  historyDateToolbar?.classList.toggle('hidden', historyModalTab === 'archive');
   historyExportPdfBtn?.classList.toggle('hidden', historyModalTab !== 'report');
   historyExportInvoiceBtn?.classList.toggle('hidden', historyModalTab !== 'report');
 
@@ -7561,7 +8015,11 @@ function setHistoryModalTab(tab) {
 
 function refreshHistoryModalPanels() {
   populateHistoryReportSessionFilter();
-  renderHistoryModal();
+  if (historyModalTab === 'archive') {
+    renderArchivePanel();
+  } else {
+    renderHistoryModal();
+  }
   if (historyModalTab === 'report') {
     renderHistoryReportPanel();
   }
@@ -8095,6 +8553,87 @@ function renderHistoryEntry(entry) {
   `;
 }
 
+function renderArchivedSessionEntry(session) {
+  const isExpanded = expandedArchivedSessionIds.has(session.id);
+  const taskCount = session.tasks.length;
+  const taskLabel = `${taskCount} task${taskCount === 1 ? '' : 's'}`;
+
+  return `
+    <article class="history-entry${isExpanded ? ' history-entry--expanded' : ''}" data-archived-id="${escapeHtml(session.id)}">
+      <button type="button" class="history-entry-header" aria-expanded="${isExpanded}">
+        <div class="history-entry-main">
+          <div class="history-entry-top">
+            <span class="history-entry-name">${escapeHtml(session.name)}</span>
+            <span class="history-status-badge history-status-badge--completed">Archived</span>
+          </div>
+          <div class="history-entry-meta">
+            ${escapeHtml(formatRelativeBackupTime(session.archivedAt))} · ${escapeHtml(taskLabel)}
+          </div>
+        </div>
+        <span class="history-entry-chevron" aria-hidden="true">›</span>
+      </button>
+      <div class="history-entry-detail">
+        ${taskCount > 0 ? `
+          <ul class="history-task-list">
+            ${session.tasks.map((task) => `
+              <li class="history-task-item">
+                <span class="history-task-label">${escapeHtml(task.text)}</span>
+              </li>
+            `).join('')}
+          </ul>
+        ` : ''}
+        <div class="history-entry-actions">
+          <button type="button" class="history-restore-btn" data-restore-archived-id="${escapeHtml(session.id)}" title="Restore this session to your list">Restore to list</button>
+          <button type="button" class="history-delete-btn" data-delete-archived-id="${escapeHtml(session.id)}" title="Permanently delete this session">Delete forever</button>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderArchivePanel() {
+  if (!historyArchiveList) return;
+
+  const sessions = [...state.archivedPlannedSessions].sort((a, b) => b.archivedAt - a.archivedAt);
+  if (sessions.length === 0) {
+    historyArchiveList.innerHTML = '<p class="history-empty">No archived sessions. Archive a session from your list when you\'re done with it.</p>';
+    return;
+  }
+
+  historyArchiveList.innerHTML = sessions.map(renderArchivedSessionEntry).join('');
+}
+
+function handleArchiveListClick(event) {
+  const restoreBtn = event.target.closest('[data-restore-archived-id]');
+  if (restoreBtn) {
+    event.stopPropagation();
+    restoreArchivedPlannedSession(restoreBtn.dataset.restoreArchivedId);
+    return;
+  }
+
+  const deleteBtn = event.target.closest('[data-delete-archived-id]');
+  if (deleteBtn) {
+    event.stopPropagation();
+    openDeleteSessionForeverModal(deleteBtn.dataset.deleteArchivedId, 'archived');
+    return;
+  }
+
+  const header = event.target.closest('.history-entry-header');
+  if (!header) return;
+
+  const entryEl = header.closest('.history-entry');
+  const sessionId = entryEl?.dataset.archivedId;
+  if (!sessionId) return;
+
+  if (expandedArchivedSessionIds.has(sessionId)) {
+    expandedArchivedSessionIds.delete(sessionId);
+  } else {
+    expandedArchivedSessionIds.clear();
+    expandedArchivedSessionIds.add(sessionId);
+  }
+  renderArchivePanel();
+}
+
 function renderHistoryModal() {
   if (!historyList) return;
 
@@ -8168,11 +8707,878 @@ function openHistoryModal(highlightRunId = null) {
 
 function closeHistoryModal() {
   closeHistoryReportSessionMenu();
+  if (!deleteSessionForeverModal.classList.contains('hidden')) {
+    closeDeleteSessionForeverModal();
+  }
   if (!deleteHistoryModal.classList.contains('hidden')) {
     closeDeleteHistoryModal();
   }
   historyModal.classList.add('hidden');
   historyHighlightRunId = null;
+}
+
+const ANALYTICS_SESSION_COLORS = [
+  '#ff5500', '#30d158', '#64d2ff', '#bf5af2', '#ffd60a',
+  '#ff9f0a', '#5e5ce6', '#ff375f', '#ac8e68', '#40c8e0',
+];
+
+const ANALYTICS_PRESET_LABELS = {
+  workWeek: 'last work week',
+  last7: 'last 7 days',
+  last14: 'last 14 days',
+  lastMonth: 'last month',
+  last3Months: 'last 3 months',
+  custom: 'previous period',
+};
+
+function updateAnalyticsMenuVisibility() {
+  if (!settingsAnalyticsBtn) return;
+  const enabled = isLabsFeatureEnabled('analytics');
+  settingsAnalyticsBtn.classList.toggle('hidden', !enabled);
+  if (!enabled && analyticsModal && !analyticsModal.classList.contains('hidden')) {
+    closeAnalyticsModal();
+  }
+}
+
+function formatAnalyticsDuration(ms) {
+  if (ms == null || !Number.isFinite(ms) || ms <= 0) return '0h 0m';
+  const totalMinutes = Math.round(ms / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${minutes}m`;
+}
+
+function hashStringToIndex(value, modulo) {
+  const str = String(value || '');
+  let hash = 0;
+  for (let i = 0; i < str.length; i += 1) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash) % modulo;
+}
+
+function getSessionAnalyticsColor(sessionId) {
+  return ANALYTICS_SESSION_COLORS[
+    hashStringToIndex(sessionId || 'session', ANALYTICS_SESSION_COLORS.length)
+  ];
+}
+
+function getAnalyticsRangeEndOfToday() {
+  const now = new Date();
+  return new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    23,
+    59,
+    59,
+    999,
+  ).getTime();
+}
+
+function getAnalyticsRange(preset, customStartStr, customEndStr) {
+  const endMs = getAnalyticsRangeEndOfToday();
+  const now = new Date();
+
+  if (preset === 'custom') {
+    const startMs = parseDateInputToStartMs(customStartStr);
+    const customEnd = parseDateInputToEndMs(customEndStr);
+    if (startMs == null || customEnd == null || startMs > customEnd) return null;
+    return { startMs, endMs: customEnd, preset: 'custom' };
+  }
+
+  let startMs;
+  if (preset === 'workWeek') {
+    const start = new Date(now);
+    start.setDate(now.getDate() - now.getDay());
+    start.setHours(0, 0, 0, 0);
+    startMs = start.getTime();
+  } else if (preset === 'last7') {
+    const start = new Date(now);
+    start.setDate(now.getDate() - 6);
+    start.setHours(0, 0, 0, 0);
+    startMs = start.getTime();
+  } else if (preset === 'last14') {
+    const start = new Date(now);
+    start.setDate(now.getDate() - 13);
+    start.setHours(0, 0, 0, 0);
+    startMs = start.getTime();
+  } else if (preset === 'lastMonth') {
+    startMs = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate(), 0, 0, 0, 0).getTime();
+  } else if (preset === 'last3Months') {
+    startMs = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate(), 0, 0, 0, 0).getTime();
+  } else {
+    const start = new Date(now);
+    start.setDate(now.getDate() - 13);
+    start.setHours(0, 0, 0, 0);
+    startMs = start.getTime();
+  }
+
+  return { startMs, endMs, preset };
+}
+
+function getPriorAnalyticsRange(range) {
+  if (!range) return null;
+  const duration = range.endMs - range.startMs;
+  return {
+    startMs: range.startMs - duration - 1,
+    endMs: range.startMs - 1,
+    preset: 'prior',
+  };
+}
+
+function getAnalyticsSessionDisplayName(sessionId, fallbackName) {
+  if (sessionId === BRAINDUMP_SESSION_ID) return 'Braindump';
+  const planned = getPlannedSession(sessionId);
+  if (planned?.name) return planned.name;
+  const archived = getArchivedPlannedSession(sessionId);
+  if (archived?.name) return archived.name;
+  return (fallbackName || 'Session').trim() || 'Session';
+}
+
+function flattenCompletedHistoryTasks(history, range) {
+  if (!range) return [];
+  const entries = filterSessionHistoryByRange(history, range.startMs, range.endMs);
+  const tasks = [];
+  entries.forEach((entry) => {
+    (entry.tasks || []).forEach((task) => {
+      if (task.status !== 'completed') return;
+      const sessionId = task.sourceSessionId || entry.sourceSessionId || BRAINDUMP_SESSION_ID;
+      const sessionName = getAnalyticsSessionDisplayName(
+        sessionId,
+        task.sourceSessionName || entry.name,
+      );
+      tasks.push({
+        text: task.text || 'Untitled task',
+        sessionId,
+        sessionName,
+        limitMs: task.limitMs ?? null,
+        durationMs: task.durationMs ?? 0,
+        endedAt: entry.endedAt,
+      });
+    });
+  });
+  return tasks;
+}
+
+function filterAnalyticsTasksBySession(tasks, sessionId) {
+  if (!sessionId) return tasks;
+  return tasks.filter((task) => task.sessionId === sessionId);
+}
+
+function eachDayInRange(range, callback) {
+  if (!range) return;
+  const cursor = new Date(range.startMs);
+  cursor.setHours(0, 0, 0, 0);
+  const end = new Date(range.endMs);
+  end.setHours(0, 0, 0, 0);
+  while (cursor.getTime() <= end.getTime()) {
+    const dayStart = cursor.getTime();
+    const dayEnd = new Date(
+      cursor.getFullYear(),
+      cursor.getMonth(),
+      cursor.getDate(),
+      23,
+      59,
+      59,
+      999,
+    ).getTime();
+    callback(getLocalDateKey(dayStart), dayStart, dayEnd);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+}
+
+function computeBraindumpAverageAge() {
+  ensureBraindumpSession();
+  const braindump = getBraindumpSession();
+  const now = Date.now();
+  const ages = (braindump?.tasks || [])
+    .map((task) => (typeof task.createdAt === 'number' ? now - task.createdAt : null))
+    .filter((age) => age != null && age >= 0);
+  if (ages.length === 0) {
+    return { averageMs: null, count: 0, badge: null };
+  }
+  const averageMs = ages.reduce((sum, age) => sum + age, 0) / ages.length;
+  const days = averageMs / 86400000;
+  let badge = 'Average';
+  let badgeClass = '';
+  if (days >= 45) {
+    badge = 'High';
+    badgeClass = 'analytics-status-badge--high';
+  } else if (days < 14) {
+    badge = 'Low';
+    badgeClass = 'analytics-status-badge--low';
+  }
+  return { averageMs, count: ages.length, badge, badgeClass };
+}
+
+function formatAnalyticsAge(ms) {
+  if (ms == null) return '—';
+  const hours = ms / 3600000;
+  if (hours < 24) {
+    const rounded = Math.max(1, Math.round(hours));
+    return `${rounded} hour${rounded === 1 ? '' : 's'}`;
+  }
+  const days = Math.round(ms / 86400000);
+  return `${days} day${days === 1 ? '' : 's'}`;
+}
+
+function computeEstimateInsight(tasks) {
+  const comparable = tasks.filter(
+    (task) => task.limitMs != null && task.limitMs > 0 && task.durationMs != null,
+  );
+  if (comparable.length === 0) {
+    return {
+      copy: 'Not enough estimated tasks in this range to compare actual vs estimated time.',
+    };
+  }
+  const ratios = comparable.map((task) => (task.durationMs - task.limitMs) / task.limitMs);
+  const avg = ratios.reduce((sum, value) => sum + value, 0) / ratios.length;
+  const pct = Math.abs(avg * 100);
+  const rounded = Math.round(pct * 10) / 10;
+  if (rounded < 0.5) {
+    return { copy: 'On average, you took the same amount of time to complete a task as expected.' };
+  }
+  if (avg < 0) {
+    return {
+      copy: `On average, you took ${rounded}% less time than expected to complete a task.`,
+    };
+  }
+  return {
+    copy: `On average, you took ${rounded}% more time than expected to complete a task.`,
+  };
+}
+
+function computeAnalytics(range, sessionFilterId) {
+  const currentTasks = filterAnalyticsTasksBySession(
+    flattenCompletedHistoryTasks(state.sessionHistory, range),
+    sessionFilterId,
+  );
+  const priorRange = getPriorAnalyticsRange(range);
+  const priorTasks = filterAnalyticsTasksBySession(
+    flattenCompletedHistoryTasks(state.sessionHistory, priorRange),
+    sessionFilterId,
+  );
+
+  const completedCount = currentTasks.length;
+  const priorCount = priorTasks.length;
+  const totalActualMs = currentTasks.reduce((sum, task) => sum + (task.durationMs || 0), 0);
+  let trendPct = 0;
+  if (priorCount > 0) {
+    trendPct = ((completedCount - priorCount) / priorCount) * 100;
+  } else if (completedCount > 0) {
+    trendPct = 100;
+  }
+
+  const sessionMap = new Map();
+  currentTasks.forEach((task) => {
+    if (!sessionMap.has(task.sessionId)) {
+      sessionMap.set(task.sessionId, {
+        sessionId: task.sessionId,
+        sessionName: task.sessionName,
+        count: 0,
+        estimatedMs: 0,
+        actualMs: 0,
+      });
+    }
+    const row = sessionMap.get(task.sessionId);
+    row.count += 1;
+    row.estimatedMs += task.limitMs || 0;
+    row.actualMs += task.durationMs || 0;
+  });
+
+  const bySession = [...sessionMap.values()].sort((a, b) => b.count - a.count || a.sessionName.localeCompare(b.sessionName));
+
+  const days = [];
+  eachDayInRange(range, (dateKey, dayStart, dayEnd) => {
+    const dayTasks = currentTasks.filter(
+      (task) => task.endedAt >= dayStart && task.endedAt <= dayEnd,
+    );
+    const bySessionDay = new Map();
+    let estimatedMs = 0;
+    let actualMs = 0;
+    dayTasks.forEach((task) => {
+      estimatedMs += task.limitMs || 0;
+      actualMs += task.durationMs || 0;
+      if (!bySessionDay.has(task.sessionId)) {
+        bySessionDay.set(task.sessionId, {
+          sessionId: task.sessionId,
+          sessionName: task.sessionName,
+          count: 0,
+          actualMs: 0,
+        });
+      }
+      const bucket = bySessionDay.get(task.sessionId);
+      bucket.count += 1;
+      bucket.actualMs += task.durationMs || 0;
+    });
+    days.push({
+      dateKey,
+      dayStart,
+      label: formatReportDay(dayStart),
+      count: dayTasks.length,
+      estimatedMs,
+      actualMs,
+      sessions: [...bySessionDay.values()],
+    });
+  });
+
+  return {
+    range,
+    tasks: currentTasks,
+    completedCount,
+    priorCount,
+    totalActualMs,
+    trendPct,
+    estimateInsight: computeEstimateInsight(currentTasks),
+    braindumpAge: computeBraindumpAverageAge(),
+    bySession,
+    days,
+  };
+}
+
+function getCurrentAnalyticsRange() {
+  return getAnalyticsRange(
+    analyticsPreset,
+    analyticsRangeStartInput?.value,
+    analyticsRangeEndInput?.value,
+  );
+}
+
+function getAnalyticsSessionOptions() {
+  const ids = new Set();
+  const options = [];
+  const addOption = (id, name) => {
+    if (!id || ids.has(id)) return;
+    ids.add(id);
+    options.push({ id, label: getAnalyticsSessionDisplayName(id, name) });
+  };
+
+  state.plannedSessions.forEach((session) => addOption(session.id, session.name));
+  (state.archivedPlannedSessions || []).forEach((session) => addOption(session.id, session.name));
+  state.sessionHistory.forEach((entry) => {
+    addOption(entry.sourceSessionId || BRAINDUMP_SESSION_ID, entry.name);
+    (entry.tasks || []).forEach((task) => {
+      addOption(task.sourceSessionId || entry.sourceSessionId || BRAINDUMP_SESSION_ID, task.sourceSessionName || entry.name);
+    });
+  });
+
+  options.sort((a, b) => a.label.localeCompare(b.label));
+  return options;
+}
+
+function closeAnalyticsSessionMenu() {
+  analyticsSessionMenuOpen = false;
+  analyticsSessionMenu?.classList.add('hidden');
+  analyticsSessionTrigger?.setAttribute('aria-expanded', 'false');
+  document.removeEventListener('click', handleAnalyticsSessionOutsideClick, true);
+}
+
+function handleAnalyticsSessionOutsideClick(event) {
+  if (event.target.closest('#analytics-session-select-wrap')) return;
+  closeAnalyticsSessionMenu();
+}
+
+function renderAnalyticsSessionMenuOptions() {
+  if (!analyticsSessionMenu) return;
+  const options = getAnalyticsSessionOptions();
+  const selected = analyticsSessionFilter;
+  const items = [
+    { id: '', label: 'All sessions' },
+    ...options,
+  ];
+  analyticsSessionMenu.innerHTML = items.map((option) => {
+    const isSelected = option.id === selected;
+    return `
+      <button
+        type="button"
+        class="history-report-session-option${isSelected ? ' history-report-session-option--selected' : ''}"
+        role="option"
+        aria-selected="${isSelected ? 'true' : 'false'}"
+        data-analytics-session-filter="${escapeHtml(option.id)}"
+      >
+        <span class="history-report-session-option-check" aria-hidden="true">${isSelected ? '✓' : ''}</span>
+        <span class="history-report-session-option-label">${escapeHtml(option.label)}</span>
+      </button>
+    `;
+  }).join('');
+}
+
+function syncAnalyticsSessionFilterLabel() {
+  if (!analyticsSessionValue) return;
+  if (!analyticsSessionFilter) {
+    analyticsSessionValue.textContent = 'Filter';
+    return;
+  }
+  const option = getAnalyticsSessionOptions().find((item) => item.id === analyticsSessionFilter);
+  analyticsSessionValue.textContent = option?.label || 'Filter';
+}
+
+function openAnalyticsSessionMenu() {
+  if (analyticsSessionMenuOpen) {
+    closeAnalyticsSessionMenu();
+    return;
+  }
+  renderAnalyticsSessionMenuOptions();
+  analyticsSessionMenuOpen = true;
+  analyticsSessionMenu?.classList.remove('hidden');
+  analyticsSessionTrigger?.setAttribute('aria-expanded', 'true');
+  document.addEventListener('click', handleAnalyticsSessionOutsideClick, true);
+}
+
+function syncAnalyticsRangeButtons() {
+  document.querySelectorAll('[data-analytics-preset]').forEach((btn) => {
+    const preset = btn.getAttribute('data-analytics-preset');
+    btn.classList.toggle('analytics-range-btn--active', preset === analyticsPreset);
+  });
+  analyticsCustomDates?.classList.toggle('hidden', analyticsPreset !== 'custom');
+}
+
+function initializeAnalyticsRange(preset = 'last14') {
+  analyticsPreset = preset;
+  const range = getAnalyticsRange(preset);
+  if (range && analyticsRangeStartInput && analyticsRangeEndInput) {
+    analyticsRangeStartInput.value = formatDateInputValue(range.startMs);
+    analyticsRangeEndInput.value = formatDateInputValue(range.endMs);
+  }
+  syncAnalyticsRangeButtons();
+}
+
+function renderAnalyticsSummaryCards(data) {
+  if (!analyticsCardCompleted || !analyticsCardEstimate || !analyticsCardBraindump) return;
+
+  const trend = Math.round(data.trendPct);
+  const trendAbs = Math.abs(trend);
+  let trendClass = 'analytics-trend-badge--neutral';
+  let trendArrow = '→';
+  if (trend > 0) {
+    trendClass = '';
+    trendArrow = '↑';
+  } else if (trend < 0) {
+    trendClass = 'analytics-trend-badge--down';
+    trendArrow = '↓';
+  }
+  const periodLabel = ANALYTICS_PRESET_LABELS[data.range?.preset] || 'previous period';
+
+  analyticsCardCompleted.innerHTML = `
+    <p class="analytics-card-label">Tasks completed</p>
+    <p class="analytics-card-value">${data.completedCount}</p>
+    <p class="analytics-card-subvalue">${formatAnalyticsDuration(data.totalActualMs)}</p>
+    <span class="analytics-trend-badge ${trendClass}">${trendArrow} ${trendAbs}% vs ${escapeHtml(periodLabel)}</span>
+  `;
+
+  analyticsCardEstimate.innerHTML = `
+    <p class="analytics-card-label">Actual vs estimated</p>
+    <p class="analytics-card-copy">${escapeHtml(data.estimateInsight.copy)}</p>
+  `;
+
+  const age = data.braindumpAge;
+  if (age.averageMs == null) {
+    analyticsCardBraindump.innerHTML = `
+      <p class="analytics-card-label">Braindump average task age</p>
+      <p class="analytics-card-value">—</p>
+      <p class="analytics-card-subvalue">Add tasks to start tracking age</p>
+    `;
+  } else {
+    analyticsCardBraindump.innerHTML = `
+      <p class="analytics-card-label">Braindump average task age</p>
+      <p class="analytics-card-value">${escapeHtml(formatAnalyticsAge(age.averageMs))}</p>
+      <span class="analytics-status-badge ${age.badgeClass || ''}">${escapeHtml(age.badge)}</span>
+    `;
+  }
+}
+
+function renderAnalyticsStackedBarChart(container, days, metric) {
+  if (!container) return;
+  const hasData = days.some((day) => (metric === 'time' ? day.actualMs > 0 : day.count > 0));
+  if (!hasData) {
+    container.innerHTML = '<div class="analytics-chart-empty">No completed tasks in this range</div>';
+    return;
+  }
+
+  const width = 520;
+  const height = 200;
+  const pad = { top: 16, right: 12, bottom: 36, left: 36 };
+  const chartW = width - pad.left - pad.right;
+  const chartH = height - pad.top - pad.bottom;
+  const maxValue = Math.max(
+    ...days.map((day) => (metric === 'time' ? day.actualMs / 3600000 : day.count)),
+    1,
+  );
+  const barGap = 4;
+  const barWidth = Math.max(4, (chartW / days.length) - barGap);
+
+  const sessionIds = [];
+  days.forEach((day) => {
+    day.sessions.forEach((session) => {
+      if (!sessionIds.includes(session.sessionId)) sessionIds.push(session.sessionId);
+    });
+  });
+
+  const yTicks = 4;
+  let bars = '';
+  let labels = '';
+  let grid = '';
+
+  for (let i = 0; i <= yTicks; i += 1) {
+    const value = (maxValue / yTicks) * i;
+    const y = pad.top + chartH - ((value / maxValue) * chartH);
+    grid += `<line x1="${pad.left}" y1="${y}" x2="${width - pad.right}" y2="${y}" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>`;
+    const label = metric === 'time' ? `${value.toFixed(value >= 10 ? 0 : 1)}` : `${Math.round(value)}`;
+    grid += `<text x="${pad.left - 6}" y="${y + 3}" text-anchor="end" fill="#9a9a9a" font-size="10" font-family="N27, monospace">${label}</text>`;
+  }
+
+  days.forEach((day, index) => {
+    const x = pad.left + (index * (barWidth + barGap)) + (barGap / 2);
+    let yCursor = pad.top + chartH;
+    const segments = sessionIds.map((sessionId) => {
+      const bucket = day.sessions.find((item) => item.sessionId === sessionId);
+      const value = metric === 'time'
+        ? (bucket?.actualMs || 0) / 3600000
+        : (bucket?.count || 0);
+      return { sessionId, value, name: bucket?.sessionName || getAnalyticsSessionDisplayName(sessionId) };
+    }).filter((segment) => segment.value > 0);
+
+    segments.forEach((segment) => {
+      const segH = (segment.value / maxValue) * chartH;
+      yCursor -= segH;
+      const tipValue = metric === 'time'
+        ? formatAnalyticsDuration(segment.value * 3600000)
+        : String(segment.value);
+      const tip = `${segment.name} · ${day.label}: ${tipValue}`;
+      const color = getSessionAnalyticsColor(segment.sessionId);
+      bars += `<rect class="analytics-chart-seg" x="${x}" y="${yCursor}" width="${barWidth}" height="${Math.max(segH, 1)}" fill="${color}" data-tip="${escapeHtml(tip)}" data-tip-color="${color}"></rect>`;
+    });
+
+    if (days.length <= 16 || index % Math.ceil(days.length / 10) === 0 || index === days.length - 1) {
+      labels += `<text x="${x + barWidth / 2}" y="${height - 12}" text-anchor="middle" fill="#9a9a9a" font-size="10" font-family="N27, monospace">${escapeHtml(day.label)}</text>`;
+    }
+  });
+
+  const axisLabel = metric === 'time' ? 'Hours' : '# of tasks';
+  container.innerHTML = `
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Daily ${axisLabel}">
+      ${grid}
+      ${bars}
+      ${labels}
+      <text x="12" y="14" fill="#9a9a9a" font-size="10" font-family="N27, monospace">${axisLabel}</text>
+    </svg>
+  `;
+}
+
+function renderAnalyticsEstActualChart(container, days) {
+  if (!container) return;
+  const hasData = days.some((day) => day.estimatedMs > 0 || day.actualMs > 0);
+  if (!hasData) {
+    container.innerHTML = '<div class="analytics-chart-empty">No time data in this range</div>';
+    return;
+  }
+
+  const width = 520;
+  const height = 200;
+  const pad = { top: 16, right: 12, bottom: 36, left: 36 };
+  const chartW = width - pad.left - pad.right;
+  const chartH = height - pad.top - pad.bottom;
+  const maxValue = Math.max(
+    ...days.map((day) => Math.max(day.estimatedMs, day.actualMs) / 3600000),
+    1,
+  );
+  const groupGap = 6;
+  const groupWidth = Math.max(8, (chartW / days.length) - groupGap);
+  const barWidth = Math.max(3, (groupWidth - 2) / 2);
+
+  let bars = '';
+  let labels = '';
+  let grid = '';
+  const yTicks = 4;
+  for (let i = 0; i <= yTicks; i += 1) {
+    const value = (maxValue / yTicks) * i;
+    const y = pad.top + chartH - ((value / maxValue) * chartH);
+    grid += `<line x1="${pad.left}" y1="${y}" x2="${width - pad.right}" y2="${y}" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>`;
+    grid += `<text x="${pad.left - 6}" y="${y + 3}" text-anchor="end" fill="#9a9a9a" font-size="10" font-family="N27, monospace">${value.toFixed(value >= 10 ? 0 : 1)}</text>`;
+  }
+
+  days.forEach((day, index) => {
+    const groupX = pad.left + (index * (groupWidth + groupGap)) + (groupGap / 2);
+    const estH = (day.estimatedMs / 3600000 / maxValue) * chartH;
+    const actH = (day.actualMs / 3600000 / maxValue) * chartH;
+    const estY = pad.top + chartH - estH;
+    const actY = pad.top + chartH - actH;
+    const estTip = `Estimated · ${day.label}: ${formatAnalyticsDuration(day.estimatedMs)}`;
+    const actTip = `Actual · ${day.label}: ${formatAnalyticsDuration(day.actualMs)}`;
+    bars += `<rect class="analytics-chart-seg" x="${groupX}" y="${estY}" width="${barWidth}" height="${Math.max(estH, day.estimatedMs > 0 ? 1 : 0)}" fill="rgba(255,255,255,0.22)" data-tip="${escapeHtml(estTip)}" data-tip-color="rgba(255,255,255,0.45)"></rect>`;
+    bars += `<rect class="analytics-chart-seg" x="${groupX + barWidth + 2}" y="${actY}" width="${barWidth}" height="${Math.max(actH, day.actualMs > 0 ? 1 : 0)}" fill="rgba(255,255,255,0.55)" data-tip="${escapeHtml(actTip)}" data-tip-color="rgba(255,255,255,0.75)"></rect>`;
+    if (days.length <= 16 || index % Math.ceil(days.length / 10) === 0 || index === days.length - 1) {
+      labels += `<text x="${groupX + groupWidth / 2}" y="${height - 12}" text-anchor="middle" fill="#9a9a9a" font-size="10" font-family="N27, monospace">${escapeHtml(day.label)}</text>`;
+    }
+  });
+
+  container.innerHTML = `
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Estimated vs actual time">
+      ${grid}
+      ${bars}
+      ${labels}
+      <text x="12" y="14" fill="#9a9a9a" font-size="10" font-family="N27, monospace">Time (in hours)</text>
+    </svg>
+  `;
+}
+
+function renderAnalyticsSessionTable(data) {
+  if (!analyticsSessionTableBody || !analyticsSessionTableFoot) return;
+  const totalCount = data.bySession.reduce((sum, row) => sum + row.count, 0);
+  const totalEstimated = data.bySession.reduce((sum, row) => sum + row.estimatedMs, 0);
+  const totalActual = data.bySession.reduce((sum, row) => sum + row.actualMs, 0);
+  const pctLabel = analyticsSessionMetric === 'time' ? '% (by actual time)' : '% (by # of tasks)';
+  if (analyticsSessionPctHeader) analyticsSessionPctHeader.textContent = pctLabel;
+
+  if (data.bySession.length === 0) {
+    analyticsSessionTableBody.innerHTML = `
+      <tr><td colspan="5" class="analytics-chart-empty" style="min-height:auto;padding:20px;">No completed tasks in this range</td></tr>
+    `;
+    analyticsSessionTableFoot.innerHTML = '';
+    return;
+  }
+
+  analyticsSessionTableBody.innerHTML = data.bySession.map((row) => {
+    const basis = analyticsSessionMetric === 'time' ? totalActual : totalCount;
+    const value = analyticsSessionMetric === 'time' ? row.actualMs : row.count;
+    const pct = basis > 0 ? (value / basis) * 100 : 0;
+    const pctRounded = Math.round(pct);
+    return `
+      <tr>
+        <td>
+          <span class="analytics-session-cell">
+            <span class="analytics-session-dot" style="background:${getSessionAnalyticsColor(row.sessionId)}"></span>
+            ${escapeHtml(row.sessionName)}
+          </span>
+        </td>
+        <td>
+          <div class="analytics-pct-cell">
+            <span>${pctRounded}%</span>
+            <div class="analytics-pct-bar" aria-hidden="true">
+              <div class="analytics-pct-bar-fill" style="width:${Math.min(100, pct)}%;background:${getSessionAnalyticsColor(row.sessionId)}"></div>
+            </div>
+          </div>
+        </td>
+        <td>${row.count}</td>
+        <td>${formatAnalyticsDuration(row.estimatedMs)}</td>
+        <td>${formatAnalyticsDuration(row.actualMs)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  analyticsSessionTableFoot.innerHTML = `
+    <tr>
+      <td>Total</td>
+      <td>100%</td>
+      <td>${totalCount}</td>
+      <td>${formatAnalyticsDuration(totalEstimated)}</td>
+      <td>${formatAnalyticsDuration(totalActual)}</td>
+    </tr>
+  `;
+}
+
+function renderAnalyticsCompletedTable(data) {
+  if (!analyticsCompletedTableBody || !analyticsCompletedTableFoot) return;
+  const tasks = [...data.tasks].sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0));
+
+  if (tasks.length === 0) {
+    analyticsCompletedTableBody.innerHTML = `
+      <tr><td colspan="5" class="analytics-chart-empty" style="min-height:auto;padding:20px;">No completed tasks in this range</td></tr>
+    `;
+    analyticsCompletedTableFoot.innerHTML = '';
+    return;
+  }
+
+  let rowsHtml = '';
+  if (analyticsCompletedGrouping === 'session') {
+    const groups = new Map();
+    tasks.forEach((task) => {
+      if (!groups.has(task.sessionId)) {
+        groups.set(task.sessionId, {
+          sessionId: task.sessionId,
+          sessionName: task.sessionName,
+          tasks: [],
+        });
+      }
+      groups.get(task.sessionId).tasks.push(task);
+    });
+    [...groups.values()]
+      .sort((a, b) => a.sessionName.localeCompare(b.sessionName))
+      .forEach((group) => {
+        rowsHtml += `
+          <tr class="analytics-group-row">
+            <td colspan="5">
+              <span class="analytics-session-cell">
+                <span class="analytics-session-dot" style="background:${getSessionAnalyticsColor(group.sessionId)}"></span>
+                ${escapeHtml(group.sessionName)}
+              </span>
+            </td>
+          </tr>
+        `;
+        group.tasks.forEach((task) => {
+          rowsHtml += `
+            <tr>
+              <td>${escapeHtml(formatReportDate(task.endedAt))}</td>
+              <td><div class="analytics-task-text" title="${escapeHtml(task.text)}">${escapeHtml(task.text)}</div></td>
+              <td>${task.limitMs != null ? formatAnalyticsDuration(task.limitMs) : '—'}</td>
+              <td>${formatAnalyticsDuration(task.durationMs)}</td>
+              <td>${escapeHtml(task.sessionName)}</td>
+            </tr>
+          `;
+        });
+      });
+  } else {
+    rowsHtml = tasks.map((task) => `
+      <tr>
+        <td>${escapeHtml(formatReportDate(task.endedAt))}</td>
+        <td><div class="analytics-task-text" title="${escapeHtml(task.text)}">${escapeHtml(task.text)}</div></td>
+        <td>${task.limitMs != null ? formatAnalyticsDuration(task.limitMs) : '—'}</td>
+        <td>${formatAnalyticsDuration(task.durationMs)}</td>
+        <td>${escapeHtml(task.sessionName)}</td>
+      </tr>
+    `).join('');
+  }
+
+  analyticsCompletedTableBody.innerHTML = rowsHtml;
+  const totalEstimated = tasks.reduce((sum, task) => sum + (task.limitMs || 0), 0);
+  const totalActual = tasks.reduce((sum, task) => sum + (task.durationMs || 0), 0);
+  analyticsCompletedTableFoot.innerHTML = `
+    <tr>
+      <td>Total</td>
+      <td></td>
+      <td>${formatAnalyticsDuration(totalEstimated)}</td>
+      <td>${formatAnalyticsDuration(totalActual)}</td>
+      <td></td>
+    </tr>
+  `;
+}
+
+function ensureAnalyticsChartTooltip(container) {
+  if (!container) return null;
+  let tip = container.querySelector('.analytics-chart-tooltip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.className = 'analytics-chart-tooltip hidden';
+    tip.setAttribute('role', 'tooltip');
+    container.appendChild(tip);
+  }
+  return tip;
+}
+
+function hideAnalyticsChartTooltip(container) {
+  const tip = container?.querySelector('.analytics-chart-tooltip');
+  if (!tip) return;
+  tip.classList.add('hidden');
+  tip.innerHTML = '';
+}
+
+function handleAnalyticsChartPointer(event) {
+  const container = event.currentTarget;
+  const segment = event.target.closest?.('[data-tip]');
+  const tip = ensureAnalyticsChartTooltip(container);
+  if (!tip) return;
+
+  if (!segment || event.type === 'mouseleave') {
+    hideAnalyticsChartTooltip(container);
+    return;
+  }
+
+  const text = segment.getAttribute('data-tip') || '';
+  const color = segment.getAttribute('data-tip-color') || '';
+  tip.innerHTML = color
+    ? `<span class="analytics-chart-tooltip-dot" style="background:${color}"></span><span>${escapeHtml(text)}</span>`
+    : `<span>${escapeHtml(text)}</span>`;
+  tip.classList.remove('hidden');
+
+  const bounds = container.getBoundingClientRect();
+  const x = event.clientX - bounds.left;
+  const y = event.clientY - bounds.top;
+  const tipWidth = tip.offsetWidth || 0;
+  const clampedX = Math.min(Math.max(x, tipWidth / 2 + 8), bounds.width - tipWidth / 2 - 8);
+  tip.style.left = `${clampedX}px`;
+  tip.style.top = `${Math.max(y, 12)}px`;
+}
+
+function bindAnalyticsChartTooltips(container) {
+  if (!container || container.dataset.tooltipBound === '1') return;
+  container.dataset.tooltipBound = '1';
+  container.addEventListener('mousemove', handleAnalyticsChartPointer);
+  container.addEventListener('mouseleave', handleAnalyticsChartPointer);
+}
+
+function renderAnalyticsModal() {
+  if (!analyticsModal || analyticsModal.classList.contains('hidden')) return;
+  const range = getCurrentAnalyticsRange();
+  if (!range) {
+    if (analyticsCardCompleted) {
+      analyticsCardCompleted.innerHTML = '<p class="analytics-card-copy">Choose a valid custom date range.</p>';
+    }
+    return;
+  }
+
+  const data = computeAnalytics(range, analyticsSessionFilter);
+  renderAnalyticsSummaryCards(data);
+  renderAnalyticsStackedBarChart(analyticsDailyChart, data.days, analyticsDailyMetric);
+  renderAnalyticsEstActualChart(analyticsEstActualChart, data.days);
+  bindAnalyticsChartTooltips(analyticsDailyChart);
+  bindAnalyticsChartTooltips(analyticsEstActualChart);
+  renderAnalyticsSessionTable(data);
+  renderAnalyticsCompletedTable(data);
+  syncAnalyticsSessionFilterLabel();
+}
+
+function setAnalyticsWindowButtonsVisible(visible) {
+  if (typeof window.slashIt?.setWindowButtonsVisible !== 'function') return;
+  void window.slashIt.setWindowButtonsVisible(!!visible);
+}
+
+function openAnalyticsModal() {
+  if (!isLabsFeatureEnabled('analytics')) return;
+  hideSettingsMenu();
+  closeAnalyticsSessionMenu();
+  if (!analyticsRangeStartInput?.value || !analyticsRangeEndInput?.value) {
+    initializeAnalyticsRange(analyticsPreset || 'last14');
+  } else {
+    syncAnalyticsRangeButtons();
+  }
+  if (analyticsDailyMetricSelect) analyticsDailyMetricSelect.value = analyticsDailyMetric;
+  if (analyticsSessionMetricSelect) analyticsSessionMetricSelect.value = analyticsSessionMetric;
+  if (analyticsCompletedGroupingSelect) analyticsCompletedGroupingSelect.value = analyticsCompletedGrouping;
+  analyticsModal.classList.remove('hidden');
+  setAnalyticsWindowButtonsVisible(false);
+  renderAnalyticsModal();
+}
+
+function closeAnalyticsModal() {
+  if (!analyticsModal) return;
+  closeAnalyticsSessionMenu();
+  analyticsModal.classList.add('hidden');
+  setAnalyticsWindowButtonsVisible(true);
+}
+
+function handleAnalyticsPresetClick(event) {
+  const btn = event.target.closest('[data-analytics-preset]');
+  if (!btn) return;
+  const preset = btn.getAttribute('data-analytics-preset');
+  if (!preset) return;
+  analyticsPreset = preset;
+  if (preset !== 'custom') {
+    const range = getAnalyticsRange(preset);
+    if (range && analyticsRangeStartInput && analyticsRangeEndInput) {
+      analyticsRangeStartInput.value = formatDateInputValue(range.startMs);
+      analyticsRangeEndInput.value = formatDateInputValue(range.endMs);
+    }
+  }
+  syncAnalyticsRangeButtons();
+  renderAnalyticsModal();
+}
+
+function handleAnalyticsCustomDateChange() {
+  analyticsPreset = 'custom';
+  syncAnalyticsRangeButtons();
+  renderAnalyticsModal();
 }
 
 let appAlertResolve = null;
@@ -8343,6 +9749,11 @@ function resetWhatsNewModalState() {
   whatsNewView = 'slides';
 }
 
+function dismissWhatsNewModalWithoutSaving() {
+  whatsNewModal.classList.add('hidden');
+  resetWhatsNewModalState();
+}
+
 function closeWhatsNewModal() {
   markWhatsNewSeen();
   whatsNewModal.classList.add('hidden');
@@ -8394,22 +9805,14 @@ async function shouldDeferWhatsNewAutoShow() {
   return updateReady || updateDownloading;
 }
 
-async function recordLaunchedAppVersion() {
-  const version = await window.slashIt.getAppVersion();
-  if (state.lastLaunchedAppVersion === version) return;
-  state.lastLaunchedAppVersion = version;
-  persist({ skipUndoCheckpoint: true });
-}
-
 async function maybeAutoShowWhatsNew() {
+  await window.slashIt.waitForInitialUpdateCheck();
+  if (await shouldDeferWhatsNewAutoShow()) return;
+
   const version = await window.slashIt.getAppVersion();
   const slides = getReleaseNotes(version);
   if (!slides?.length) return;
   if (state.lastSeenWhatsNewVersion === version) return;
-  if (await shouldDeferWhatsNewAutoShow()) return;
-
-  // Only auto-show on the first launch of this version (e.g. after restart post-update).
-  if (state.lastLaunchedAppVersion === version) return;
 
   openWhatsNewModal();
 }
@@ -8789,6 +10192,11 @@ function closeTemplatesModal() {
 
 const LABS_FEATURES = [
   {
+    id: 'analytics',
+    title: 'Analytics',
+    description: 'Open Analytics from the settings menu to review completed tasks from Session history — time ranges, actual vs estimated, daily charts, and breakdowns by session. Braindump average task age tracks newly added tasks going forward.',
+  },
+  {
     id: 'trayAddTask',
     title: 'Add task from tray',
     description: 'Quickly add pending tasks from the floating timebar tray without stopping your session or switching away from the current task. Press Enter to keep adding more.',
@@ -8798,6 +10206,11 @@ const LABS_FEATURES = [
     title: 'Quick Start',
     description: 'Skip the Sessions list and jump straight into a focus run. Add tasks, optional time limits, a name, and billable settings, then Start Session. Quick Start runs stay out of your Sessions list but still appear in Session history.',
   },
+  {
+    id: 'pinnedFilters',
+    title: 'Pinned filters',
+    description: 'Pin custom session filters for one-click access in the Sessions list. Open the filter menu (funnel icon next to Sessions), then click the pin icon on any custom filter. Pinned filters appear above your pinned sessions when you are on All sessions — click one to show only the sessions in that filter. Unpin from the same filter menu anytime.',
+  },
 ];
 const LABS_FEATURES_STORAGE_KEY = 'supaslash-labs-features';
 
@@ -8806,6 +10219,8 @@ function normalizeLabsFeatures(saved) {
   return {
     trayAddTask: !!source.trayAddTask,
     quickStart: !!source.quickStart,
+    pinnedFilters: !!source.pinnedFilters,
+    analytics: !!source.analytics,
   };
 }
 
@@ -8857,6 +10272,11 @@ function setLabsFeatureEnabled(featureId, enabled) {
 
   if (featureId === 'quickStart') {
     updateQuickStartButtonVisibility();
+  }
+
+  if (featureId === 'analytics') {
+    updateAnalyticsMenuVisibility();
+    if (!enabled) closeAnalyticsModal();
   }
 
   persist();
@@ -9025,6 +10445,7 @@ function migrateLegacyTaskTemplates(savedTaskTemplates) {
 function applySavedData(saved, { mergeLabsFromLocal = true } = {}) {
   state.sessionTasks = (saved.sessionTasks || saved.tasks || []).map(normalizeSessionTask);
   loadPlannedSessionsFromSaved(saved);
+  loadArchivedPlannedSessionsFromSaved(saved);
   state.activeSessionName = saved.activeSessionName || null;
   state.totalSessionMs = saved.totalSessionMs || 0;
   if (saved.timerView === 'earnings') {
@@ -9070,12 +10491,14 @@ function applySavedData(saved, { mergeLabsFromLocal = true } = {}) {
   state.sessionListFilters = Array.isArray(saved.sessionListFilters)
     ? saved.sessionListFilters.map(normalizeCustomSessionFilter)
     : [];
+  state.pinnedSessionListFilters = normalizePinnedSessionListFilters(saved.pinnedSessionListFilters);
   state.sessionListFilter = normalizeSessionListFilter(saved.sessionListFilter);
   state.labsFeatures = mergeLabsFromLocal
     ? resolveLabsFeatures(saved.labsFeatures)
     : normalizeLabsFeatures(saved.labsFeatures);
   writeLabsFeaturesToStorage(state.labsFeatures);
   updateQuickStartButtonVisibility();
+  updateAnalyticsMenuVisibility();
   state.quickStartRateSettings = normalizeQuickStartRateSettings(saved.quickStartRateSettings);
 
   if (saved.timerBarSize === 'hidden') {
@@ -9244,7 +10667,11 @@ function submitPlannedSessionTask(sessionId, text, limitValue) {
   const session = getPlannedSession(sessionId);
   if (!session) return;
 
-  session.tasks.push({ text: parsed.text, limitMs: parsed.limitMs });
+  session.tasks.push(normalizeBraindumpTask({
+    text: parsed.text,
+    limitMs: parsed.limitMs,
+    createdAt: Date.now(),
+  }));
   state.addFocusSessionId = sessionId;
   state.lastAddSessionId = sessionId;
   state.activeAddSessionIds.add(sessionId);
@@ -9264,7 +10691,11 @@ function submitPlannedTaskToQueue(sessionId, text, limitValue) {
   state.sessionTasks.splice(
     insertAt,
     0,
-    toSessionTaskFromBraindump({ text: parsed.text, limitMs: parsed.limitMs }, sourceMeta),
+    toSessionTaskFromBraindump({
+      text: parsed.text,
+      limitMs: parsed.limitMs,
+      createdAt: Date.now(),
+    }, sourceMeta),
   );
   state.addFocusSessionId = sessionId;
   state.lastAddSessionId = sessionId;
@@ -9338,7 +10769,8 @@ function startEditingTask(li, listId, index) {
 
 function isEditShortcutBlocked() {
   if (!clearSessionModal.classList.contains('hidden')) return true;
-  if (!deleteSessionModal.classList.contains('hidden')) return true;
+  if (!deleteSessionForeverModal.classList.contains('hidden')) return true;
+  if (!archiveSessionModal.classList.contains('hidden')) return true;
   if (!billableModal.classList.contains('hidden')) return true;
   if (!quickStartModal?.classList.contains('hidden')) return true;
   if (isTaskDetailModalOpen()) return true;
@@ -9733,6 +11165,13 @@ startBtn.addEventListener('click', startSlashing);
 document.addEventListener('keydown', handleUndoRedoShortcuts, true);
 document.addEventListener('keydown', handleEditModeEnterShortcuts, true);
 document.addEventListener('keydown', handleEditModeShortcuts, true);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Meta' && !e.repeat) setMetaKeyHeld(true);
+});
+document.addEventListener('keyup', (e) => {
+  if (e.key === 'Meta') setMetaKeyHeld(false);
+});
+window.addEventListener('blur', () => setMetaKeyHeld(false));
 
 settingsBtn.addEventListener('click', (e) => {
   e.stopPropagation();
@@ -9754,6 +11193,7 @@ settingsWhatsNewBtn.addEventListener('click', () => {
 settingsTemplatesBtn.addEventListener('click', openTemplatesModal);
 settingsLabsBtn?.addEventListener('click', openLabsModal);
 settingsHistoryBtn.addEventListener('click', () => openHistoryModal());
+settingsAnalyticsBtn?.addEventListener('click', () => openAnalyticsModal());
 settingsShortcutsBtn.addEventListener('click', openShortcutsModal);
 settingsTutorialBtn.addEventListener('click', startTutorial);
 settingsSoundEffectsBtn.addEventListener('click', toggleSoundEffects);
@@ -9776,6 +11216,7 @@ licenseModal?.addEventListener('click', (e) => {
 historyCloseBtn.addEventListener('click', closeHistoryModal);
 historyTabSessionsBtn?.addEventListener('click', () => setHistoryModalTab('sessions'));
 historyTabReportBtn?.addEventListener('click', () => setHistoryModalTab('report'));
+historyTabArchiveBtn?.addEventListener('click', () => setHistoryModalTab('archive'));
 historyDateToolbar?.addEventListener('click', handleHistoryDatePresetClick);
 historyDateToolbar?.addEventListener('click', handleHistoryDateIconClick);
 historyReportStartInput?.addEventListener('change', handleHistoryDateChange);
@@ -9784,7 +11225,39 @@ historyReportSessionTrigger?.addEventListener('click', handleHistoryReportSessio
 historyReportSessionMenu?.addEventListener('click', handleHistoryReportSessionOptionClick);
 historyExportInvoiceBtn?.addEventListener('click', handleExportInvoicePdf);
 historyExportPdfBtn?.addEventListener('click', handleExportEarningsReportPdf);
+analyticsCloseBtn?.addEventListener('click', closeAnalyticsModal);
+analyticsModal?.addEventListener('click', (e) => {
+  if (e.target === analyticsModal) closeAnalyticsModal();
+});
+analyticsModal?.querySelector('.analytics-range-presets')?.addEventListener('click', handleAnalyticsPresetClick);
+analyticsRangeStartInput?.addEventListener('change', handleAnalyticsCustomDateChange);
+analyticsRangeEndInput?.addEventListener('change', handleAnalyticsCustomDateChange);
+analyticsSessionTrigger?.addEventListener('click', (event) => {
+  event.stopPropagation();
+  openAnalyticsSessionMenu();
+});
+analyticsSessionMenu?.addEventListener('click', (event) => {
+  const option = event.target.closest('[data-analytics-session-filter]');
+  if (!option) return;
+  analyticsSessionFilter = option.getAttribute('data-analytics-session-filter') ?? '';
+  closeAnalyticsSessionMenu();
+  syncAnalyticsSessionFilterLabel();
+  renderAnalyticsModal();
+});
+analyticsDailyMetricSelect?.addEventListener('change', () => {
+  analyticsDailyMetric = analyticsDailyMetricSelect.value === 'time' ? 'time' : 'tasks';
+  renderAnalyticsModal();
+});
+analyticsSessionMetricSelect?.addEventListener('change', () => {
+  analyticsSessionMetric = analyticsSessionMetricSelect.value === 'time' ? 'time' : 'tasks';
+  renderAnalyticsModal();
+});
+analyticsCompletedGroupingSelect?.addEventListener('change', () => {
+  analyticsCompletedGrouping = analyticsCompletedGroupingSelect.value === 'session' ? 'session' : 'none';
+  renderAnalyticsModal();
+});
 historyList.addEventListener('click', handleHistoryListClick);
+historyArchiveList?.addEventListener('click', handleArchiveListClick);
 historyList.addEventListener('change', handleHistoryEntryDateInput);
 historyList.addEventListener('blur', handleHistoryDurationInput, true);
 historyList.addEventListener('keydown', handleHistoryDurationInput, true);
@@ -9855,10 +11328,16 @@ tutorialDoneBtn.addEventListener('click', stopTutorial);
 tutorialTooltip.addEventListener('mouseenter', cancelHideTutorialTooltip);
 tutorialTooltip.addEventListener('mouseleave', scheduleHideTutorialTooltip);
 
-deleteSessionConfirmBtn.addEventListener('click', confirmDeletePlannedSession);
-deleteSessionCancelBtn.addEventListener('click', closeDeleteSessionModal);
-deleteSessionModal.addEventListener('click', (e) => {
-  if (e.target === deleteSessionModal) closeDeleteSessionModal();
+archiveSessionConfirmBtn.addEventListener('click', confirmArchivePlannedSession);
+archiveSessionDeleteBtn.addEventListener('click', openDeletePlannedSessionForeverFromArchiveModal);
+archiveSessionCancelBtn.addEventListener('click', closeArchiveSessionModal);
+archiveSessionModal.addEventListener('click', (e) => {
+  if (e.target === archiveSessionModal) closeArchiveSessionModal();
+});
+deleteSessionForeverConfirmBtn.addEventListener('click', confirmDeleteSessionForever);
+deleteSessionForeverCancelBtn.addEventListener('click', closeDeleteSessionForeverModal);
+deleteSessionForeverModal.addEventListener('click', (e) => {
+  if (e.target === deleteSessionForeverModal) closeDeleteSessionForeverModal();
 });
 deleteHistoryConfirmBtn.addEventListener('click', confirmDeleteHistoryEntry);
 deleteHistoryCancelBtn.addEventListener('click', closeDeleteHistoryModal);
@@ -9878,6 +11357,11 @@ whatsNewModal.addEventListener('click', (e) => {
   if (e.target === whatsNewModal) closeWhatsNewModal();
 });
 window.slashIt.onOpenWhatsNew(() => openWhatsNewModal());
+window.slashIt.onUpdateInstallPending(() => {
+  if (!whatsNewModal.classList.contains('hidden')) {
+    dismissWhatsNewModalWithoutSaving();
+  }
+});
 
 billableToggleBtn.addEventListener('click', () => {
   const session = getBillableModalTarget();
@@ -10052,6 +11536,17 @@ sessionContextSaveTemplateBtn.addEventListener('click', () => {
   saveSessionAsTemplateFromContext(sessionId);
 });
 
+sessionContextFocusBtn?.addEventListener('click', () => {
+  if (!sessionContextMenuTarget) return;
+  const { sessionId } = sessionContextMenuTarget;
+  hideSessionContextMenu();
+  if (sessionFocusId === sessionId) {
+    exitSessionFocus();
+  } else {
+    enterSessionFocus(sessionId);
+  }
+});
+
 sessionContextPinBtn?.addEventListener('click', () => {
   if (!sessionContextMenuTarget) return;
   const { sessionId } = sessionContextMenuTarget;
@@ -10151,6 +11646,10 @@ document.addEventListener('keydown', (e) => {
       closeInvoiceSettingsModal();
       return;
     }
+    if (!deleteSessionForeverModal.classList.contains('hidden')) {
+      closeDeleteSessionForeverModal();
+      return;
+    }
     if (!deleteHistoryModal.classList.contains('hidden')) {
       closeDeleteHistoryModal();
       return;
@@ -10161,6 +11660,18 @@ document.addEventListener('keydown', (e) => {
     }
     if (plannedSessionsFilterMenuOpen) {
       closePlannedSessionsFilterMenu();
+      return;
+    }
+    if (isSessionFocusActive()) {
+      exitSessionFocus();
+      return;
+    }
+    if (analyticsModal && !analyticsModal.classList.contains('hidden')) {
+      if (analyticsSessionMenuOpen) {
+        closeAnalyticsSessionMenu();
+        return;
+      }
+      closeAnalyticsModal();
       return;
     }
     if (!historyModal.classList.contains('hidden')) {
@@ -10177,8 +11688,8 @@ document.addEventListener('keydown', (e) => {
       hideSettingsMenu();
       return;
     }
-    if (!deleteSessionModal.classList.contains('hidden')) {
-      closeDeleteSessionModal();
+    if (!archiveSessionModal.classList.contains('hidden')) {
+      closeArchiveSessionModal();
       return;
     }
     if (!billableModal.classList.contains('hidden')) {
@@ -10314,6 +11825,12 @@ function loadExpandedSessionIds(_saved) {
   state.expandedSessionIds = new Set();
 }
 
+function loadArchivedPlannedSessionsFromSaved(saved) {
+  state.archivedPlannedSessions = Array.isArray(saved.archivedPlannedSessions)
+    ? saved.archivedPlannedSessions.map(normalizeArchivedPlannedSession)
+    : [];
+}
+
 function loadPlannedSessionsFromSaved(saved) {
   if (Array.isArray(saved.plannedSessions) && saved.plannedSessions.length > 0) {
     state.plannedSessions = saved.plannedSessions.map(normalizePlannedSession);
@@ -10358,9 +11875,7 @@ async function init() {
   dismissAppPreloader();
 
   void refreshLicenseStatus();
-  void maybeAutoShowWhatsNew().finally(() => {
-    void recordLaunchedAppVersion();
-  });
+  void maybeAutoShowWhatsNew();
 }
 
 init();

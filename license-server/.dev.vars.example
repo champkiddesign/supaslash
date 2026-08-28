@@ -1,0 +1,4 @@
+PADDLE_WEBHOOK_SECRET=pdl_ntfsec_xxx
+LICENSE_API_SECRET=generate-a-long-random-string
+# Optional
+# PADDLE_API_KEY=pdl_apikey_xxx

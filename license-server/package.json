@@ -1,0 +1,15 @@
+{
+  "name": "supaslash-license-server",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Paddle webhook fulfillment + license activate/validate/deactivate for SupaSlash",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4.20.0"
+  }
+}

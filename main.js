@@ -39,6 +39,7 @@ const {
   isQuittingForUpdate,
   isUpdateReadyToInstall,
   isUpdateDownloading,
+  waitForInitialUpdateCheck,
 } = require('./auto-updater');
 
 const CELEBRATION_DURATION_MS = 3500;
@@ -706,7 +707,13 @@ app.whenReady().then(() => {
   setDockIcon();
   setupAppMenu();
   createWindow();
-  setupAutoUpdater();
+  setupAutoUpdater({
+    notifyRenderer: (channel) => {
+      if (isLiveWindow(mainWindow)) {
+        mainWindow.webContents.send(channel);
+      }
+    },
+  });
   licenseService.validateStoredLicense().catch((err) => {
     console.error('Failed to validate license on startup:', err);
   });
@@ -752,9 +759,22 @@ ipcMain.handle('is-update-ready-to-install', () => isUpdateReadyToInstall());
 
 ipcMain.handle('is-update-downloading', () => isUpdateDownloading());
 
+ipcMain.handle('wait-for-initial-update-check', () => waitForInitialUpdateCheck());
+
 ipcMain.handle('set-window-mode', (_event, mode, options = {}) => {
   applyWindowSize(mode, options);
   return true;
+});
+
+ipcMain.handle('set-window-buttons-visible', (_event, visible) => {
+  if (process.platform !== 'darwin' || !isLiveWindow(mainWindow)) return false;
+  // Floating focus/done modes always keep traffic lights hidden.
+  if (isFloatingMode(currentWindowMode)) {
+    mainWindow.setWindowButtonVisibility(false);
+    return false;
+  }
+  mainWindow.setWindowButtonVisibility(!!visible);
+  return !!visible;
 });
 
 ipcMain.handle('set-focus-width', (_event, contentWidth) => {
@@ -923,6 +943,29 @@ ipcMain.handle('open-documents-data-folder', async () => {
   await fs.promises.mkdir(documentsDir, { recursive: true });
   const errorMessage = await shell.openPath(documentsDir);
   return { ok: !errorMessage, errorMessage };
+});
+
+ipcMain.handle('export-text-file', async (event, { content, defaultFileName, dialogTitle, filters } = {}) => {
+  const parentWindow = BrowserWindow.fromWebContents(event.sender);
+  try {
+    const { canceled, filePath } = await dialog.showSaveDialog(parentWindow, {
+      title: dialogTitle || 'Export',
+      defaultPath: defaultFileName || 'export.txt',
+      filters: Array.isArray(filters) && filters.length
+        ? filters
+        : [{ name: 'Text', extensions: ['txt'] }],
+    });
+
+    if (canceled || !filePath) {
+      return { canceled: true };
+    }
+
+    await fs.promises.writeFile(filePath, content ?? '', 'utf8');
+    return { canceled: false, filePath };
+  } catch (err) {
+    console.error('Failed to export text file:', err);
+    return { canceled: false, error: 'Could not export the file.' };
+  }
 });
 
 ipcMain.handle('export-earnings-report-pdf', async (event, { html, defaultFileName, dialogTitle }) => {

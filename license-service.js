@@ -4,8 +4,6 @@ const { execSync } = require('child_process');
 const licenseConfig = require('./license-config');
 
 const ACTIVE_STATUSES = new Set(['active', 'inactive']);
-const ONLINE_LICENSE_UNAVAILABLE =
-  'Online licensing is not available yet. Use a development or beta key for now.';
 
 function getMacHardwareUuid() {
   if (process.platform !== 'darwin') return null;
@@ -40,10 +38,22 @@ function isLicenseKeyUsable(licenseKey = {}) {
   if (!licenseKey || typeof licenseKey !== 'object') return false;
   if (licenseKey.status === 'disabled' || licenseKey.status === 'expired') return false;
 
-  const expiresAt = parseTimestamp(licenseKey.expires_at);
+  const expiresAt = parseTimestamp(licenseKey.expires_at ?? licenseKey.expiresAt);
   if (expiresAt != null && expiresAt <= Date.now()) return false;
 
   return ACTIVE_STATUSES.has(licenseKey.status);
+}
+
+function isConfigReady() {
+  return !!licenseConfig.licenseApiBaseUrl;
+}
+
+function matchesConfiguredPrice(meta = {}) {
+  const allowed = licenseConfig.paddlePriceIds || [];
+  if (!allowed.length) return true;
+  const priceId = meta.price_id || meta.priceId;
+  if (!priceId) return true;
+  return allowed.includes(priceId);
 }
 
 function buildLicenseRecord({
@@ -55,6 +65,7 @@ function buildLicenseRecord({
   expiresAt,
   productName,
   lastValidatedAt,
+  priceId,
 }) {
   return {
     licenseKey,
@@ -65,6 +76,7 @@ function buildLicenseRecord({
     expiresAt: expiresAt || null,
     productName: productName || 'SupaSlash',
     lastValidatedAt: lastValidatedAt || new Date().toISOString(),
+    priceId: priceId || null,
   };
 }
 
@@ -91,9 +103,42 @@ function buildStatus({
     lastValidatedAt,
     activationUsage,
     activationLimit,
-    configReady: false,
+    configReady: isConfigReady(),
     checkoutConfigured: !!licenseConfig.checkoutUrl,
   };
+}
+
+async function postLicenseEndpoint(endpoint, params) {
+  if (!licenseConfig.licenseApiBaseUrl) {
+    throw new Error('Online licensing is not configured. Set SUPASLASH_LICENSE_API_URL.');
+  }
+
+  const headers = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  };
+  if (licenseConfig.licenseApiSecret) {
+    headers.Authorization = `Bearer ${licenseConfig.licenseApiSecret}`;
+  }
+
+  const response = await fetch(`${licenseConfig.licenseApiBaseUrl}/v1/licenses/${endpoint}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(params),
+  });
+
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error('Could not read a response from the license server.');
+  }
+
+  if (!response.ok && !payload?.error) {
+    throw new Error(`License server request failed (${response.status}).`);
+  }
+
+  return payload;
 }
 
 function createLicenseService(licenseStore, { allowDevLicense = false } = {}) {
@@ -138,6 +183,14 @@ function createLicenseService(licenseStore, { allowDevLicense = false } = {}) {
     if (storedInstanceName) return storedInstanceName;
     if (!machineFingerprint) machineFingerprint = buildMachineFingerprint();
     return machineFingerprint;
+  }
+
+  function shouldRevalidate(record) {
+    if (!record?.lastValidatedAt) return true;
+    const lastValidatedAt = Date.parse(record.lastValidatedAt);
+    if (!Number.isFinite(lastValidatedAt)) return true;
+    const intervalMs = licenseConfig.revalidateIntervalHours * 60 * 60 * 1000;
+    return Date.now() - lastValidatedAt >= intervalMs;
   }
 
   function isWithinOfflineGrace(record) {
@@ -186,10 +239,67 @@ function createLicenseService(licenseStore, { allowDevLicense = false } = {}) {
       });
     }
 
-    return {
-      ok: false,
-      status: buildStatus({ error: ONLINE_LICENSE_UNAVAILABLE }),
-    };
+    if (!isConfigReady()) {
+      return {
+        ok: false,
+        status: buildStatus({
+          error: 'Online licensing is not configured yet. Use a development or beta key for now.',
+        }),
+      };
+    }
+
+    const instanceName = getMachineFingerprint();
+    let payload;
+    try {
+      payload = await postLicenseEndpoint('activate', {
+        license_key: trimmedKey,
+        instance_name: instanceName,
+        email: (email || '').trim(),
+      });
+    } catch (err) {
+      return { ok: false, status: buildStatus({ error: err.message }) };
+    }
+
+    if (!payload?.activated) {
+      return {
+        ok: false,
+        status: buildStatus({ error: payload?.error || 'Could not activate this license key.' }),
+      };
+    }
+
+    if (!matchesConfiguredPrice(payload.meta)) {
+      return { ok: false, status: buildStatus({ error: 'This license key is not for SupaSlash.' }) };
+    }
+
+    const record = buildLicenseRecord({
+      licenseKey: payload.license_key?.key || trimmedKey,
+      instanceId: payload.instance?.id,
+      instanceName,
+      customerEmail: email || payload.meta?.customer_email || '',
+      status: payload.license_key?.status || 'active',
+      expiresAt: payload.license_key?.expires_at || null,
+      productName: payload.meta?.product_name || 'SupaSlash',
+      lastValidatedAt: new Date().toISOString(),
+      priceId: payload.meta?.price_id || null,
+    });
+
+    if (!record.instanceId) {
+      return { ok: false, status: buildStatus({ error: 'License server did not return an instance id.' }) };
+    }
+
+    await licenseStore.saveLicense(record);
+    cachedStatus = buildStatus({
+      isLicensed: isLicenseKeyUsable(payload.license_key),
+      status: record.status,
+      expiresAt: record.expiresAt,
+      customerEmail: record.customerEmail,
+      productName: record.productName,
+      lastValidatedAt: record.lastValidatedAt,
+      activationUsage: payload.license_key?.activation_usage ?? null,
+      activationLimit: payload.license_key?.activation_limit ?? null,
+    });
+
+    return { ok: true, status: cachedStatus };
   }
 
   async function validateStoredLicense({ force = false } = {}) {
@@ -204,25 +314,86 @@ function createLicenseService(licenseStore, { allowDevLicense = false } = {}) {
       return cachedStatus;
     }
 
-    // Previously online-activated licenses remain trusted from the local record
-    // until online licensing (Paddle) is wired up.
-    if (isLicenseKeyUsable({ status: record.status, expires_at: record.expiresAt })) {
-      const withinGrace = isWithinOfflineGrace(record);
-      cachedStatus = statusFromRecord(record, {
-        offlineGrace: !withinGrace,
-        error: force ? ONLINE_LICENSE_UNAVAILABLE : null,
+    if (!isConfigReady()) {
+      if (isLicenseKeyUsable({ status: record.status, expires_at: record.expiresAt })) {
+        cachedStatus = statusFromRecord(record, {
+          offlineGrace: !isWithinOfflineGrace(record),
+          error: force ? 'Online licensing is not configured yet.' : null,
+        });
+        return cachedStatus;
+      }
+      cachedStatus = buildStatus({
+        status: record.status || 'invalid',
+        expiresAt: record.expiresAt,
+        customerEmail: record.customerEmail || '',
+        productName: record.productName || '',
+        lastValidatedAt: record.lastValidatedAt || null,
+        error: 'This license is not valid.',
       });
       return cachedStatus;
     }
 
-    cachedStatus = buildStatus({
-      status: record.status || 'invalid',
-      expiresAt: record.expiresAt,
-      customerEmail: record.customerEmail || '',
-      productName: record.productName || '',
-      lastValidatedAt: record.lastValidatedAt || null,
-      error: 'This license is not valid.',
+    if (!force && !shouldRevalidate(record)) {
+      cachedStatus = statusFromRecord(record);
+      return cachedStatus;
+    }
+
+    let payload;
+    try {
+      payload = await postLicenseEndpoint('validate', {
+        license_key: record.licenseKey,
+        instance_id: record.instanceId,
+      });
+    } catch (err) {
+      if (isWithinOfflineGrace(record) && isLicenseKeyUsable({ status: record.status, expires_at: record.expiresAt })) {
+        cachedStatus = statusFromRecord(record, { offlineGrace: true, error: err.message });
+        return cachedStatus;
+      }
+      cachedStatus = buildStatus({ error: err.message });
+      return cachedStatus;
+    }
+
+    if (!payload?.valid) {
+      cachedStatus = buildStatus({
+        error: payload?.error || 'This license is not valid.',
+        status: payload?.license_key?.status || 'invalid',
+        expiresAt: payload?.license_key?.expires_at || record.expiresAt,
+        customerEmail: record.customerEmail || payload?.meta?.customer_email || '',
+        productName: record.productName || payload?.meta?.product_name || '',
+      });
+      return cachedStatus;
+    }
+
+    if (!matchesConfiguredPrice(payload.meta)) {
+      cachedStatus = buildStatus({ error: 'This license key is not for SupaSlash.', status: 'invalid' });
+      return cachedStatus;
+    }
+
+    const updatedRecord = buildLicenseRecord({
+      licenseKey: record.licenseKey,
+      instanceId: record.instanceId,
+      instanceName: record.instanceName,
+      customerEmail: record.customerEmail || payload.meta?.customer_email || '',
+      status: payload.license_key?.status || record.status,
+      expiresAt: payload.license_key?.expires_at || record.expiresAt,
+      productName: payload.meta?.product_name || record.productName,
+      lastValidatedAt: new Date().toISOString(),
+      priceId: payload.meta?.price_id || record.priceId || null,
     });
+
+    await licenseStore.saveLicense(updatedRecord);
+
+    cachedStatus = buildStatus({
+      isLicensed: isLicenseKeyUsable(payload.license_key),
+      status: updatedRecord.status,
+      expiresAt: updatedRecord.expiresAt,
+      customerEmail: updatedRecord.customerEmail,
+      productName: updatedRecord.productName,
+      lastValidatedAt: updatedRecord.lastValidatedAt,
+      activationUsage: payload.license_key?.activation_usage ?? null,
+      activationLimit: payload.license_key?.activation_limit ?? null,
+    });
+
     return cachedStatus;
   }
 
@@ -231,6 +402,23 @@ function createLicenseService(licenseStore, { allowDevLicense = false } = {}) {
     if (!record) {
       cachedStatus = buildStatus();
       return { ok: true, status: cachedStatus };
+    }
+
+    if (!isLocalLicenseKey(record.licenseKey) && isConfigReady()) {
+      try {
+        const payload = await postLicenseEndpoint('deactivate', {
+          license_key: record.licenseKey,
+          instance_id: record.instanceId,
+        });
+        if (!payload?.deactivated) {
+          return {
+            ok: false,
+            status: buildStatus({ error: payload?.error || 'Could not deactivate this device.' }),
+          };
+        }
+      } catch (err) {
+        return { ok: false, status: buildStatus({ error: err.message }) };
+      }
     }
 
     await licenseStore.clearLicense();

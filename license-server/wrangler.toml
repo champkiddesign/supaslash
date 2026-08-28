@@ -1,0 +1,14 @@
+name = "supaslash-license"
+main = "src/index.js"
+compatibility_date = "2025-07-01"
+
+# After: npx wrangler kv namespace create LICENSES
+# Replace id with the value wrangler prints.
+[[kv_namespaces]]
+binding = "LICENSES"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_KV_PREVIEW_ID"
+
+[vars]
+ACTIVATION_LIMIT = "2"
+PRODUCT_NAME = "SupaSlash"

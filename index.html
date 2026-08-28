@@ -94,13 +94,14 @@
       </div>
     </div>
 
-    <div id="delete-session-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="delete-session-title">
+    <div id="archive-session-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="archive-session-title">
       <div class="clear-session-modal-card">
-        <h3 id="delete-session-title" class="clear-session-modal-title">Delete session</h3>
-        <p id="delete-session-message" class="delete-session-message"></p>
+        <h3 id="archive-session-title" class="clear-session-modal-title">Archive session</h3>
+        <p id="archive-session-message" class="archive-session-message"></p>
         <div class="clear-session-modal-actions">
-          <button id="delete-session-confirm-btn" class="clear-session-modal-btn" type="button">Delete session</button>
-          <button id="delete-session-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
+          <button id="archive-session-confirm-btn" class="clear-session-modal-btn" type="button">Archive session</button>
+          <button id="archive-session-delete-btn" class="clear-session-modal-btn clear-session-modal-btn--danger" type="button">Delete session</button>
+          <button id="archive-session-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
         </div>
       </div>
     </div>
@@ -195,6 +196,7 @@
       <button type="button" id="settings-templates-btn" class="settings-menu-item" role="menuitem">Templates</button>
       <button type="button" id="settings-labs-btn" class="settings-menu-item" role="menuitem">Labs</button>
       <button type="button" id="settings-history-btn" class="settings-menu-item" role="menuitem">Session history</button>
+      <button type="button" id="settings-analytics-btn" class="settings-menu-item hidden" role="menuitem">Analytics</button>
       <button type="button" id="settings-invoice-btn" class="settings-menu-item" role="menuitem">Personal Profile</button>
       <div class="settings-menu-divider" role="separator"></div>
       <button type="button" id="settings-sound-effects-btn" class="settings-menu-item" role="menuitemcheckbox" aria-checked="true">
@@ -491,6 +493,13 @@
   </div>
 
   <div id="session-context-menu" class="task-context-menu hidden" role="menu">
+    <button type="button" id="session-context-focus" class="task-context-menu-item" role="menuitem">
+      <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12"/>
+      </svg>
+      <span>Session focus</span>
+    </button>
     <button type="button" id="session-context-pin" class="task-context-menu-item" role="menuitem">
       <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3.76z"/>
@@ -675,6 +684,17 @@
     </div>
   </div>
 
+  <div id="delete-session-forever-modal" class="clear-session-modal clear-session-modal--stacked hidden" role="dialog" aria-modal="true" aria-labelledby="delete-session-forever-title">
+    <div class="clear-session-modal-card">
+      <h3 id="delete-session-forever-title" class="clear-session-modal-title">Delete session</h3>
+      <p id="delete-session-forever-message" class="delete-session-message"></p>
+      <div class="clear-session-modal-actions">
+        <button id="delete-session-forever-confirm-btn" class="clear-session-modal-btn clear-session-modal-btn--danger" type="button">Delete forever</button>
+        <button id="delete-session-forever-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div id="delete-history-modal" class="clear-session-modal clear-session-modal--stacked hidden" role="dialog" aria-modal="true" aria-labelledby="delete-history-title">
     <div class="clear-session-modal-card">
       <h3 id="delete-history-title" class="clear-session-modal-title">Delete from history</h3>
@@ -701,7 +721,8 @@
       <h3 id="history-modal-title" class="clear-session-modal-title">Session history</h3>
       <div class="history-modal-tabs" role="tablist" aria-label="Session history views">
         <button id="history-tab-sessions-btn" class="history-modal-tab history-modal-tab--active" type="button" role="tab" aria-selected="true" aria-controls="history-sessions-panel">Sessions</button>
-        <button id="history-tab-report-btn" class="history-modal-tab" type="button" role="tab" aria-selected="false" aria-controls="history-report-panel">Earnings report</button>
+        <button id="history-tab-report-btn" class="history-modal-tab" type="button" role="tab" aria-selected="false" aria-controls="history-report-panel">Earnings</button>
+        <button id="history-tab-archive-btn" class="history-modal-tab" type="button" role="tab" aria-selected="false" aria-controls="history-archive-panel">Archive</button>
       </div>
       <div id="history-date-toolbar" class="history-report-toolbar">
         <div class="history-report-presets">
@@ -743,6 +764,9 @@
       <div id="history-sessions-panel" class="history-modal-panel" role="tabpanel">
         <div id="history-list" class="history-list"></div>
       </div>
+      <div id="history-archive-panel" class="history-modal-panel hidden" role="tabpanel">
+        <div id="history-archive-list" class="history-list"></div>
+      </div>
       <div id="history-report-panel" class="history-modal-panel hidden" role="tabpanel">
         <div id="history-report-summary" class="history-report-summary"></div>
         <div class="history-report-charts">
@@ -776,6 +800,134 @@
         <button id="history-export-invoice-btn" class="clear-session-modal-btn hidden" type="button">Create Invoice</button>
         <button id="history-export-pdf-btn" class="clear-session-modal-btn hidden" type="button">Create Report</button>
         <button id="history-close-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="analytics-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="analytics-modal-title">
+    <div class="clear-session-modal-card analytics-modal-card">
+      <div class="analytics-modal-header">
+        <h3 id="analytics-modal-title" class="clear-session-modal-title analytics-modal-title">Analytics</h3>
+        <button type="button" id="analytics-close-btn" class="analytics-modal-close" aria-label="Close analytics">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="analytics-modal-toolbar">
+        <div class="analytics-range-presets" role="group" aria-label="Time range">
+          <button type="button" class="analytics-range-btn" data-analytics-preset="workWeek">Current work week</button>
+          <button type="button" class="analytics-range-btn" data-analytics-preset="last7">Last 7 days</button>
+          <button type="button" class="analytics-range-btn analytics-range-btn--active" data-analytics-preset="last14">Last 14 days</button>
+          <button type="button" class="analytics-range-btn" data-analytics-preset="lastMonth">Last month</button>
+          <button type="button" class="analytics-range-btn" data-analytics-preset="last3Months">Last 3 months</button>
+          <button type="button" class="analytics-range-btn" data-analytics-preset="custom">
+            Custom
+            <svg class="analytics-range-calendar-icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3.25" width="12" height="10.75" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M2 6.75h12" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M5.25 2.25v2.25M10.75 2.25v2.25" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div id="analytics-custom-dates" class="analytics-custom-dates hidden">
+          <div class="history-report-date-field">
+            <label class="history-report-date-label" for="analytics-range-start">From</label>
+            <input id="analytics-range-start" class="history-report-date-input" type="date" />
+          </div>
+          <div class="history-report-date-field">
+            <label class="history-report-date-label" for="analytics-range-end">To</label>
+            <input id="analytics-range-end" class="history-report-date-input" type="date" />
+          </div>
+        </div>
+        <div class="analytics-session-filter">
+          <div id="analytics-session-select-wrap" class="history-report-session-select-wrap">
+            <button type="button" id="analytics-session-trigger" class="history-report-session-trigger analytics-filter-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="analytics-session-menu">
+              <svg class="analytics-filter-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11l-4 5v3.5l-3 1.5v-5l-4-5z" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/></svg>
+              <span id="analytics-session-value" class="history-report-session-trigger-label">Filter</span>
+              <span class="history-report-session-trigger-chevron" aria-hidden="true">▾</span>
+            </button>
+            <div id="analytics-session-menu" class="history-report-session-menu hidden" role="listbox" aria-label="Filter by session"></div>
+          </div>
+        </div>
+      </div>
+      <div id="analytics-modal-body" class="analytics-modal-body">
+        <div class="analytics-summary-row">
+          <section class="analytics-card" id="analytics-card-completed"></section>
+          <section class="analytics-card" id="analytics-card-estimate"></section>
+          <section class="analytics-card" id="analytics-card-braindump"></section>
+        </div>
+        <div class="analytics-charts-row">
+          <section class="analytics-card analytics-chart-card">
+            <div class="analytics-card-header">
+              <h4 class="analytics-card-title">How you spend your time each day</h4>
+              <label class="analytics-select-label">
+                <span class="visually-hidden">Daily metric</span>
+                <select id="analytics-daily-metric" class="analytics-select">
+                  <option value="tasks"># of Tasks</option>
+                  <option value="time">Actual time</option>
+                </select>
+              </label>
+            </div>
+            <div id="analytics-daily-chart" class="analytics-chart"></div>
+          </section>
+          <section class="analytics-card analytics-chart-card">
+            <div class="analytics-card-header">
+              <h4 class="analytics-card-title">Estimated vs Actual time spent</h4>
+            </div>
+            <div id="analytics-est-actual-chart" class="analytics-chart"></div>
+          </section>
+        </div>
+        <section class="analytics-card analytics-table-card">
+          <div class="analytics-card-header">
+            <h4 class="analytics-card-title">Your tasks by session</h4>
+            <label class="analytics-select-label">
+              <span class="visually-hidden">Session breakdown metric</span>
+              <select id="analytics-session-metric" class="analytics-select">
+                <option value="tasks">% (by # of tasks)</option>
+                <option value="time">% (by actual time)</option>
+              </select>
+            </label>
+          </div>
+          <div class="analytics-table-wrap">
+            <table class="analytics-table">
+              <thead>
+                <tr>
+                  <th scope="col">Session</th>
+                  <th scope="col" id="analytics-session-pct-header">% (by # of tasks)</th>
+                  <th scope="col">Tasks completed</th>
+                  <th scope="col">Estimated time</th>
+                  <th scope="col">Actual time</th>
+                </tr>
+              </thead>
+              <tbody id="analytics-session-table-body"></tbody>
+              <tfoot id="analytics-session-table-foot"></tfoot>
+            </table>
+          </div>
+        </section>
+        <section class="analytics-card analytics-table-card">
+          <div class="analytics-card-header">
+            <h4 class="analytics-card-title">Completed tasks</h4>
+            <div class="analytics-completed-actions">
+              <label class="analytics-select-label">
+                <span class="visually-hidden">Grouping</span>
+                <select id="analytics-completed-grouping" class="analytics-select">
+                  <option value="none">No grouping</option>
+                  <option value="session">By session</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div class="analytics-table-wrap">
+            <table class="analytics-table analytics-table--completed">
+              <thead>
+                <tr>
+                  <th scope="col">Date</th>
+                  <th scope="col">Task description</th>
+                  <th scope="col">Estimated time</th>
+                  <th scope="col">Actual time</th>
+                  <th scope="col">Session</th>
+                </tr>
+              </thead>
+              <tbody id="analytics-completed-table-body"></tbody>
+              <tfoot id="analytics-completed-table-foot"></tfoot>
+            </table>
+          </div>
+        </section>
       </div>
     </div>
   </div>

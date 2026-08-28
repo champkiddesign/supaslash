@@ -25,6 +25,29 @@ let pendingUpdateCheck = null;
 let updaterLogPath = null;
 let updateWindowIpcReady = false;
 let pendingDialogResolve = null;
+let initialUpdateCheckSettled = false;
+let resolveInitialUpdateCheck = null;
+let notifyRenderer = null;
+
+const initialUpdateCheckPromise = new Promise((resolve) => {
+  resolveInitialUpdateCheck = resolve;
+});
+
+function settleInitialUpdateCheck(reason) {
+  if (initialUpdateCheckSettled) return;
+  initialUpdateCheckSettled = true;
+  writeUpdaterLog(`Initial update check settled: ${reason}`);
+  resolveInitialUpdateCheck();
+}
+
+function waitForInitialUpdateCheck() {
+  return initialUpdateCheckPromise;
+}
+
+function sendRendererEvent(channel) {
+  if (typeof notifyRenderer !== 'function') return;
+  notifyRenderer(channel);
+}
 
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = false;
@@ -304,7 +327,10 @@ async function promptDownload(info) {
     sizeKey: 'promptCompact',
   });
 
-  if (response !== 0) return;
+  if (response !== 0) {
+    settleInitialUpdateCheck('download-declined');
+    return;
+  }
 
   isDownloading = true;
   openProgressWindow();
@@ -326,6 +352,7 @@ async function promptDownload(info) {
   } catch (err) {
     console.error('Failed to start update download:', err);
     await showDownloadError(err);
+    settleInitialUpdateCheck('download-failed');
   }
 }
 
@@ -350,6 +377,8 @@ async function promptInstall(info) {
   if (installPromptOpen || quittingForUpdate) return;
   installPromptOpen = true;
   updateReadyToInstall = true;
+  settleInitialUpdateCheck('downloaded');
+  sendRendererEvent('update-install-pending');
 
   closeUpdateUiWindow();
   clearDockBadge();
@@ -438,10 +467,17 @@ async function checkForUpdates({ manual = false } = {}) {
   }
 }
 
-function setupAutoUpdater() {
-  if (!app.isPackaged) return;
+function setupAutoUpdater(options = {}) {
+  notifyRenderer = typeof options.notifyRenderer === 'function' ? options.notifyRenderer : null;
+
+  if (!app.isPackaged) {
+    settleInitialUpdateCheck('dev-mode');
+    return;
+  }
 
   ensureUpdateWindowIpc();
+
+  setTimeout(() => settleInitialUpdateCheck('timeout'), 12000);
 
   try {
     updaterLogPath = path.join(app.getPath('logs'), 'updater.log');
@@ -474,6 +510,7 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('update-not-available', () => {
+    settleInitialUpdateCheck('no-update');
     if (manualCheckPending) {
       manualCheckPending = false;
       showNoUpdatesDialog().catch((err) => {
@@ -500,11 +537,13 @@ function setupAutoUpdater() {
       showDownloadError(err).catch((dialogErr) => {
         writeUpdaterLog(`Failed to show download error dialog: ${dialogErr.message}`);
       });
+      settleInitialUpdateCheck('download-error');
     }
   });
 
   checkForUpdates().catch((err) => {
     writeUpdaterLog(`Initial update check failed: ${err.message}`);
+    settleInitialUpdateCheck('check-failed');
   });
 }
 
@@ -514,4 +553,5 @@ module.exports = {
   isQuittingForUpdate,
   isUpdateReadyToInstall,
   isUpdateDownloading,
+  waitForInitialUpdateCheck,
 };
