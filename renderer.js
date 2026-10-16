@@ -216,6 +216,8 @@ const billableCancelBtn = document.getElementById('billable-cancel-btn');
 const backToEditBtn = document.getElementById('back-to-edit-btn');
 const timerSizeBtn = document.getElementById('timer-size-btn');
 const timerHideBtn = document.getElementById('timer-hide-btn');
+const timerActionsToggle = document.getElementById('timer-actions-toggle');
+const timerActionsGroup = document.getElementById('timer-actions-group');
 const pauseBtn = document.getElementById('pause-btn');
 const timerDisplay = document.getElementById('timer-display');
 const timerModeLabel = document.getElementById('timer-mode-label');
@@ -401,6 +403,7 @@ const SESSION_HISTORY_MAX = 200;
 const FOCUS_BAR_BASE_HEIGHT = 56;
 const FOCUS_BAR_BASE_MIN_WIDTH = 300;
 const FOCUS_BAR_BASE_MAX_WIDTH = 450;
+const FOCUS_BAR_ACTIONS_OPEN_EXTRA = 160;
 const FOCUS_BAR_SCALE_SMALL = 0.75;
 const TIMER_BAR_HIDE_DURATION_MS = 5 * 60 * 1000;
 const FOCUS_DRAWER_GAP = 6;
@@ -640,8 +643,24 @@ function clampBarWidth(width, scale = getTimerBarScale()) {
   if (isTimerBarWideLayout()) {
     return Math.max(minWidth, width);
   }
-  const maxWidth = Math.round(FOCUS_BAR_BASE_MAX_WIDTH * scale);
+  const actionsExtra = timerBar.classList.contains('timer-actions-open')
+    ? Math.round(FOCUS_BAR_ACTIONS_OPEN_EXTRA * scale)
+    : 0;
+  const maxWidth = Math.round(FOCUS_BAR_BASE_MAX_WIDTH * scale) + actionsExtra;
   return Math.max(minWidth, Math.min(maxWidth, width));
+}
+
+function setTimerActionsOpen(open) {
+  const next = !!open;
+  if (timerBar.classList.contains('timer-actions-open') === next) return;
+  timerBar.classList.toggle('timer-actions-open', next);
+  if (timerActionsToggle) {
+    timerActionsToggle.setAttribute('aria-expanded', next ? 'true' : 'false');
+    timerActionsToggle.title = next ? 'Hide actions' : 'More actions';
+    timerActionsToggle.setAttribute('aria-label', next ? 'Hide actions' : 'More actions');
+  }
+  invalidateFocusBarWidthCache();
+  scheduleFocusDimensionsUpdate();
 }
 
 function updateTimerBarExpandedLayout() {
@@ -11740,6 +11759,14 @@ fullscreenTaskToggleBtn?.addEventListener('click', (e) => {
 timerSizeBtn.addEventListener('click', toggleTimerBarSize);
 timerHideBtn.addEventListener('click', hideTimerBar);
 pauseBtn.addEventListener('click', toggleTimer);
+timerActionsToggle?.addEventListener('click', () => {
+  setTimerActionsOpen(!timerBar.classList.contains('timer-actions-open'));
+});
+timerActionsGroup?.addEventListener('click', (e) => {
+  const button = e.target.closest('button');
+  if (!button || button.disabled || !timerActionsGroup.contains(button)) return;
+  setTimerActionsOpen(false);
+});
 timerDisplay.addEventListener('click', toggleTimerView);
 
 window.slashIt.onFocusPositionChanged(({ x, y }) => {
