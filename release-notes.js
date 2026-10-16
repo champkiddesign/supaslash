@@ -1,4 +1,13 @@
 const RELEASES = {
+  '1.0.14': {
+    releasedAt: '2026-10-16',
+    slides: [
+      {
+        title: 'Quieter timebar',
+        description: 'The focus timebar now keeps the drag grip, task timer, and complete check in view, and tucks expand, hide, edit, pause, and skip behind an ellipsis. Click the ellipsis to open those actions in a row, then they fold back up after you use one.',
+      },
+    ],
+  },
   '1.0.12': {
     releasedAt: '2026-07-22',
     slides: [
