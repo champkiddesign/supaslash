@@ -391,6 +391,14 @@
           </div>
         </div>
         <div id="timer-actions" class="timer-actions">
+          <button id="timer-actions-toggle" class="icon-btn timer-actions-toggle" type="button" title="More actions" aria-label="More actions" aria-expanded="false" aria-controls="timer-actions-group">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <circle cx="5" cy="12" r="2"/>
+              <circle cx="12" cy="12" r="2"/>
+              <circle cx="19" cy="12" r="2"/>
+            </svg>
+          </button>
+          <div id="timer-actions-group" class="timer-actions-group">
           <button id="timer-size-btn" class="icon-btn icon-size" type="button" title="Smaller timer bar" aria-label="Make timer bar smaller">
             <svg class="size-icon-small" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
               <polyline points="4 14 10 14 10 20"/>
@@ -426,6 +434,7 @@
           <button id="skip-btn" class="icon-btn icon-skip" type="button" title="Skip task" aria-label="Skip task">
             <img src="skip-next.png" width="14" height="14" alt="" aria-hidden="true" class="skip-icon" />
           </button>
+          </div>
           <button id="complete-btn" class="icon-btn icon-complete" type="button" title="Complete task" aria-label="Complete task">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
               <path d="M20 6 9 17l-5-5"/>

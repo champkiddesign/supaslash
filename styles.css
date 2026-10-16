@@ -4718,6 +4718,10 @@ body.app-license-locked #focus-view {
   -webkit-app-region: no-drag;
 }
 
+.focus-stack:has(.timer-bar.timer-actions-open) {
+  max-width: calc((450px + 160px) * var(--timer-bar-scale, 1));
+}
+
 .focus-stack.focus-stack--expanded,
 .focus-stack:has(.timer-bar--earnings-split) {
   max-width: none;
@@ -4936,6 +4940,10 @@ body.app-license-locked #focus-view {
   border-radius: var(--window-radius);
 }
 
+.timer-bar.timer-actions-open {
+  max-width: calc((450px + 160px) * var(--timer-bar-scale, 1));
+}
+
 .timer-bar.timer-bar--expanded,
 .timer-bar.timer-bar--earnings-split {
   max-width: none;
@@ -5072,62 +5080,42 @@ body.app-license-locked #focus-view {
 }
 
 .timer-actions {
-  position: absolute;
-  top: 0;
-  right: calc(12px * var(--timer-bar-scale, 1));
-  bottom: 0;
+  position: relative;
   z-index: 3;
-  width: var(--timer-actions-width);
+  flex-shrink: 0;
+  width: auto;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: calc(4px * var(--timer-bar-scale, 1));
-  visibility: hidden;
-  opacity: 0;
-  pointer-events: none;
   -webkit-app-region: no-drag;
-  transition: opacity 0.35s ease, visibility 0s linear 0.35s;
 }
 
-.timer-actions::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background-color: var(--bg);
-  pointer-events: none;
+.timer-actions-group {
+  display: none;
+  align-items: center;
+  flex-shrink: 0;
+  gap: calc(4px * var(--timer-bar-scale, 1));
 }
 
+.timer-bar.timer-actions-open .timer-actions-group {
+  display: flex;
+}
+
+.timer-actions::before,
 .timer-actions::after {
   display: none;
 }
 
-.timer-bar.is-running .timer-actions::before {
-  background-image: var(--grain-image);
-  background-repeat: repeat;
-  background-size: var(--grain-size);
-}
-
-.timer-bar:hover .timer-actions,
-.timer-bar:has(.timer-actions :focus-visible) .timer-actions {
-  visibility: visible;
-  opacity: 1;
-  pointer-events: auto;
-  transition: opacity 0.35s ease, visibility 0s;
-}
-
-/* Block hover controls while Overtime/Extend must be resolved */
-.timer-bar.timer-bar--expanded .timer-actions,
-.timer-bar.timer-bar--expanded:hover .timer-actions,
-.timer-bar.timer-bar--expanded:has(.timer-actions :focus-visible) .timer-actions {
-  visibility: hidden;
-  opacity: 0;
-  pointer-events: none;
+/* Overtime/Extend replaces the icon row until it is resolved */
+.timer-bar.timer-bar--expanded .timer-actions {
+  display: none;
 }
 
 .timer-actions button {
   position: relative;
   z-index: 1;
+  flex-shrink: 0;
   cursor: pointer;
 }
 
@@ -5204,7 +5192,8 @@ body.app-license-locked #focus-view {
 }
 
 .timer-actions .icon-size svg,
-.timer-actions .icon-hide svg {
+.timer-actions .icon-hide svg,
+.timer-actions .timer-actions-toggle svg {
   width: calc(14px * var(--timer-bar-scale, 1));
   height: calc(14px * var(--timer-bar-scale, 1));
 }
@@ -5516,6 +5505,7 @@ body.mode-focus.timer-bar-size-fullscreen .pause-btn {
 
 body.mode-focus.timer-bar-size-fullscreen .timer-actions .icon-size svg,
 body.mode-focus.timer-bar-size-fullscreen .timer-actions .icon-hide svg,
+body.mode-focus.timer-bar-size-fullscreen .timer-actions .timer-actions-toggle svg,
 body.mode-focus.timer-bar-size-fullscreen .pause-btn svg,
 body.mode-focus.timer-bar-size-fullscreen .timer-actions .icon-complete svg {
   width: clamp(16px, 1.8vw, 20px);
