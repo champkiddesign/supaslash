@@ -1,5 +1,5 @@
 const RELEASES = {
-  '1.0.14': {
+  '1.0.15': {
     releasedAt: '2026-10-16',
     slides: [
       {
