@@ -1,4 +1,13 @@
 const RELEASES = {
+  '1.0.15': {
+    releasedAt: '2026-10-16',
+    slides: [
+      {
+        title: 'Today column',
+        description: 'Turn on Today from Menu → Labs to plan the day between Sessions and Queue. Drag tasks onto a 6:00am–10:00pm grid to block time in 15-minute steps. Color each block, and send its tasks to the queue without removing them from their session.',
+      },
+    ],
+  },
   '1.0.14': {
     releasedAt: '2026-10-16',
     slides: [
