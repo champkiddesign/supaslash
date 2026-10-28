@@ -80,7 +80,23 @@
     </div>
 
     <footer class="edit-footer">
-      <button id="start-btn" class="start-session-btn" data-tutorial="start-session" disabled>Start Session</button>
+      <div class="edit-footer-actions">
+        <div class="edit-footer-session-row">
+          <button id="start-btn" class="start-session-btn" data-tutorial="start-session" disabled>Start Session</button>
+          <button
+            id="design-sprint-toggle-btn"
+            class="design-sprint-toggle-btn hidden"
+            type="button"
+            role="switch"
+            aria-checked="false"
+            aria-label="Design Sprint mode"
+            title="Design Sprint mode"
+            disabled
+          >
+            <span class="design-sprint-toggle-icon" aria-hidden="true"></span>
+          </button>
+        </div>
+      </div>
     </footer>
 
     <div id="clear-session-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="clear-session-title">
@@ -454,6 +470,21 @@
       </div>
     </div>
     </div>
+  </div>
+
+  <div id="design-sprint-bar" class="design-sprint-bar hidden" aria-hidden="true">
+    <div
+      id="design-sprint-task-menu"
+      class="design-sprint-task-menu hidden"
+      role="menu"
+      aria-label="Task actions"
+    >
+      <button id="design-sprint-pause-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Pause</button>
+      <button id="design-sprint-skip-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Skip</button>
+      <button id="design-sprint-edit-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Edit</button>
+      <button id="design-sprint-dashboard-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Dashboard</button>
+    </div>
+    <div id="design-sprint-track" class="design-sprint-track"></div>
   </div>
 
   <!-- All Done -->
