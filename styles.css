@@ -2630,6 +2630,10 @@ body.app-license-locked #focus-view {
   display: none;
 }
 
+#design-sprint-toggle-btn.hidden {
+  display: none;
+}
+
 .plan-session-btn:hover,
 .plan-session-btn--header:hover {
   border-color: var(--accent);

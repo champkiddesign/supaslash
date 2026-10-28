@@ -4,7 +4,7 @@ const RELEASES = {
     slides: [
       {
         title: 'Design Sprints',
-        description: 'Enable Design Sprints in Menu → Labs, then use the sprint toggle beside Start Session. When it is on, every queued task needs a time limit and focus mode opens a full-width timeline along the bottom of your screen. Segments are sized by each task\'s limit, the active task counts down, and skipped tasks show as skipped. Tap the current task for a quick menu, or tap another task to jump back or ahead.',
+        description: 'Enable Design Sprints in Menu → Labs to show the sprint toggle beside Start Session. When it is on, every queued task needs a time limit and focus mode opens a full-width timeline along the bottom of your screen. Segments are sized by each task\'s limit, the active task counts down, and skipped tasks show as skipped. Tap the current task for a quick menu, or tap another task to jump back or ahead.',
       },
       {
         title: 'Quieter timebar',

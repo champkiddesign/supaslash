@@ -3272,7 +3272,10 @@ function updateQuickStartButtonVisibility() {
 
 function updateDesignSprintToggleVisibility() {
   if (!designSprintToggleBtn) return;
-  designSprintToggleBtn.classList.toggle('hidden', !isLabsFeatureEnabled('designSprints'));
+  const visible = isLabsFeatureEnabled('designSprints');
+  designSprintToggleBtn.classList.toggle('hidden', !visible);
+  designSprintToggleBtn.hidden = !visible;
+  designSprintToggleBtn.setAttribute('aria-hidden', visible ? 'false' : 'true');
 }
 
 function updateDesignSprintToggleUi() {
@@ -10771,7 +10774,7 @@ function setLabsFeatureEnabled(featureId, enabled) {
 
   if (featureId === 'designSprints') {
     updateDesignSprintToggleVisibility();
-  updateDesignSprintToggleUi();
+    updateDesignSprintToggleUi();
     if (!enabled) {
       if (state.designSprintMode && state.mode === 'focus') {
         state.designSprintMode = false;
