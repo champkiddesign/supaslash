@@ -41,9 +41,7 @@ const state = {
     quickStart: false,
     pinnedFilters: false,
     analytics: false,
-    todayColumn: false,
   },
-  todayBlocks: [],
   invoiceSettings: {
     name: '',
     logoDataUrl: '',
@@ -1374,11 +1372,6 @@ function applyTaskDetailFields(normalized, task) {
   return normalized;
 }
 
-function applyTaskId(normalized, task) {
-  if (typeof task?.id === 'string' && task.id.trim()) normalized.id = task.id;
-  return normalized;
-}
-
 function applyTaskCreatedAt(normalized, task) {
   if (typeof task?.createdAt === 'number' && Number.isFinite(task.createdAt)) {
     normalized.createdAt = task.createdAt;
@@ -1410,16 +1403,15 @@ function normalizeSessionTask(task) {
   if (task.historyRecorded) {
     normalized.historyRecorded = true;
   }
-  applyTaskId(normalized, task);
   applyTaskCreatedAt(normalized, task);
   return applyTaskDetailFields(normalized, task);
 }
 
 function normalizeBraindumpTask(task) {
-  return applyTaskDetailFields(applyTaskCreatedAt(applyTaskId({
+  return applyTaskDetailFields(applyTaskCreatedAt({
     text: task.text || '',
     limitMs: task.limitMs ?? null,
-  }, task), task), task);
+  }, task), task);
 }
 
 function parseHourlyRate(value) {
@@ -1491,9 +1483,6 @@ function normalizePlannedSession(session) {
     billableRoundMinutes: normalizeBillableRoundMinutes(session.billableRoundMinutes),
     billableRoundScope: normalizeBillableRoundScope(session.billableRoundScope),
     pinned: !!session.pinned && id !== BRAINDUMP_SESSION_ID,
-    countdownMs: Number.isFinite(Number(session.countdownMs)) && Number(session.countdownMs) > 0
-      ? Math.round(Number(session.countdownMs))
-      : null,
   };
 }
 
@@ -2365,7 +2354,6 @@ function hasPlannedSessionQueueTasks(sessionId) {
 function getPlannedSessionEstimateTotalMs(sessionId) {
   const session = getPlannedSession(sessionId);
   if (!session) return 0;
-  if (session.countdownMs > 0) return session.countdownMs;
   return session.tasks.reduce((sum, task) => sum + (task.limitMs || 0), 0);
 }
 
@@ -3326,9 +3314,7 @@ function renderSessionBillableButton(session, tutorialAnchor) {
 function renderSessionEstimateBadge(session) {
   const totalMs = getPlannedSessionEstimateTotalMs(session.id);
   if (!totalMs) return '';
-  const fromCountdown = session.countdownMs > 0;
-  const title = fromCountdown ? 'Session countdown' : 'Total planned time from task estimates';
-  return `<span class="session-estimate-badge" title="${title}">${escapeHtml(formatLimitField(totalMs))}</span>`;
+  return `<span class="session-estimate-badge" title="Total planned time from task estimates">${escapeHtml(formatLimitField(totalMs))}</span>`;
 }
 
 function renderSessionEarningsBadge(session) {
@@ -3554,7 +3540,6 @@ function captureUndoSnapshot() {
     listTemplates: structuredClone(state.listTemplates),
     invoiceSettings: structuredClone(state.invoiceSettings),
     expandedSessionIds: [...state.expandedSessionIds],
-    todayBlocks: structuredClone(state.todayBlocks),
   };
 }
 
@@ -3577,7 +3562,6 @@ function applyUndoSnapshot(snapshot) {
   state.listTemplates = structuredClone(snapshot.listTemplates);
   state.invoiceSettings = structuredClone(snapshot.invoiceSettings);
   state.expandedSessionIds = new Set(snapshot.expandedSessionIds);
-  state.todayBlocks = structuredClone(snapshot.todayBlocks || []);
   state.selectedTasks.clear();
   state.lastSelected = null;
   state.renamingSessionId = null;
@@ -3644,8 +3628,6 @@ function isUndoRedoShortcutBlocked() {
   if (!archiveSessionModal.classList.contains('hidden')) return true;
   if (!billableModal.classList.contains('hidden')) return true;
   if (!quickStartModal?.classList.contains('hidden')) return true;
-  if (!document.getElementById('today-split-modal')?.classList.contains('hidden')) return true;
-  if (!document.getElementById('today-block-modal')?.classList.contains('hidden')) return true;
   if (!completeTaskModal.classList.contains('hidden')) return true;
   if (!saveTemplateModal.classList.contains('hidden')) return true;
   if (!createSessionFilterModal?.classList.contains('hidden')) return true;
@@ -3713,7 +3695,6 @@ function persist(options = {}) {
     pinnedSessionListFilters: state.pinnedSessionListFilters,
     labsFeatures: state.labsFeatures,
     quickStartRateSettings: state.quickStartRateSettings,
-    todayBlocks: state.todayBlocks,
   });
 }
 
@@ -3750,10 +3731,7 @@ function showView(mode) {
       window.slashIt.showFocusWindow();
     }
     applyTimerBarSizeClass();
-    window.slashIt.setWindowMode(
-      mode,
-      mode === 'edit' ? { todayColumn: isLabsFeatureEnabled('todayColumn') } : undefined,
-    );
+    window.slashIt.setWindowMode(mode);
     closeSessionDrawer({ immediate: true });
     updateFullscreenTaskPanel();
   } else {
@@ -6876,21 +6854,11 @@ function renderTaskList(listEl, listId) {
     const notesIndicatorHtml = taskHasNotes(task)
       ? '<span class="task-notes-indicator" aria-hidden="true"></span>'
       : '';
-    const timeblockIndicatorHtml = isTaskTimeblocked(task)
-      ? `<span class="task-timeblock-indicator" title="Timeblocked" aria-label="Timeblocked">
-          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-            <circle cx="6" cy="6" r="4.25" fill="none" stroke="currentColor" stroke-width="1.2"/>
-            <path d="M6 3.4V6.2L7.7 7.4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-          </svg>
-        </span>`
-      : '';
-    if (isTaskTimeblocked(task)) li.classList.add('task-item--timeblocked');
 
     li.innerHTML = `
       ${leadControlHtml}
       <span class="task-text-cell">
         ${notesIndicatorHtml}
-        ${timeblockIndicatorHtml}
         <span class="task-text">${escapeHtml(task.text)}</span>
       </span>
       ${limitFieldHtml}
@@ -7359,8 +7327,6 @@ function isSettingsUiOpen() {
     || !historyModal.classList.contains('hidden')
     || !templatesModal.classList.contains('hidden')
     || !labsModal?.classList.contains('hidden')
-    || !document.getElementById('today-split-modal')?.classList.contains('hidden')
-    || !document.getElementById('today-block-modal')?.classList.contains('hidden')
     || !saveTemplateModal.classList.contains('hidden')
     || !createSessionFilterModal?.classList.contains('hidden')
     || !billableModal.classList.contains('hidden')
@@ -10264,11 +10230,6 @@ const LABS_FEATURES = [
     title: 'Pinned filters',
     description: 'Pin custom session filters for one-click access in the Sessions list. Open the filter menu (funnel icon next to Sessions), then click the pin icon on any custom filter. Pinned filters appear above your pinned sessions when you are on All sessions — click one to show only the sessions in that filter. Unpin from the same filter menu anytime.',
   },
-  {
-    id: 'todayColumn',
-    title: 'Today column',
-    description: 'Show a Today column between Sessions and Queue. Drag tasks onto the day to block time from 6:00am to 10:00pm. Hiding the column keeps your blocks, and turning it back on brings them back.',
-  },
 ];
 const LABS_FEATURES_STORAGE_KEY = 'supaslash-labs-features';
 
@@ -10279,7 +10240,6 @@ function normalizeLabsFeatures(saved) {
     quickStart: !!source.quickStart,
     pinnedFilters: !!source.pinnedFilters,
     analytics: !!source.analytics,
-    todayColumn: !!source.todayColumn,
   };
 }
 
@@ -10336,14 +10296,6 @@ function setLabsFeatureEnabled(featureId, enabled) {
   if (featureId === 'analytics') {
     updateAnalyticsMenuVisibility();
     if (!enabled) closeAnalyticsModal();
-  }
-
-  if (featureId === 'todayColumn') {
-    updateTodayColumnVisibility();
-    if (state.mode === 'edit') {
-      window.slashIt.setWindowMode('edit', { todayColumn: !!enabled });
-      renderTodayColumn();
-    }
   }
 
   persist();
@@ -10564,9 +10516,6 @@ function applySavedData(saved, { mergeLabsFromLocal = true } = {}) {
     ? resolveLabsFeatures(saved.labsFeatures)
     : normalizeLabsFeatures(saved.labsFeatures);
   writeLabsFeaturesToStorage(state.labsFeatures);
-  state.todayBlocks = Array.isArray(saved.todayBlocks)
-    ? saved.todayBlocks.map(normalizeTodayBlock).filter(Boolean)
-    : [];
   updateQuickStartButtonVisibility();
   updateAnalyticsMenuVisibility();
   state.quickStartRateSettings = normalizeQuickStartRateSettings(saved.quickStartRateSettings);
@@ -10623,10 +10572,8 @@ async function applyRestoredData(saved) {
 
 function renderEditView() {
   hideTaskContextMenu();
-  updateTodayColumnVisibility();
   renderPlannedSessions();
   renderTaskList(sessionList, 'session');
-  renderTodayColumn();
   if (isSessionReadyToComplete()) {
     startBtn.disabled = false;
     startBtn.textContent = 'Complete Session';
@@ -11706,14 +11653,6 @@ document.addEventListener('keydown', (e) => {
       closeLabsModal();
       return;
     }
-    if (!document.getElementById('today-block-modal')?.classList.contains('hidden')) {
-      closeTodayBlockModal();
-      return;
-    }
-    if (!document.getElementById('today-split-modal')?.classList.contains('hidden')) {
-      cancelTodaySplit();
-      return;
-    }
     if (!shortcutsModal.classList.contains('hidden')) {
       closeShortcutsModal();
       return;
@@ -11936,694 +11875,6 @@ function loadPlannedSessionsFromSaved(saved) {
   state.expandedSessionIds = new Set();
 }
 
-const TODAY_START_MIN = 6 * 60;
-const TODAY_END_MIN = 22 * 60;
-const TODAY_PX_PER_HOUR = 72;
-const TODAY_DEFAULT_COLOR = '#ff5500';
-const TODAY_COLOR_PRESETS = [
-  '#ff5500',
-  '#ff6a20',
-  '#ff453a',
-  '#ff9f0a',
-  '#ffd60a',
-  '#30d158',
-  '#64d2ff',
-  '#c4b5fd',
-  '#ffffff',
-];
-
-let pendingTodaySplit = null;
-let openTodayBlockId = null;
-let todayPointer = null;
-
-function todayDateKey(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function snapMinutes(minutes) {
-  return Math.round(minutes / 15) * 15;
-}
-
-function normalizeHexColor(value, { allowShort = false } = {}) {
-  if (typeof value !== 'string') return null;
-  let hex = value.trim();
-  if (!hex) return null;
-  if (!hex.startsWith('#')) hex = `#${hex}`;
-  if (allowShort && /^#[0-9a-fA-F]{3}$/.test(hex)) {
-    hex = `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
-  }
-  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return null;
-  return hex.toLowerCase();
-}
-
-function normalizeTodayBlock(raw) {
-  if (!raw || typeof raw !== 'object') return null;
-  const startMin = Number(raw.startMin);
-  const durationMin = Number(raw.durationMin);
-  if (!Number.isFinite(startMin) || !Number.isFinite(durationMin)) return null;
-  const taskIds = Array.isArray(raw.taskIds)
-    ? raw.taskIds.filter((id) => typeof id === 'string' && id)
-    : [];
-  const taskNames = Array.isArray(raw.taskNames)
-    ? raw.taskNames.map((name) => String(name || 'Task'))
-    : [];
-  while (taskNames.length < taskIds.length) taskNames.push('Task');
-  const snappedStart = Math.max(TODAY_START_MIN, Math.min(snapMinutes(startMin), TODAY_END_MIN - 15));
-  let snappedDuration = Math.max(15, snapMinutes(durationMin));
-  if (snappedStart + snappedDuration > TODAY_END_MIN) {
-    snappedDuration = TODAY_END_MIN - snappedStart;
-  }
-  return {
-    id: typeof raw.id === 'string' && raw.id ? raw.id : crypto.randomUUID(),
-    date: typeof raw.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.date) ? raw.date : todayDateKey(),
-    title: typeof raw.title === 'string' && raw.title.trim() ? raw.title.trim() : 'Time block',
-    sessionId: typeof raw.sessionId === 'string' && raw.sessionId ? raw.sessionId : null,
-    taskIds,
-    taskNames,
-    startMin: snappedStart,
-    durationMin: snappedDuration,
-    color: normalizeHexColor(raw.color) || TODAY_DEFAULT_COLOR,
-  };
-}
-
-function todayBlocksForToday() {
-  const today = todayDateKey();
-  return state.todayBlocks.filter((block) => block.date === today);
-}
-
-function isTaskTimeblocked(task) {
-  if (!task?.id) return false;
-  return todayBlocksForToday().some((block) => block.taskIds.includes(task.id));
-}
-
-function ensureTaskId(task) {
-  if (!task) return '';
-  if (typeof task.id === 'string' && task.id) return task.id;
-  task.id = crypto.randomUUID();
-  return task.id;
-}
-
-function findTaskById(taskId) {
-  if (!taskId) return null;
-  for (const session of state.plannedSessions) {
-    const task = session.tasks.find((item) => item.id === taskId);
-    if (task) return task;
-  }
-  return state.sessionTasks.find((item) => item.id === taskId) || null;
-}
-
-function formatClock(minutes) {
-  const normalized = ((Math.round(minutes) % 1440) + 1440) % 1440;
-  const hour24 = Math.floor(normalized / 60);
-  const minute = normalized % 60;
-  const hour12 = hour24 % 12 || 12;
-  return `${hour12}:${String(minute).padStart(2, '0')}`;
-}
-
-function formatClockWithPeriod(minutes) {
-  const normalized = ((Math.round(minutes) % 1440) + 1440) % 1440;
-  const hour24 = Math.floor(normalized / 60);
-  const suffix = hour24 >= 12 ? 'PM' : 'AM';
-  return `${formatClock(normalized)} ${suffix}`;
-}
-
-function formatTimeRange(startMin, durationMin) {
-  return `${formatClock(startMin)} - ${formatClock(startMin + durationMin)}`;
-}
-
-function formatHourLabel(hour24) {
-  const suffix = hour24 >= 12 ? 'PM' : 'AM';
-  const hour12 = hour24 % 12 || 12;
-  return `${hour12}${suffix}`;
-}
-
-function minutesToTop(minutes) {
-  return ((minutes - TODAY_START_MIN) / 60) * TODAY_PX_PER_HOUR;
-}
-
-function minutesToHeight(durationMin) {
-  return Math.max(18, (durationMin / 60) * TODAY_PX_PER_HOUR - 3);
-}
-
-function minutesFromClientY(clientY) {
-  const grid = document.getElementById('today-grid');
-  if (!grid) return TODAY_START_MIN;
-  const rect = grid.getBoundingClientRect();
-  if (rect.height <= 0) return TODAY_START_MIN;
-  const ratio = (clientY - rect.top) / rect.height;
-  const span = TODAY_END_MIN - TODAY_START_MIN;
-  return TODAY_START_MIN + ratio * span;
-}
-
-function rangesOverlap(startA, durationA, startB, durationB) {
-  return startA < startB + durationB && startB < startA + durationA;
-}
-
-function blocksTouchingRange(startMin, durationMin, ignoreId, extras = []) {
-  return [
-    ...todayBlocksForToday().filter((block) => block.id !== ignoreId),
-    ...extras,
-  ].filter((block) => rangesOverlap(startMin, durationMin, block.startMin, block.durationMin));
-}
-
-function findFreeStart(startMin, durationMin, ignoreId, extras = []) {
-  if (durationMin < 15 || durationMin > TODAY_END_MIN - TODAY_START_MIN) return null;
-  let cursor = snapMinutes(startMin);
-  if (cursor < TODAY_START_MIN) cursor = TODAY_START_MIN;
-  for (let guard = 0; guard < 80; guard += 1) {
-    if (cursor + durationMin > TODAY_END_MIN) return null;
-    const hits = blocksTouchingRange(cursor, durationMin, ignoreId, extras)
-      .sort((a, b) => a.startMin - b.startMin);
-    if (hits.length === 0) return cursor;
-    let next = hits[0].startMin + hits[0].durationMin;
-    if (next % 15 !== 0) next = Math.ceil(next / 15) * 15;
-    if (next <= cursor) next = cursor + 15;
-    cursor = next;
-  }
-  return null;
-}
-
-function updateTodayColumnVisibility() {
-  const column = document.getElementById('today-column');
-  const columns = document.querySelector('.edit-columns');
-  const enabled = isLabsFeatureEnabled('todayColumn');
-  column?.classList.toggle('hidden', !enabled);
-  columns?.classList.toggle('edit-columns--today', enabled);
-}
-
-function taskSessionInfo(listId, task) {
-  if (isPlannedList(listId)) {
-    const sessionId = getPlannedSessionIdFromListId(listId);
-    const session = getPlannedSession(sessionId);
-    return {
-      kind: 'session',
-      key: `session:${sessionId}`,
-      sessionId,
-      sessionName: session?.name || 'Session',
-    };
-  }
-  if (task?.sourceSessionId) {
-    const session = getPlannedSession(task.sourceSessionId);
-    return {
-      kind: 'session',
-      key: `session:${task.sourceSessionId}`,
-      sessionId: task.sourceSessionId,
-      sessionName: session?.name || task.sourceSessionName || 'Session',
-    };
-  }
-  return { kind: 'orphan', key: null, sessionId: null, sessionName: null };
-}
-
-function groupDragItemsForToday(items) {
-  const groups = [];
-  const byKey = new Map();
-  items.forEach((item) => {
-    const task = getTasksForList(item.list)?.[item.index];
-    if (!task) return;
-    const info = taskSessionInfo(item.list, task);
-    const taskId = ensureTaskId(task);
-    const taskName = task.text || 'Task';
-    if (info.kind === 'orphan') {
-      groups.push({
-        kind: 'orphan',
-        key: `task:${taskId}`,
-        sessionId: null,
-        sessionName: null,
-        title: taskName,
-        taskIds: [taskId],
-        taskNames: [taskName],
-      });
-      return;
-    }
-    let group = byKey.get(info.key);
-    if (!group) {
-      group = {
-        kind: 'session',
-        key: info.key,
-        sessionId: info.sessionId,
-        sessionName: info.sessionName,
-        title: info.sessionName,
-        taskIds: [],
-        taskNames: [],
-      };
-      byKey.set(info.key, group);
-      groups.push(group);
-    }
-    if (!group.taskIds.includes(taskId)) {
-      group.taskIds.push(taskId);
-      group.taskNames.push(taskName);
-    }
-  });
-  groups.forEach((group) => {
-    if (group.kind !== 'session') return;
-    if (groups.length === 1 && group.taskIds.length === 1) {
-      group.title = group.taskNames[0] || group.title;
-      return;
-    }
-    group.title = group.sessionName || group.title;
-  });
-  return groups;
-}
-
-function createTodayBlock(group, startMin, durationMin) {
-  return {
-    id: crypto.randomUUID(),
-    date: todayDateKey(),
-    title: group.title,
-    sessionId: group.sessionId,
-    taskIds: group.taskIds.slice(),
-    taskNames: group.taskNames.slice(),
-    startMin,
-    durationMin,
-    color: TODAY_DEFAULT_COLOR,
-  };
-}
-
-function applyBlockCountdown(block) {
-  if (!block?.sessionId) return;
-  const session = getPlannedSession(block.sessionId);
-  if (!session) return;
-  session.countdownMs = block.durationMin * 60000;
-}
-
-function placeSingleTodayGroup(group, startMin) {
-  const placed = findFreeStart(startMin, 60, null, []);
-  if (placed == null) {
-    showAppAlert('That part of the day is full. Choose an open time.', { title: 'Today' });
-    return;
-  }
-  const block = createTodayBlock(group, placed, 60);
-  state.todayBlocks.push(block);
-  applyBlockCountdown(block);
-  persist();
-  renderEditView();
-}
-
-function openTodaySplitDialog(groups, startMin) {
-  pendingTodaySplit = { groups, startMin };
-  const message = document.getElementById('today-split-message');
-  const modal = document.getElementById('today-split-modal');
-  if (!message || !modal) return;
-  const items = groups.map((group) => {
-    const detail = group.kind === 'session'
-      ? `${group.title} — 1 hour, named for the session`
-      : `${group.title} — 1 hour, named for the task`;
-    return `<li>${escapeHtml(detail)}</li>`;
-  }).join('');
-  message.innerHTML = `
-    <p>This drop will create separate time blocks, placed back-to-back from ${escapeHtml(formatClockWithPeriod(startMin))}. Each block is 1 hour and skips time that is already taken.</p>
-    <ul>${items}</ul>
-  `;
-  modal.classList.remove('hidden');
-}
-
-function closeTodaySplitDialog() {
-  pendingTodaySplit = null;
-  document.getElementById('today-split-modal')?.classList.add('hidden');
-}
-
-function cancelTodaySplit() {
-  closeTodaySplitDialog();
-}
-
-function confirmTodaySplit() {
-  const pending = pendingTodaySplit;
-  closeTodaySplitDialog();
-  if (!pending) return;
-  const placements = [];
-  let cursor = snapMinutes(pending.startMin);
-  for (const group of pending.groups) {
-    const start = findFreeStart(cursor, 60, null, placements);
-    if (start == null) {
-      showAppAlert('Those blocks do not fit in the rest of today without overlapping.', { title: 'Today' });
-      return;
-    }
-    placements.push(createTodayBlock(group, start, 60));
-    cursor = start + 60;
-  }
-  state.todayBlocks.push(...placements);
-  placements.forEach(applyBlockCountdown);
-  persist();
-  renderEditView();
-}
-
-function handleTodayDrop(event) {
-  if (!isLabsFeatureEnabled('todayColumn') || pendingTodaySplit) return;
-  const payload = decodeDragPayload(event.dataTransfer?.getData('text/plain'));
-  if (!payload || isSessionReorderDragActive()) return;
-  event.preventDefault();
-  event.stopPropagation();
-  let startMin = snapMinutes(minutesFromClientY(event.clientY));
-  if (startMin < TODAY_START_MIN) startMin = TODAY_START_MIN;
-  if (startMin > TODAY_END_MIN - 60) startMin = TODAY_END_MIN - 60;
-  const groups = groupDragItemsForToday(payload.items);
-  if (groups.length === 0) return;
-  if (groups.length === 1) {
-    placeSingleTodayGroup(groups[0], startMin);
-    return;
-  }
-  openTodaySplitDialog(groups, startMin);
-}
-
-function enqueueTodayBlock(blockId) {
-  const block = state.todayBlocks.find((item) => item.id === blockId);
-  if (!block) return;
-  const sources = block.taskIds.map((id, index) => {
-    const live = findTaskById(id);
-    if (live) return live;
-    return { text: block.taskNames[index] || 'Task', limitMs: null };
-  }).filter((task) => task.text);
-  if (sources.length === 0) return;
-  const session = block.sessionId ? getPlannedSession(block.sessionId) : null;
-  const sourceMeta = session ? getSourceMetaFromSession(session) : null;
-  const copies = sources.map((task) => {
-    const meta = sourceMeta || (task.sourceSessionId
-      ? { sourceSessionId: task.sourceSessionId, sourceSessionName: task.sourceSessionName || 'Session' }
-      : null);
-    const copy = toSessionTaskFromBraindump(task, meta);
-    copy.id = crypto.randomUUID();
-    return copy;
-  });
-  const insertAt = getSessionActiveInsertIndex();
-  state.sessionTasks.splice(insertAt, 0, ...copies);
-  persist();
-  renderEditView();
-}
-
-function paintTodaySwatches(color) {
-  document.querySelectorAll('#today-color-swatches .today-swatch').forEach((button) => {
-    const selected = button.dataset.color === color;
-    button.classList.toggle('today-swatch--selected', selected);
-    button.setAttribute('aria-pressed', selected ? 'true' : 'false');
-  });
-}
-
-function setTodayBlockColor(blockId, color) {
-  const hex = normalizeHexColor(color);
-  const block = state.todayBlocks.find((item) => item.id === blockId);
-  if (!block || !hex) return;
-  if (block.color === hex) {
-    paintTodaySwatches(hex);
-    return;
-  }
-  block.color = hex;
-  const input = document.getElementById('today-hex-input');
-  if (input && document.activeElement !== input) input.value = hex;
-  paintTodaySwatches(hex);
-  persist();
-  renderTodayColumn();
-}
-
-function renderTodayBlockModal(block) {
-  const list = document.getElementById('today-block-task-list');
-  const swatches = document.getElementById('today-color-swatches');
-  const input = document.getElementById('today-hex-input');
-  if (!list || !swatches || !input || !block) return;
-  list.innerHTML = block.taskIds.map((id, index) => {
-    const live = findTaskById(id);
-    const name = live?.text || block.taskNames[index] || 'Task';
-    return `<li>${escapeHtml(name)}</li>`;
-  }).join('');
-  swatches.innerHTML = TODAY_COLOR_PRESETS.map((color) => `
-    <button
-      type="button"
-      class="today-swatch${color === block.color ? ' today-swatch--selected' : ''}"
-      style="background:${color}"
-      data-color="${color}"
-      aria-label="${color}"
-      aria-pressed="${color === block.color ? 'true' : 'false'}"
-    ></button>
-  `).join('');
-  input.value = block.color;
-}
-
-function openTodayBlockModal(blockId) {
-  const block = state.todayBlocks.find((item) => item.id === blockId);
-  const modal = document.getElementById('today-block-modal');
-  if (!block || !modal) return;
-  openTodayBlockId = blockId;
-  renderTodayBlockModal(block);
-  modal.classList.remove('hidden');
-}
-
-function closeTodayBlockModal() {
-  openTodayBlockId = null;
-  document.getElementById('today-block-modal')?.classList.add('hidden');
-}
-
-function previewTodayBlock(blockId, startMin, durationMin) {
-  const element = document.querySelector(`.today-block[data-block-id="${blockId}"]`);
-  if (!element) return;
-  element.style.top = `${minutesToTop(startMin)}px`;
-  element.style.height = `${minutesToHeight(durationMin)}px`;
-  const time = element.querySelector('.today-block-time');
-  if (time) time.textContent = formatTimeRange(startMin, durationMin);
-}
-
-function beginTodayPointer(event, blockId, mode) {
-  const block = state.todayBlocks.find((item) => item.id === blockId);
-  if (!block) return;
-  event.preventDefault();
-  event.currentTarget.setPointerCapture?.(event.pointerId);
-  todayPointer = {
-    mode,
-    blockId,
-    originClientY: event.clientY,
-    startMin: block.startMin,
-    durationMin: block.durationMin,
-    previewStart: block.startMin,
-    previewDur: block.durationMin,
-    moved: false,
-  };
-}
-
-function onTodayPointerMove(event) {
-  if (!todayPointer) return;
-  const grid = document.getElementById('today-grid');
-  if (!grid || grid.getBoundingClientRect().height <= 0) return;
-  const deltaPx = event.clientY - todayPointer.originClientY;
-  if (Math.abs(deltaPx) > 3) todayPointer.moved = true;
-  const deltaMin = (deltaPx / grid.getBoundingClientRect().height) * (TODAY_END_MIN - TODAY_START_MIN);
-  if (todayPointer.mode === 'move') {
-    let next = snapMinutes(todayPointer.startMin + deltaMin);
-    if (next < TODAY_START_MIN) next = TODAY_START_MIN;
-    if (next + todayPointer.durationMin > TODAY_END_MIN) {
-      next = TODAY_END_MIN - todayPointer.durationMin;
-    }
-    todayPointer.previewStart = next;
-    todayPointer.previewDur = todayPointer.durationMin;
-  } else if (todayPointer.mode === 'resize-end') {
-    let end = snapMinutes(todayPointer.startMin + todayPointer.durationMin + deltaMin);
-    if (end < todayPointer.startMin + 15) end = todayPointer.startMin + 15;
-    if (end > TODAY_END_MIN) end = TODAY_END_MIN;
-    todayPointer.previewStart = todayPointer.startMin;
-    todayPointer.previewDur = end - todayPointer.startMin;
-  } else {
-    const end = todayPointer.startMin + todayPointer.durationMin;
-    let next = snapMinutes(todayPointer.startMin + deltaMin);
-    if (next < TODAY_START_MIN) next = TODAY_START_MIN;
-    if (next > end - 15) next = end - 15;
-    todayPointer.previewStart = next;
-    todayPointer.previewDur = end - next;
-  }
-  previewTodayBlock(todayPointer.blockId, todayPointer.previewStart, todayPointer.previewDur);
-}
-
-function commitBlockMove(block, startMin) {
-  const placed = findFreeStart(startMin, block.durationMin, block.id, []);
-  if (placed == null) {
-    renderTodayColumn();
-    return;
-  }
-  block.startMin = placed;
-  applyBlockCountdown(block);
-  persist();
-  renderEditView();
-}
-
-function commitBlockResize(block, startMin, durationMin, edge) {
-  let start = snapMinutes(startMin);
-  let duration = Math.max(15, snapMinutes(durationMin));
-  if (edge === 'end') {
-    start = block.startMin;
-    let end = start + duration;
-    if (end > TODAY_END_MIN) end = TODAY_END_MIN;
-    duration = end - start;
-    const blocking = blocksTouchingRange(start, duration, block.id)
-      .sort((a, b) => a.startMin - b.startMin);
-    if (blocking.length > 0) {
-      const boundary = blocking[0].startMin;
-      if (boundary - start < 15) {
-        renderTodayColumn();
-        return;
-      }
-      duration = boundary - start;
-    }
-  } else {
-    const end = block.startMin + block.durationMin;
-    if (start < TODAY_START_MIN) start = TODAY_START_MIN;
-    if (end - start < 15) start = end - 15;
-    duration = end - start;
-    const blocking = blocksTouchingRange(start, duration, block.id)
-      .sort((a, b) => (b.startMin + b.durationMin) - (a.startMin + a.durationMin));
-    if (blocking.length > 0) {
-      const boundary = blocking[0].startMin + blocking[0].durationMin;
-      if (end - boundary < 15) {
-        renderTodayColumn();
-        return;
-      }
-      start = boundary;
-      duration = end - start;
-    }
-  }
-  if (duration < 15 || blocksTouchingRange(start, duration, block.id).length > 0) {
-    renderTodayColumn();
-    return;
-  }
-  block.startMin = start;
-  block.durationMin = duration;
-  applyBlockCountdown(block);
-  persist();
-  renderEditView();
-}
-
-function onTodayPointerUp() {
-  if (!todayPointer) return;
-  const drag = todayPointer;
-  todayPointer = null;
-  const block = state.todayBlocks.find((item) => item.id === drag.blockId);
-  if (!block) return;
-  if (!drag.moved) {
-    if (drag.mode === 'move') openTodayBlockModal(block.id);
-    return;
-  }
-  if (drag.mode === 'move') {
-    commitBlockMove(block, drag.previewStart);
-    return;
-  }
-  commitBlockResize(
-    block,
-    drag.previewStart,
-    drag.previewDur,
-    drag.mode === 'resize-start' ? 'start' : 'end',
-  );
-}
-
-function renderTodayColumn() {
-  const grid = document.getElementById('today-grid');
-  if (!grid || todayPointer) return;
-  const hourCount = (TODAY_END_MIN - TODAY_START_MIN) / 60;
-  grid.style.height = `${hourCount * TODAY_PX_PER_HOUR}px`;
-  const hours = [];
-  for (let hour = 6; hour < 22; hour += 1) {
-    hours.push(`
-      <div class="today-hour">
-        <span class="today-hour-label">${formatHourLabel(hour)}</span>
-      </div>
-    `);
-  }
-  const blocks = todayBlocksForToday().map((block) => `
-    <article
-      class="today-block"
-      data-block-id="${escapeHtml(block.id)}"
-      data-start-min="${block.startMin}"
-      data-duration-min="${block.durationMin}"
-      style="top:${minutesToTop(block.startMin)}px;height:${minutesToHeight(block.durationMin)}px;--block-color:${escapeHtml(block.color)}"
-    >
-      <button type="button" class="today-block-resize today-block-resize--start" aria-label="Change start time"></button>
-      <div class="today-block-body">
-        <p class="today-block-title">${escapeHtml(block.title)}</p>
-        <p class="today-block-time">${escapeHtml(formatTimeRange(block.startMin, block.durationMin))}</p>
-      </div>
-      <button type="button" class="today-block-enqueue" aria-label="Add tasks to queue" title="Add tasks to queue">
-        <span class="task-arrow" aria-hidden="true"></span>
-      </button>
-      <button type="button" class="today-block-resize today-block-resize--end" aria-label="Change end time"></button>
-    </article>
-  `).join('');
-  grid.innerHTML = `
-    <div class="today-hours">${hours.join('')}<span class="today-hour-label today-hour-label--end">${formatHourLabel(22)}</span></div>
-    <div class="today-blocks">${blocks}</div>
-  `;
-  grid.querySelectorAll('.today-block').forEach((element) => {
-    element.addEventListener('pointerdown', (event) => {
-      if (event.button !== 0) return;
-      if (event.target.closest('.today-block-enqueue')) return;
-      const resize = event.target.closest('.today-block-resize');
-      const mode = resize
-        ? (resize.classList.contains('today-block-resize--start') ? 'resize-start' : 'resize-end')
-        : 'move';
-      beginTodayPointer(event, element.dataset.blockId, mode);
-    });
-    const enqueue = element.querySelector('.today-block-enqueue');
-    enqueue?.addEventListener('pointerdown', (event) => event.stopPropagation());
-    enqueue?.addEventListener('click', (event) => {
-      event.stopPropagation();
-      enqueueTodayBlock(element.dataset.blockId);
-    });
-  });
-}
-
-function setupTodayColumn() {
-  const scroll = document.getElementById('today-grid-scroll');
-  if (!scroll || scroll.dataset.bound === 'true') return;
-  scroll.dataset.bound = 'true';
-  scroll.addEventListener('dragover', (event) => {
-    if (!isLabsFeatureEnabled('todayColumn') || isSessionReorderDragActive()) return;
-    event.preventDefault();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
-    scroll.classList.add('today-grid-scroll--drop');
-  });
-  scroll.addEventListener('dragleave', (event) => {
-    if (!scroll.contains(event.relatedTarget)) scroll.classList.remove('today-grid-scroll--drop');
-  });
-  scroll.addEventListener('drop', (event) => {
-    scroll.classList.remove('today-grid-scroll--drop');
-    event.preventDefault();
-    handleTodayDrop(event);
-  });
-  document.addEventListener('pointermove', onTodayPointerMove);
-  document.addEventListener('pointerup', onTodayPointerUp);
-  document.addEventListener('pointercancel', onTodayPointerUp);
-
-  document.getElementById('today-split-confirm-btn')?.addEventListener('click', confirmTodaySplit);
-  document.getElementById('today-split-cancel-btn')?.addEventListener('click', cancelTodaySplit);
-  document.getElementById('today-split-modal')?.addEventListener('click', (event) => {
-    if (event.target === document.getElementById('today-split-modal')) cancelTodaySplit();
-  });
-  document.getElementById('today-block-modal')?.addEventListener('click', (event) => {
-    if (event.target === document.getElementById('today-block-modal')) closeTodayBlockModal();
-  });
-  document.getElementById('today-color-swatches')?.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-color]');
-    if (!button || !openTodayBlockId) return;
-    const input = document.getElementById('today-hex-input');
-    if (input) input.value = button.dataset.color;
-    setTodayBlockColor(openTodayBlockId, button.dataset.color);
-  });
-  const hexInput = document.getElementById('today-hex-input');
-  hexInput?.addEventListener('input', () => {
-    if (!openTodayBlockId) return;
-    const hex = normalizeHexColor(hexInput.value);
-    if (!hex) return;
-    setTodayBlockColor(openTodayBlockId, hex);
-  });
-  hexInput?.addEventListener('blur', () => {
-    if (!openTodayBlockId) return;
-    const block = state.todayBlocks.find((item) => item.id === openTodayBlockId);
-    const hex = normalizeHexColor(hexInput.value, { allowShort: true });
-    if (!hex) {
-      if (block) hexInput.value = block.color;
-      return;
-    }
-    hexInput.value = hex;
-    setTodayBlockColor(openTodayBlockId, hex);
-  });
-}
-
 const APP_PRELOADER_MIN_MS = 200;
 
 function dismissAppPreloader() {
@@ -12654,5 +11905,4 @@ async function init() {
   void maybeAutoShowWhatsNew();
 }
 
-setupTodayColumn();
 init();

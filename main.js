@@ -569,13 +569,11 @@ function applyWindowSize(mode, options = {}) {
     focusPositionCustomized = false;
     focusBarHeight = FOCUS_BAR_HEIGHT;
     mainWindow.setMaximumSize(10000, 10000);
-    const todayColumn = mode === 'edit' && !!options.todayColumn;
-    const width = todayColumn ? 1080 : size.width;
-    const height = size.height;
-    const minWidth = todayColumn ? 900 : size.minWidth;
-    mainWindow.setMinimumSize(minWidth, size.minHeight);
+    mainWindow.setMinimumSize(size.minWidth, size.minHeight);
     mainWindow.setResizable(size.resizable);
     mainWindow.setBackgroundColor('#00000000');
+    const width = size.width;
+    const height = size.height;
     const x = Math.round(areaX + (areaWidth - width) / 2);
     const y = Math.round(areaY + (areaHeight - height) / 2);
     mainWindow.setBounds({ x, y, width, height }, false);

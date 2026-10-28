@@ -67,15 +67,6 @@
         <div id="planned-sessions-list" class="planned-sessions-list"></div>
       </section>
 
-      <section id="today-column" class="task-section task-section--today hidden" aria-label="Today">
-        <div class="section-header">
-          <h2 class="section-label section-label--bright">Today:</h2>
-        </div>
-        <div id="today-grid-scroll" class="today-grid-scroll">
-          <div id="today-grid" class="today-grid"></div>
-        </div>
-      </section>
-
       <section class="task-section task-section--session">
         <div class="section-header">
           <h2 class="section-label section-label--bright" data-tutorial="queue-panel">Queue:</h2>
@@ -698,31 +689,6 @@
       <div id="labs-modal-body" class="labs-modal-body"></div>
       <div class="labs-modal-actions">
         <button id="labs-close-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="today-split-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="today-split-title">
-    <div class="clear-session-modal-card">
-      <h3 id="today-split-title" class="clear-session-modal-title">Split time blocks</h3>
-      <div id="today-split-message" class="today-split-message"></div>
-      <div class="clear-session-modal-actions">
-        <button id="today-split-confirm-btn" class="clear-session-modal-btn" type="button">Place blocks</button>
-        <button id="today-split-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="today-block-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="today-block-modal-title">
-    <div class="clear-session-modal-card today-block-modal-card">
-      <h3 id="today-block-modal-title" class="visually-hidden">Time block</h3>
-      <ul id="today-block-task-list" class="today-block-task-list"></ul>
-      <div class="today-color-controls">
-        <div id="today-color-swatches" class="today-color-swatches" role="listbox" aria-label="Block color"></div>
-        <label class="today-hex-field">
-          <span class="today-hex-label">Hex</span>
-          <input id="today-hex-input" class="template-editor-input today-hex-input" type="text" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Custom hex color" />
-        </label>
       </div>
     </div>
   </div>
