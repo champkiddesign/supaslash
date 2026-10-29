@@ -480,6 +480,8 @@
       aria-label="Task actions"
     >
       <button id="design-sprint-pause-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Pause</button>
+      <button id="design-sprint-complete-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Complete</button>
+      <button id="design-sprint-extend-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Extend</button>
       <button id="design-sprint-skip-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Skip</button>
       <button id="design-sprint-edit-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Edit</button>
       <button id="design-sprint-dashboard-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Dashboard</button>
@@ -632,6 +634,30 @@
     </div>
     <div id="task-detail-move-menu" class="task-detail-select-menu hidden" role="listbox" aria-label="Move to session"></div>
     <div id="task-detail-template-menu" class="task-detail-select-menu hidden" role="listbox" aria-label="Template"></div>
+  </div>
+
+  <div id="design-sprint-time-modal" class="clear-session-modal app-alert-modal hidden" role="dialog" aria-modal="true" aria-labelledby="design-sprint-time-modal-title">
+    <div class="clear-session-modal-card design-sprint-time-modal-card">
+      <div id="design-sprint-wrap-up-step">
+        <h3 id="design-sprint-time-modal-title" class="clear-session-modal-title">Almost out of time</h3>
+        <p id="design-sprint-wrap-up-task-name" class="design-sprint-wrap-up-task-name"></p>
+        <p class="design-sprint-wrap-up-message">Hey — this task wraps in about 30 seconds. Need a little more runway, or ready to roll into the next one?</p>
+        <div class="clear-session-modal-actions">
+          <button id="design-sprint-wrap-up-extend-btn" class="clear-session-modal-btn" type="button">Give me more time</button>
+          <button id="design-sprint-wrap-up-continue-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Keep the clock running</button>
+        </div>
+      </div>
+      <div id="design-sprint-extend-step" class="hidden">
+        <h3 id="design-sprint-extend-step-title" class="clear-session-modal-title">Need more time?</h3>
+        <p id="design-sprint-extend-step-message" class="design-sprint-wrap-up-message">Add a buffer so you can finish strong — no shame in the extension.</p>
+        <label for="design-sprint-extend-input" class="design-sprint-extend-label">How much extra?</label>
+        <input id="design-sprint-extend-input" type="text" class="design-sprint-extend-input" value="5m" autocomplete="off" />
+        <div class="clear-session-modal-actions">
+          <button id="design-sprint-extend-confirm-btn" class="clear-session-modal-btn" type="button">Add it</button>
+          <button id="design-sprint-extend-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="complete-task-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="complete-task-title">

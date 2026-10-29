@@ -1,4 +1,22 @@
 const RELEASES = {
+  '1.0.16': {
+    releasedAt: '2026-10-28',
+    hotfix: true,
+    slides: [
+      {
+        title: 'Design Sprints',
+        description: 'Enable Design Sprints in Menu → Labs to show the sprint toggle beside Start Session. When it is on, every queued task needs a time limit and focus mode opens a full-width timeline along the bottom of your screen. Segments are sized by each task\'s limit, the active task counts down, and skipped tasks show as skipped. Tap the current task for a quick menu, or tap another task to jump back or ahead.',
+      },
+      {
+        title: 'Quieter timebar',
+        description: 'The classic focus timebar keeps the drag grip, task timer, and complete check visible, and puts resize, hide, edit, pause, and skip behind an ellipsis. Open the menu when you need an action; it closes after you choose one.',
+      },
+      {
+        title: 'Under the hood',
+        description: 'Under-the-hood performance and reliability improvements, plus polish across focus mode and the edit dashboard.',
+      },
+    ],
+  },
   '1.0.15': {
     releasedAt: '2026-10-28',
     slides: [
@@ -132,6 +150,12 @@ function getReleaseNotes(version) {
 
 function getReleaseDate(version) {
   return RELEASES[version]?.releasedAt || null;
+}
+
+function getReleaseDisplayVersion(version) {
+  const entry = RELEASES[version];
+  if (!entry) return version;
+  return entry.hotfix ? `${version} (hotfix)` : version;
 }
 
 function getAllReleases() {

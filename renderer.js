@@ -173,9 +173,21 @@ const designSprintBar = document.getElementById('design-sprint-bar');
 const designSprintTrack = document.getElementById('design-sprint-track');
 const designSprintTaskMenu = document.getElementById('design-sprint-task-menu');
 const designSprintPauseBtn = document.getElementById('design-sprint-pause-btn');
+const designSprintCompleteBtn = document.getElementById('design-sprint-complete-btn');
+const designSprintExtendBtn = document.getElementById('design-sprint-extend-btn');
 const designSprintSkipBtn = document.getElementById('design-sprint-skip-btn');
 const designSprintEditBtn = document.getElementById('design-sprint-edit-btn');
 const designSprintDashboardBtn = document.getElementById('design-sprint-dashboard-btn');
+const designSprintTimeModal = document.getElementById('design-sprint-time-modal');
+const designSprintWrapUpStep = document.getElementById('design-sprint-wrap-up-step');
+const designSprintExtendStep = document.getElementById('design-sprint-extend-step');
+const designSprintWrapUpTaskNameEl = document.getElementById('design-sprint-wrap-up-task-name');
+const designSprintWrapUpExtendBtn = document.getElementById('design-sprint-wrap-up-extend-btn');
+const designSprintWrapUpContinueBtn = document.getElementById('design-sprint-wrap-up-continue-btn');
+const designSprintExtendInput = document.getElementById('design-sprint-extend-input');
+const designSprintExtendConfirmBtn = document.getElementById('design-sprint-extend-confirm-btn');
+const designSprintExtendCancelBtn = document.getElementById('design-sprint-extend-cancel-btn');
+const designSprintExtendStepMessage = document.getElementById('design-sprint-extend-step-message');
 const clearSessionBtn = document.getElementById('clear-session-btn');
 const moveBackToListBtn = document.getElementById('move-back-to-list-btn');
 const clearSessionModal = document.getElementById('clear-session-modal');
@@ -422,6 +434,14 @@ const DESIGN_SPRINT_TASK_MENU_MIN_EXTRA = 52;
 let designSprintActionsMenuOpen = false;
 let designSprintActionsMenuExtraHeight = 0;
 let designSprintMenuAnchorSegment = null;
+let designSprintWrapUpPromptTaskIndex = null;
+/** User chose to keep going without extending — skip auto wrap-up for this task. */
+let designSprintWrapUpSuppressedForTaskIndex = null;
+let designSprintPauseForTimeModal = false;
+let designSprintTimeModalFromWrapUp = false;
+
+const DESIGN_SPRINT_SEGMENT_CHECK_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+const DESIGN_SPRINT_WRAP_UP_MS = 30 * 1000;
 const TIMER_BAR_HIDE_DURATION_MS = 5 * 60 * 1000;
 const FOCUS_DRAWER_GAP = 6;
 const DRAWER_CLOSE_DELAY_MS = 280;
@@ -611,7 +631,18 @@ function isDesignSprintFocus() {
     && isLabsFeatureEnabled('designSprints');
 }
 
+function getDesignSprintTimeModalOverlayHeight() {
+  const avail = window.screen?.availHeight;
+  if (Number.isFinite(avail) && avail > DESIGN_SPRINT_BAR_HEIGHT) {
+    return Math.floor(avail);
+  }
+  return 720;
+}
+
 function getDesignSprintWindowHeight() {
+  if (isDesignSprintTimeModalOpen()) {
+    return getDesignSprintTimeModalOverlayHeight();
+  }
   if (designSprintActionsMenuOpen) {
     return DESIGN_SPRINT_BAR_HEIGHT + Math.max(
       DESIGN_SPRINT_TASK_MENU_MIN_EXTRA,
@@ -619,6 +650,11 @@ function getDesignSprintWindowHeight() {
     );
   }
   return DESIGN_SPRINT_BAR_HEIGHT;
+}
+
+function syncDesignSprintTimeModalPresentation(open) {
+  document.body.classList.toggle('design-sprint-time-modal-open', !!open);
+  scheduleFocusDimensionsUpdate();
 }
 
 function getFocusWindowModeOptions() {
@@ -720,6 +756,9 @@ function getDesignSprintProgressRatio(task, taskIndex) {
 }
 
 function getDesignSprintSegmentLabelText(task, taskIndex) {
+  if (task.completed) {
+    return task.text.toUpperCase();
+  }
   if (task.skipped) {
     return `${task.text.toUpperCase()} (skipped)`;
   }
@@ -732,6 +771,23 @@ function getDesignSprintSegmentLabelText(task, taskIndex) {
     return `${task.text.toUpperCase()} (${formatTime(displayMs)})`;
   }
   return `${task.text.toUpperCase()} (${formatTime(task.limitMs || 0)})`;
+}
+
+function getDesignSprintSegmentLabelHtml(task, taskIndex) {
+  const segmentState = getDesignSprintSegmentState(task, taskIndex);
+  if (segmentState === 'completed') {
+    return `<span class="design-sprint-segment-check">${DESIGN_SPRINT_SEGMENT_CHECK_SVG}</span><span class="design-sprint-segment-label-text">${escapeHtml(task.text.toUpperCase())}</span>`;
+  }
+  const label = getDesignSprintSegmentLabelText(task, taskIndex);
+  return `<span class="design-sprint-segment-label-text">${escapeHtml(label)}</span>`;
+}
+
+function syncDesignSprintSegmentLabelElement(segment, task, taskIndex) {
+  const labelEl = segment.querySelector('.design-sprint-segment-label');
+  if (!labelEl) return;
+  const segmentState = getDesignSprintSegmentState(task, taskIndex);
+  labelEl.innerHTML = getDesignSprintSegmentLabelHtml(task, taskIndex);
+  labelEl.title = segmentState === 'completed' ? task.text : getDesignSprintSegmentLabelText(task, taskIndex);
 }
 
 function shouldShowDesignSprintSegmentProgress(task, taskIndex, segmentState) {
@@ -784,6 +840,7 @@ function renderDesignSprintBar() {
     const progressPct = (getDesignSprintProgressRatio(task, taskIndex) * 100).toFixed(2);
     const expired = segmentState === 'current' && state.limitExpired && state.limitExpiredKind === 'task';
     const label = getDesignSprintSegmentLabelText(task, taskIndex);
+    const labelHtml = getDesignSprintSegmentLabelHtml(task, taskIndex);
     const interactive = isDesignSprintSegmentInteractive(task, segmentState);
     return `
       <div
@@ -794,7 +851,7 @@ function renderDesignSprintBar() {
         tabindex="${interactive ? '0' : '-1'}"
         aria-label="${segmentState === 'current' ? `Current task: ${escapeHtml(task.text)}` : escapeHtml(label)}"
       >
-        <div class="design-sprint-segment-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
+        <div class="design-sprint-segment-label" title="${escapeHtml(label)}">${labelHtml}</div>
         <div class="design-sprint-segment-track">
           ${shouldShowDesignSprintSegmentProgress(task, taskIndex, segmentState)
     ? `<div class="design-sprint-segment-progress" style="width: ${progressPct}%;"></div>`
@@ -842,12 +899,7 @@ function updateDesignSprintBarProgress() {
         : ''
     }`;
     syncDesignSprintSegmentProgressElement(segment, task, taskIndex, segmentState);
-    const label = getDesignSprintSegmentLabelText(task, taskIndex);
-    const labelEl = segment.querySelector('.design-sprint-segment-label');
-    if (labelEl) {
-      labelEl.textContent = label;
-      labelEl.title = label;
-    }
+    syncDesignSprintSegmentLabelElement(segment, task, taskIndex);
     segment.setAttribute('role', isDesignSprintSegmentInteractive(task, segmentState) ? 'button' : 'presentation');
     segment.tabIndex = isDesignSprintSegmentInteractive(task, segmentState) ? 0 : -1;
   });
@@ -958,8 +1010,123 @@ function closeDesignSprintActionsModal() {
   }
 }
 
-function exitDesignSprintToTimerBar() {
+function isDesignSprintTimeModalOpen() {
+  return designSprintTimeModal && !designSprintTimeModal.classList.contains('hidden');
+}
+
+function showDesignSprintTimeModalStep(step) {
+  if (!designSprintWrapUpStep || !designSprintExtendStep || !designSprintTimeModal) return;
+  const wrapUp = step === 'wrapUp';
+  designSprintWrapUpStep.classList.toggle('hidden', !wrapUp);
+  designSprintExtendStep.classList.toggle('hidden', wrapUp);
+  designSprintTimeModal.setAttribute(
+    'aria-labelledby',
+    wrapUp ? 'design-sprint-time-modal-title' : 'design-sprint-extend-step-title',
+  );
+}
+
+function pauseTimerForDesignSprintTimeModal() {
+  designSprintPauseForTimeModal = state.isRunning;
+  if (state.isRunning) stopTimer();
+}
+
+function closeDesignSprintTimeModal({ resumeTimer = false } = {}) {
+  if (!designSprintTimeModal) return;
+  const wasOpen = !designSprintTimeModal.classList.contains('hidden');
+  designSprintTimeModal.classList.add('hidden');
+  designSprintTimeModalFromWrapUp = false;
+  showDesignSprintTimeModalStep('wrapUp');
+  if (wasOpen) {
+    syncDesignSprintTimeModalPresentation(false);
+  }
+  if (resumeTimer && designSprintPauseForTimeModal) {
+    startTimer();
+  }
+  designSprintPauseForTimeModal = false;
+}
+
+function openDesignSprintWrapUpModal() {
+  if (!designSprintTimeModal || !isDesignSprintFocus()) return;
+  const current = getCurrentTask();
+  if (!current) return;
   closeDesignSprintActionsModal();
+  pauseTimerForDesignSprintTimeModal();
+  designSprintTimeModalFromWrapUp = true;
+  if (designSprintWrapUpTaskNameEl) {
+    designSprintWrapUpTaskNameEl.textContent = current.text.toUpperCase();
+  }
+  showDesignSprintTimeModalStep('wrapUp');
+  designSprintTimeModal.classList.remove('hidden');
+  syncDesignSprintTimeModalPresentation(true);
+  requestAnimationFrame(() => designSprintWrapUpContinueBtn?.focus());
+}
+
+function openDesignSprintExtendModal({ source = 'menu' } = {}) {
+  if (!designSprintTimeModal || !isDesignSprintFocus()) return;
+  if (source === 'menu') {
+    closeDesignSprintActionsModal();
+    designSprintTimeModalFromWrapUp = false;
+    pauseTimerForDesignSprintTimeModal();
+  } else {
+    designSprintTimeModalFromWrapUp = true;
+  }
+  if (designSprintExtendInput) {
+    designSprintExtendInput.value = '5m';
+  }
+  if (designSprintExtendStepMessage) {
+    designSprintExtendStepMessage.textContent = source === 'menu'
+      ? 'Grab extra time whenever you want — a few minutes now beats a panic later.'
+      : 'Add a buffer so you can finish strong — no shame in the extension.';
+  }
+  showDesignSprintTimeModalStep('extend');
+  const wasOpen = isDesignSprintTimeModalOpen();
+  designSprintTimeModal.classList.remove('hidden');
+  if (!wasOpen) {
+    syncDesignSprintTimeModalPresentation(true);
+  }
+  requestAnimationFrame(() => {
+    designSprintExtendInput?.focus();
+    designSprintExtendInput?.select();
+  });
+}
+
+function continueDesignSprintWrapUpModal() {
+  designSprintWrapUpSuppressedForTaskIndex = state.focusTaskIndex;
+  designSprintWrapUpPromptTaskIndex = state.focusTaskIndex;
+  closeDesignSprintTimeModal({ resumeTimer: true });
+}
+
+function cancelDesignSprintExtendModal() {
+  if (designSprintTimeModalFromWrapUp) {
+    showDesignSprintTimeModalStep('wrapUp');
+    designSprintTimeModalFromWrapUp = true;
+    requestAnimationFrame(() => designSprintWrapUpContinueBtn?.focus());
+    return;
+  }
+  closeDesignSprintTimeModal({ resumeTimer: true });
+}
+
+function resetDesignSprintWrapUpTaskFlags() {
+  designSprintWrapUpPromptTaskIndex = null;
+  designSprintWrapUpSuppressedForTaskIndex = null;
+}
+
+function checkDesignSprintTimerMilestones() {
+  if (!isDesignSprintFocus() || !state.isRunning || isDesignSprintTimeModalOpen()) return;
+  const current = getCurrentTask();
+  if (!current?.limitMs || isTaskOvertimeActive()) return;
+  const remaining = current.limitMs - state.elapsedMs;
+  if (remaining > DESIGN_SPRINT_WRAP_UP_MS || remaining <= 0) return;
+  if (designSprintWrapUpSuppressedForTaskIndex === state.focusTaskIndex) return;
+  if (designSprintWrapUpPromptTaskIndex === state.focusTaskIndex) return;
+  designSprintWrapUpPromptTaskIndex = state.focusTaskIndex;
+  openDesignSprintWrapUpModal();
+}
+
+function exitDesignSprintToTimerBar() {
+  closeDesignSprintTimeModal();
+  closeDesignSprintActionsModal();
+  resetDesignSprintWrapUpTaskFlags();
   state.designSprintMode = false;
   applyDesignSprintPresentation();
   applyTimerBarSizeClass();
@@ -6630,6 +6797,10 @@ function restoreTaskTimerFromTask(task) {
   const taskAtLimit = task.limitMs && !state.taskOvertimeMode && state.elapsedMs >= task.limitMs;
 
   if (taskAtLimit) {
+    if (isDesignSprintFocus()) {
+      handleLimitExpired();
+      return;
+    }
     state.limitExpired = true;
     state.limitExpiredKind = 'task';
     setExpiredUI(true);
@@ -10095,7 +10266,12 @@ let whatsNewDisplayVersion = '';
 let whatsNewView = 'slides';
 
 function renderWhatsNewVersionMeta(version) {
-  if (whatsNewVersion) whatsNewVersion.textContent = `Version ${version}`;
+  if (whatsNewVersion) {
+    const displayVersion = typeof getReleaseDisplayVersion === 'function'
+      ? getReleaseDisplayVersion(version)
+      : version;
+    whatsNewVersion.textContent = `Version ${displayVersion}`;
+  }
   if (whatsNewVersionDate) {
     const releaseDate = getReleaseDate(version);
     const formattedDate = releaseDate ? formatReleaseDate(releaseDate) : '';
@@ -10160,7 +10336,7 @@ function renderWhatsNewHistoryList() {
         role="listitem"
         data-whats-new-version="${escapeHtml(release.version)}"
       >
-        <span class="whats-new-history-item-version">Version ${escapeHtml(release.version)}</span>
+        <span class="whats-new-history-item-version">Version ${escapeHtml(typeof getReleaseDisplayVersion === 'function' ? getReleaseDisplayVersion(release.version) : release.version)}</span>
         <span class="whats-new-history-item-date">${escapeHtml(formattedDate)}</span>
       </button>
     `;
@@ -11435,7 +11611,9 @@ function renderFocusView() {
 
 function showDoneView({ playSound = false } = {}) {
   state.designSprintMode = false;
+  closeDesignSprintTimeModal();
   closeDesignSprintActionsModal();
+  resetDesignSprintWrapUpTaskFlags();
   archiveCurrentSession('completed');
   if (doneHeadline) doneHeadline.textContent = getNextDoneHeadline();
   doneSummary.textContent = `You completed ${getCompletedCount()} task${getCompletedCount() === 1 ? '' : 's'}.`;
@@ -11449,6 +11627,14 @@ function launchCelebration() {
 }
 
 function handleLimitExpired() {
+  if (isDesignSprintFocus()) {
+    closeDesignSprintTimeModal();
+    closeDesignSprintActionsModal();
+    resetDesignSprintWrapUpTaskFlags();
+    completeCurrentTask();
+    persist();
+    return;
+  }
   if (state.limitExpired) return;
   state.limitExpired = true;
   state.limitExpiredKind = 'task';
@@ -11470,6 +11656,7 @@ function startTimer() {
   state.sessionStartMs = Date.now() - state.elapsedMs;
   state.timerInterval = setInterval(() => {
     state.elapsedMs = Date.now() - state.sessionStartMs;
+    checkDesignSprintTimerMilestones();
     checkLimitExpiry();
     updateTimerDisplay();
   }, 250);
@@ -11513,6 +11700,9 @@ function completeCurrentTask() {
   const taskIndex = getFocusTaskIndex();
   if (taskIndex < 0) return;
 
+  closeDesignSprintTimeModal();
+  resetDesignSprintWrapUpTaskFlags();
+
   const completedElapsedMs = state.elapsedMs;
 
   state.isRunning = false;
@@ -11551,6 +11741,8 @@ function skipCurrentTask() {
   const taskIndex = getFocusTaskIndex();
   if (taskIndex < 0 || getIncompleteCount() <= 1) return;
 
+  closeDesignSprintTimeModal();
+  resetDesignSprintWrapUpTaskFlags();
   saveCurrentTaskProgress();
   state.sessionTasks[taskIndex].skipped = true;
   stopTimer();
@@ -11570,6 +11762,8 @@ function switchToTask(index) {
   if (!task || task.completed) return;
   if (index === state.focusTaskIndex) return;
 
+  closeDesignSprintTimeModal();
+  resetDesignSprintWrapUpTaskFlags();
   saveCurrentTaskProgress();
   stopTimer();
 
@@ -11585,26 +11779,44 @@ function extendTime() {
   showExtendPanel();
 }
 
+function applyTaskTimeExtension(extraMs) {
+  const current = getCurrentTask();
+  if (!current || !extraMs) return false;
+  const taskIndex = getFocusTaskIndex();
+  if (taskIndex < 0) return false;
+  state.sessionTasks[taskIndex].limitMs = state.elapsedMs + extraMs;
+  state.taskOvertimeMode = false;
+  state.sessionTasks[taskIndex].taskOvertimeMode = false;
+  state.limitExpired = false;
+  state.limitExpiredKind = null;
+  hideExtendPanel();
+  setExpiredUI(false);
+  resetDesignSprintWrapUpTaskFlags();
+  if (isDesignSprintFocus()) {
+    renderDesignSprintBar();
+  }
+  persist();
+  return true;
+}
+
 function confirmExtend() {
   const extraMs = parseManualLimit(extendInput.value);
   if (!extraMs) {
     extendInput.focus();
     return;
   }
-
-  const current = getCurrentTask();
-  if (!current) return;
-  const taskIndex = getFocusTaskIndex();
-  state.sessionTasks[taskIndex].limitMs = state.elapsedMs + extraMs;
-  state.taskOvertimeMode = false;
-  state.sessionTasks[taskIndex].taskOvertimeMode = false;
-
-  state.limitExpired = false;
-  state.limitExpiredKind = null;
-  hideExtendPanel();
-  setExpiredUI(false);
+  if (!applyTaskTimeExtension(extraMs)) return;
   startTimer();
-  persist();
+}
+
+function confirmDesignSprintExtendModal() {
+  const extraMs = parseManualLimit(designSprintExtendInput?.value || '');
+  if (!extraMs) {
+    designSprintExtendInput?.focus();
+    return;
+  }
+  if (!applyTaskTimeExtension(extraMs)) return;
+  closeDesignSprintTimeModal({ resumeTimer: true });
 }
 
 function enterFocusMode() {
@@ -11743,6 +11955,36 @@ designSprintPauseBtn?.addEventListener('click', (event) => {
   syncDesignSprintTaskMenuContent();
   toggleTimer();
   syncDesignSprintTaskMenuContent();
+});
+designSprintCompleteBtn?.addEventListener('click', (event) => {
+  event.stopPropagation();
+  closeDesignSprintActionsModal();
+  completeCurrentTask();
+});
+designSprintExtendBtn?.addEventListener('click', (event) => {
+  event.stopPropagation();
+  openDesignSprintExtendModal({ source: 'menu' });
+});
+designSprintWrapUpExtendBtn?.addEventListener('click', () => {
+  openDesignSprintExtendModal({ source: 'wrapUp' });
+});
+designSprintWrapUpContinueBtn?.addEventListener('click', continueDesignSprintWrapUpModal);
+designSprintExtendConfirmBtn?.addEventListener('click', confirmDesignSprintExtendModal);
+designSprintExtendCancelBtn?.addEventListener('click', cancelDesignSprintExtendModal);
+designSprintExtendInput?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    confirmDesignSprintExtendModal();
+  }
+});
+designSprintTimeModal?.addEventListener('click', (e) => {
+  if (e.target === designSprintTimeModal) {
+    if (isDesignSprintTimeModalOpen() && !designSprintExtendStep?.classList.contains('hidden')) {
+      cancelDesignSprintExtendModal();
+    } else {
+      continueDesignSprintWrapUpModal();
+    }
+  }
 });
 designSprintSkipBtn?.addEventListener('click', (event) => {
   event.stopPropagation();
@@ -12226,6 +12468,14 @@ document.addEventListener('keydown', (e) => {
     }
     if (!completeTaskModal.classList.contains('hidden')) {
       closeCompleteTaskModal();
+      return;
+    }
+    if (designSprintTimeModal && !designSprintTimeModal.classList.contains('hidden')) {
+      if (!designSprintExtendStep?.classList.contains('hidden')) {
+        cancelDesignSprintExtendModal();
+      } else {
+        continueDesignSprintWrapUpModal();
+      }
       return;
     }
     if (!templatesModal.classList.contains('hidden')) {
