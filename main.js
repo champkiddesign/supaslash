@@ -46,7 +46,7 @@ const CELEBRATION_DURATION_MS = 3500;
 
 const FOCUS_WIDTH_MARGIN = 40;
 const FOCUS_BAR_HEIGHT = 56;
-const DESIGN_SPRINT_BAR_HEIGHT = 104;
+const DESIGN_SPRINT_BAR_HEIGHT = 32;
 const FOCUS_DRAWER_GAP = 6;
 const FOCUS_DRAWER_BRIDGE = 14;
 const FOCUS_DRAWER_SLOT = 180 + 16 + 6 + 8 + 44;
@@ -479,19 +479,44 @@ function applyFocusWindowChrome({ designSprint = false } = {}) {
 function resizeFocusWindow({ width: contentWidth, height: contentHeight, x, y, preservePosition, fullscreen, designSprint } = {}) {
   if (!isLiveWindow(mainWindow) || currentWindowMode !== 'focus') return;
 
+  if (designSprint && fullscreen) {
+    focusWindowDesignSprintActive = true;
+    applyFocusWindowChrome({ designSprint: true });
+    focusWindowFullscreen = true;
+    const display = getMainDisplay();
+    const { x: areaX, y: areaY, width: areaWidth, height: areaHeight } = display.workArea;
+    focusPositionCustomized = false;
+    focusBarHeight = areaHeight;
+    mainWindow.setMinimumSize(200, 200);
+    mainWindow.setMaximumSize(areaWidth, areaHeight);
+    mainWindow.setResizable(false);
+    // Leave the native window transparent. An opaque black background sticks
+    // on macOS until the next click, which hides the docked bar's fade.
+    mainWindow.setBackgroundColor('rgba(0, 0, 0, 0)');
+    suppressFocusMoveEvent = true;
+    mainWindow.setBounds({
+      x: areaX,
+      y: areaY,
+      width: areaWidth,
+      height: areaHeight,
+    }, false);
+    suppressFocusMoveEvent = false;
+    mainWindow.show();
+    return;
+  }
+
   if (designSprint) {
     focusWindowDesignSprintActive = true;
     applyFocusWindowChrome({ designSprint: true });
     focusWindowFullscreen = false;
     const display = getMainDisplay();
     const { x: areaX, y: areaY, width: areaWidth, height: areaHeight } = display.workArea;
-    const height = Math.max(80, Math.ceil(contentHeight || DESIGN_SPRINT_BAR_HEIGHT));
+    const height = Math.max(DESIGN_SPRINT_BAR_HEIGHT, Math.ceil(contentHeight || DESIGN_SPRINT_BAR_HEIGHT));
     focusBarHeight = height;
     focusPositionCustomized = false;
     mainWindow.setMinimumSize(400, height);
     mainWindow.setMaximumSize(areaWidth, height);
     mainWindow.setResizable(false);
-    mainWindow.setBackgroundColor('#00000000');
     suppressFocusMoveEvent = true;
     mainWindow.setBounds({
       x: areaX,
@@ -500,6 +525,8 @@ function resizeFocusWindow({ width: contentWidth, height: contentHeight, x, y, p
       height,
     }, false);
     suppressFocusMoveEvent = false;
+    mainWindow.setBackgroundColor('rgba(0, 0, 0, 0)');
+    mainWindow.webContents.invalidate();
     mainWindow.show();
     return;
   }
@@ -593,6 +620,7 @@ function applyWindowSize(mode, options = {}) {
     if (options.designSprint) {
       resizeFocusWindow({
         designSprint: true,
+        fullscreen: !!options.fullscreen,
         height: options.height || DESIGN_SPRINT_BAR_HEIGHT,
       });
     } else if (options.fullscreen) {
@@ -837,6 +865,7 @@ ipcMain.handle('set-focus-dimensions', (_event, dimensions = {}) => {
     focusPositionCustomized = false;
     resizeFocusWindow({
       designSprint: true,
+      fullscreen: !!dimensions.fullscreen,
       height: dimensions.height,
     });
     return true;

@@ -1,4 +1,25 @@
 const RELEASES = {
+  '1.0.17': {
+    releasedAt: '2026-11-07',
+    slides: [
+      {
+        title: 'Design Sprint fullscreen',
+        description: 'Open Fullscreen from the current task\'s menu to cover the screen in black while the sprint keeps running. Use the corner menu to show the task timer, the clock, or both. Leave fullscreen and the slim bar comes back with its fade.',
+      },
+      {
+        title: 'A minute to finish',
+        description: 'With one minute left, a small note appears above the current task: "Finishing up. Add more time?" The clock keeps running. Tap the note to add time, or dismiss it and keep going. It shows in fullscreen too.',
+      },
+      {
+        title: 'Sprint from Quick Start',
+        description: 'When Design Sprints is on in Labs, Quick Start has its own sprint switch. It starts off each time you open Quick Start and applies only to that run. Every task still needs a time limit.',
+      },
+      {
+        title: 'Turn a task into a session',
+        description: 'Right-click a task and choose Convert to session. SupaSlash makes a new session with that name. Notes, files, and a time limit come along when the task has them.',
+      },
+    ],
+  },
   '1.0.16': {
     releasedAt: '2026-10-28',
     hotfix: true,

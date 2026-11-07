@@ -93,7 +93,9 @@
             title="Design Sprint mode"
             disabled
           >
-            <span class="design-sprint-toggle-icon" aria-hidden="true"></span>
+            <span class="design-sprint-toggle-thumb" aria-hidden="true">
+              <span class="design-sprint-toggle-icon"></span>
+            </span>
           </button>
         </div>
       </div>
@@ -202,6 +204,22 @@
           <button type="button" class="templates-add-btn" id="quick-start-add-task-btn">+ Add task</button>
         </div>
         <div class="clear-session-modal-actions">
+          <div id="quick-start-design-sprint-row" class="quick-start-design-sprint-row hidden" hidden>
+            <span class="quick-start-design-sprint-label">Design Sprint</span>
+            <button
+              id="quick-start-design-sprint-btn"
+              class="design-sprint-toggle-btn"
+              type="button"
+              role="switch"
+              aria-checked="false"
+              aria-label="Design Sprint"
+              title="Design Sprint off"
+            >
+              <span class="design-sprint-toggle-thumb" aria-hidden="true">
+                <span class="design-sprint-toggle-icon"></span>
+              </span>
+            </button>
+          </div>
           <button id="quick-start-confirm-btn" class="clear-session-modal-btn" type="button" disabled>Start Session</button>
           <button id="quick-start-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
         </div>
@@ -479,14 +497,53 @@
       role="menu"
       aria-label="Task actions"
     >
-      <button id="design-sprint-pause-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Pause</button>
-      <button id="design-sprint-complete-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Complete</button>
+      <button id="design-sprint-pause-btn" class="design-sprint-task-menu-item design-sprint-task-menu-item--icon" type="button" role="menuitem" aria-label="Pause" title="Pause">
+        <svg class="pause-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <rect x="6" y="4" width="4" height="16" rx="1"/>
+          <rect x="14" y="4" width="4" height="16" rx="1"/>
+        </svg>
+        <svg class="play-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+      </button>
+      <button id="design-sprint-complete-btn" class="design-sprint-task-menu-item design-sprint-task-menu-item--icon" type="button" role="menuitem" aria-label="Complete" title="Complete">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 6 9 17l-5-5"/>
+        </svg>
+      </button>
+      <button id="design-sprint-edit-btn" class="design-sprint-task-menu-item design-sprint-task-menu-item--icon" type="button" role="menuitem" aria-label="Edit" title="Edit">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 20h9"/>
+          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+        </svg>
+      </button>
       <button id="design-sprint-extend-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Extend</button>
       <button id="design-sprint-skip-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Skip</button>
-      <button id="design-sprint-edit-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Edit</button>
+      <button id="design-sprint-fullscreen-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Fullscreen</button>
       <button id="design-sprint-dashboard-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Dashboard</button>
     </div>
+    <div id="design-sprint-wrap-up-toast" class="design-sprint-wrap-up-toast hidden" aria-hidden="true">
+      <button type="button" class="design-sprint-wrap-up-toast-message">Finishing up. Add more time?</button>
+      <button type="button" class="design-sprint-wrap-up-toast-close" aria-label="Close">×</button>
+    </div>
     <div id="design-sprint-track" class="design-sprint-track"></div>
+    <div id="design-sprint-fullscreen-timer" class="design-sprint-fullscreen-readout design-sprint-fullscreen-timer hidden" aria-hidden="true"></div>
+    <div id="design-sprint-fullscreen-tools" class="design-sprint-fullscreen-tools">
+      <div id="design-sprint-fullscreen-clock" class="design-sprint-fullscreen-readout design-sprint-fullscreen-clock hidden" aria-hidden="true"></div>
+      <div class="design-sprint-fullscreen-menu-wrap">
+        <div id="design-sprint-fullscreen-options" class="design-sprint-fullscreen-options hidden" role="menu" aria-label="Fullscreen options">
+          <button id="design-sprint-show-time-btn" class="design-sprint-fullscreen-option" type="button" role="menuitemcheckbox" aria-checked="false">Show the time</button>
+          <button id="design-sprint-show-clock-btn" class="design-sprint-fullscreen-option" type="button" role="menuitemcheckbox" aria-checked="false">Show the clock</button>
+        </div>
+        <button id="design-sprint-fullscreen-menu-btn" class="design-sprint-fullscreen-menu-btn" type="button" aria-label="Fullscreen options" aria-haspopup="menu" aria-expanded="false">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <circle cx="5" cy="12" r="1.7"/>
+            <circle cx="12" cy="12" r="1.7"/>
+            <circle cx="19" cy="12" r="1.7"/>
+          </svg>
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- All Done -->
@@ -524,6 +581,13 @@
         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
       </svg>
       <span>Duplicate</span>
+    </button>
+    <button type="button" id="task-context-convert-session" class="task-context-menu-item" role="menuitem">
+      <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="16" rx="2"/>
+        <path d="M8 9h8M8 13h5"/>
+      </svg>
+      <span>Convert to session</span>
     </button>
     <button type="button" id="task-context-delete" class="task-context-menu-item task-context-menu-item--danger" role="menuitem">
       <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -641,7 +705,7 @@
       <div id="design-sprint-wrap-up-step">
         <h3 id="design-sprint-time-modal-title" class="clear-session-modal-title">Almost out of time</h3>
         <p id="design-sprint-wrap-up-task-name" class="design-sprint-wrap-up-task-name"></p>
-        <p class="design-sprint-wrap-up-message">Hey — this task wraps in about 30 seconds. Need a little more runway, or ready to roll into the next one?</p>
+        <p class="design-sprint-wrap-up-message">Hey — this task wraps in about a minute. Need a little more runway, or ready to roll into the next one?</p>
         <div class="clear-session-modal-actions">
           <button id="design-sprint-wrap-up-extend-btn" class="clear-session-modal-btn" type="button">Give me more time</button>
           <button id="design-sprint-wrap-up-continue-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Keep the clock running</button>
