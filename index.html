@@ -491,12 +491,14 @@
   </div>
 
   <div id="design-sprint-bar" class="design-sprint-bar hidden" aria-hidden="true">
-    <div
-      id="design-sprint-task-menu"
-      class="design-sprint-task-menu hidden"
-      role="menu"
-      aria-label="Task actions"
-    >
+    <div id="design-sprint-menu-cluster" class="design-sprint-menu-cluster">
+      <img src="assets/supaslash-logo.png" alt="" class="design-sprint-menu-logo" width="447" height="125" />
+      <div
+        id="design-sprint-task-menu"
+        class="design-sprint-task-menu hidden"
+        role="menu"
+        aria-label="Task actions"
+      >
       <button id="design-sprint-pause-btn" class="design-sprint-task-menu-item design-sprint-task-menu-item--icon" type="button" role="menuitem" aria-label="Pause" title="Pause">
         <svg class="pause-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <rect x="6" y="4" width="4" height="16" rx="1"/>
@@ -521,6 +523,7 @@
       <button id="design-sprint-skip-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Skip</button>
       <button id="design-sprint-fullscreen-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Fullscreen</button>
       <button id="design-sprint-dashboard-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Dashboard</button>
+    </div>
     </div>
     <div id="design-sprint-wrap-up-toast" class="design-sprint-wrap-up-toast hidden" aria-hidden="true">
       <button type="button" class="design-sprint-wrap-up-toast-message">Finishing up. Add more time?</button>
@@ -720,6 +723,16 @@
           <button id="design-sprint-extend-confirm-btn" class="clear-session-modal-btn" type="button">Add it</button>
           <button id="design-sprint-extend-cancel-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Cancel</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="design-sprint-shortcut-modal" class="clear-session-modal app-alert-modal hidden" role="dialog" aria-modal="true" aria-labelledby="design-sprint-shortcut-title">
+    <div class="clear-session-modal-card">
+      <h3 id="design-sprint-shortcut-title" class="clear-session-modal-title">Welcome to Sprint Mode!</h3>
+      <p class="design-sprint-wrap-up-message design-sprint-shortcut-message">Your race against time rests at the bottom of your screen. To exit this mode, press Control–Option–S.</p>
+      <div class="clear-session-modal-actions">
+        <button id="design-sprint-shortcut-ok-btn" class="clear-session-modal-btn" type="button">Got it</button>
       </div>
     </div>
   </div>

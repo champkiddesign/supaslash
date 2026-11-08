@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('slashIt', {
   setWindowButtonsVisible: (visible) => ipcRenderer.invoke('set-window-buttons-visible', visible),
   setFocusWidth: (contentWidth) => ipcRenderer.invoke('set-focus-width', contentWidth),
   setFocusDimensions: (dimensions) => ipcRenderer.invoke('set-focus-dimensions', dimensions),
+  setDesignSprintInteraction: (payload) => ipcRenderer.invoke('set-design-sprint-interaction', payload),
+  onDesignSprintShortcut: (callback) => ipcRenderer.on('design-sprint-shortcut', callback),
   hideFocusWindow: () => ipcRenderer.invoke('hide-focus-window'),
   showFocusWindow: () => ipcRenderer.invoke('show-focus-window'),
   onFocusPositionChanged: (callback) => ipcRenderer.on('focus-position-changed', (_event, position) => callback(position)),

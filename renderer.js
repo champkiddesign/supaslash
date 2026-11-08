@@ -201,6 +201,8 @@ const designSprintExtendInput = document.getElementById('design-sprint-extend-in
 const designSprintExtendConfirmBtn = document.getElementById('design-sprint-extend-confirm-btn');
 const designSprintExtendCancelBtn = document.getElementById('design-sprint-extend-cancel-btn');
 const designSprintExtendStepMessage = document.getElementById('design-sprint-extend-step-message');
+const designSprintShortcutModal = document.getElementById('design-sprint-shortcut-modal');
+const designSprintShortcutOkBtn = document.getElementById('design-sprint-shortcut-ok-btn');
 const clearSessionBtn = document.getElementById('clear-session-btn');
 const moveBackToListBtn = document.getElementById('move-back-to-list-btn');
 const clearSessionModal = document.getElementById('clear-session-modal');
@@ -443,11 +445,12 @@ const FOCUS_BAR_BASE_MIN_WIDTH = 300;
 const FOCUS_BAR_BASE_MAX_WIDTH = 450;
 const FOCUS_BAR_ACTIONS_OPEN_EXTRA = 160;
 const FOCUS_BAR_SCALE_SMALL = 0.75;
-const DESIGN_SPRINT_BAR_HEIGHT = 32;
+const DESIGN_SPRINT_BAR_HEIGHT = 30;
 const DESIGN_SPRINT_WRAP_UP_TOAST_EXTRA = 44;
 const DESIGN_SPRINT_TASK_MENU_GAP = 10;
 const DESIGN_SPRINT_TASK_MENU_MIN_EXTRA = 52;
 let designSprintActionsMenuOpen = false;
+let designSprintMenuCentered = false;
 let designSprintFullscreenOptionsOpen = false;
 let designSprintWallClockInterval = null;
 let designSprintActionsMenuExtraHeight = 0;
@@ -666,7 +669,7 @@ function getDesignSprintTimeModalOverlayHeight() {
 }
 
 function getDesignSprintWindowHeight() {
-  if (isDesignSprintTimeModalOpen()) {
+  if (isDesignSprintTimeModalOpen() || isDesignSprintShortcutModalOpen() || designSprintMenuCentered) {
     return getDesignSprintTimeModalOverlayHeight();
   }
   let height = DESIGN_SPRINT_BAR_HEIGHT;
@@ -688,6 +691,7 @@ function getDesignSprintWindowHeight() {
 function syncDesignSprintTimeModalPresentation(open) {
   document.body.classList.toggle('design-sprint-time-modal-open', !!open);
   scheduleFocusDimensionsUpdate();
+  syncDesignSprintInteraction();
 }
 
 function getFocusWindowModeOptions() {
@@ -758,6 +762,7 @@ function applyDesignSprintPresentation() {
   } else if (designSprintTrack) {
     designSprintTrack.innerHTML = '';
   }
+  syncDesignSprintInteraction();
 }
 
 function syncDesignSprintAfterLayout() {
@@ -909,13 +914,14 @@ function renderDesignSprintBar() {
     `;
   }).join('');
 
+  if (designSprintMenuCentered) return;
   if (designSprintActionsMenuOpen && designSprintMenuAnchorSegment) {
     const currentSegment = designSprintTrack.querySelector('.design-sprint-segment--current');
     if (currentSegment) {
       designSprintMenuAnchorSegment = currentSegment;
       currentSegment.classList.add('design-sprint-segment--menu-open');
       requestAnimationFrame(() => {
-        if (designSprintActionsMenuOpen && designSprintMenuAnchorSegment) {
+        if (designSprintActionsMenuOpen && !designSprintMenuCentered && designSprintMenuAnchorSegment) {
           positionDesignSprintTaskMenu(designSprintMenuAnchorSegment);
         }
       });
@@ -1000,6 +1006,7 @@ function measureDesignSprintTaskMenuHeight() {
 }
 
 function positionDesignSprintTaskMenu(segment) {
+  if (designSprintMenuCentered) return;
   if (!designSprintTaskMenu || !designSprintBar || !segment) return;
 
   const barRect = designSprintBar.getBoundingClientRect();
@@ -1029,41 +1036,61 @@ function setDesignSprintTaskMenuSegmentHighlight(active) {
   }
 }
 
-function openDesignSprintActionsModal(anchorSegment) {
+function openDesignSprintActionsModal(anchorSegment, { centered = false } = {}) {
   if (!designSprintTaskMenu || !isDesignSprintFocus()) return;
   const segment = anchorSegment
     || designSprintTrack?.querySelector('.design-sprint-segment--current');
-  if (!segment) return;
+  if (!centered && !segment) return;
   if (!syncDesignSprintTaskMenuContent()) return;
 
-  designSprintMenuAnchorSegment = segment;
+  designSprintMenuAnchorSegment = segment || null;
+  designSprintMenuCentered = centered;
   designSprintActionsMenuOpen = true;
-  designSprintActionsMenuExtraHeight = measureDesignSprintTaskMenuHeight();
+  designSprintActionsMenuExtraHeight = centered ? 0 : measureDesignSprintTaskMenuHeight();
   document.body.classList.add('design-sprint-menu-open');
-  designSprintTaskMenu.classList.remove('hidden', 'design-sprint-task-menu--anchored');
-  setDesignSprintTaskMenuSegmentHighlight(true);
+  document.body.classList.toggle('design-sprint-menu-centered', centered);
+  designSprintTaskMenu.classList.remove('hidden');
+  if (centered) {
+    designSprintTaskMenu.style.left = '';
+    designSprintTaskMenu.style.bottom = '';
+    designSprintTaskMenu.classList.add('design-sprint-task-menu--centered', 'design-sprint-task-menu--anchored');
+  } else {
+    designSprintTaskMenu.classList.remove('design-sprint-task-menu--anchored', 'design-sprint-task-menu--centered');
+  }
+  setDesignSprintTaskMenuSegmentHighlight(!centered);
+  syncDesignSprintInteraction();
 
   const anchorMenu = () => {
-    if (!designSprintActionsMenuOpen || !designSprintMenuAnchorSegment) return;
-    positionDesignSprintTaskMenu(designSprintMenuAnchorSegment);
-    designSprintTaskMenu.classList.add('design-sprint-task-menu--anchored');
+    if (!designSprintActionsMenuOpen) return;
+    if (designSprintMenuCentered) {
+      designSprintTaskMenu.style.left = '';
+      designSprintTaskMenu.style.bottom = '';
+      designSprintTaskMenu.classList.add('design-sprint-task-menu--centered', 'design-sprint-task-menu--anchored');
+    } else if (designSprintMenuAnchorSegment) {
+      positionDesignSprintTaskMenu(designSprintMenuAnchorSegment);
+      designSprintTaskMenu.classList.add('design-sprint-task-menu--anchored');
+    }
     designSprintPauseBtn?.focus({ preventScroll: true });
   };
 
   void applyFocusWindowSize().then(anchorMenu);
 }
 
-function closeDesignSprintActionsModal() {
+function closeDesignSprintActionsModal({ syncInteraction = true } = {}) {
   if (!designSprintTaskMenu) return;
   const wasOpen = designSprintActionsMenuOpen
     || !designSprintTaskMenu.classList.contains('hidden');
   designSprintActionsMenuOpen = false;
+  designSprintMenuCentered = false;
   designSprintActionsMenuExtraHeight = 0;
   designSprintMenuAnchorSegment = null;
-  document.body.classList.remove('design-sprint-menu-open');
+  document.body.classList.remove('design-sprint-menu-open', 'design-sprint-menu-centered');
   designSprintTaskMenu.classList.add('hidden');
-  designSprintTaskMenu.classList.remove('design-sprint-task-menu--anchored');
+  designSprintTaskMenu.classList.remove('design-sprint-task-menu--anchored', 'design-sprint-task-menu--centered');
+  designSprintTaskMenu.style.left = '';
+  designSprintTaskMenu.style.bottom = '';
   setDesignSprintTaskMenuSegmentHighlight(false);
+  if (syncInteraction) syncDesignSprintInteraction();
   if (wasOpen && isDesignSprintFocus()) {
     void applyFocusWindowSize();
   }
@@ -1071,6 +1098,25 @@ function closeDesignSprintActionsModal() {
 
 function isDesignSprintTimeModalOpen() {
   return designSprintTimeModal && !designSprintTimeModal.classList.contains('hidden');
+}
+
+function isDesignSprintShortcutModalOpen() {
+  return designSprintShortcutModal && !designSprintShortcutModal.classList.contains('hidden');
+}
+
+function openDesignSprintShortcutModal() {
+  if (!designSprintShortcutModal || !isDesignSprintFocus()) return;
+  designSprintShortcutModal.classList.remove('hidden');
+  scheduleFocusDimensionsUpdate();
+  syncDesignSprintInteraction();
+  requestAnimationFrame(() => designSprintShortcutOkBtn?.focus());
+}
+
+function closeDesignSprintShortcutModal() {
+  if (!isDesignSprintShortcutModalOpen()) return;
+  designSprintShortcutModal.classList.add('hidden');
+  scheduleFocusDimensionsUpdate();
+  syncDesignSprintInteraction();
 }
 
 function showDesignSprintTimeModalStep(step) {
@@ -1175,7 +1221,7 @@ function openDesignSprintWrapUpModal() {
   if (!designSprintTimeModal || !isDesignSprintFocus()) return;
   const current = getCurrentTask();
   if (!current) return;
-  closeDesignSprintActionsModal();
+  closeDesignSprintActionsModal({ syncInteraction: false });
   pauseTimerForDesignSprintTimeModal();
   designSprintTimeModalFromWrapUp = true;
   if (designSprintWrapUpTaskNameEl) {
@@ -1190,7 +1236,7 @@ function openDesignSprintWrapUpModal() {
 function openDesignSprintExtendModal({ source = 'menu' } = {}) {
   if (!designSprintTimeModal || !isDesignSprintFocus()) return;
   if (source === 'menu') {
-    closeDesignSprintActionsModal();
+    closeDesignSprintActionsModal({ syncInteraction: false });
     designSprintTimeModalFromWrapUp = false;
     pauseTimerForDesignSprintTimeModal();
   } else {
@@ -1243,6 +1289,51 @@ function isDesignSprintTaskMenuOpen() {
     || (designSprintTaskMenu && !designSprintTaskMenu.classList.contains('hidden')));
 }
 
+function shouldDesignSprintPassClicks() {
+  return isDesignSprintFocus()
+    && !isDesignSprintFullscreen()
+    && !isDesignSprintTaskMenuOpen()
+    && !isDesignSprintTimeModalOpen()
+    && !isDesignSprintShortcutModalOpen();
+}
+
+let designSprintShortcutFailureAlerted = false;
+
+function syncDesignSprintInteraction() {
+  if (!window.slashIt?.setDesignSprintInteraction) return;
+  const shortcut = isDesignSprintFocus();
+  const clickThrough = shouldDesignSprintPassClicks();
+  window.slashIt.setDesignSprintInteraction({ clickThrough, shortcut }).then((registered) => {
+    if (shortcut && registered === false && !designSprintShortcutFailureAlerted) {
+      designSprintShortcutFailureAlerted = true;
+      showAppAlert(
+        'Control–Option–S is already in use, so the sprint menu could not be opened from the keyboard.',
+        { title: 'Design Sprint' },
+      );
+    }
+  }).catch((err) => {
+    console.error('Failed to update Design Sprint interaction:', err);
+  });
+}
+
+function handleDesignSprintShortcut() {
+  if (!isDesignSprintFocus()) return;
+  if (isDesignSprintShortcutModalOpen()) {
+    closeDesignSprintShortcutModal();
+    return;
+  }
+  if (isDesignSprintTimeModalOpen()) return;
+  if (isDesignSprintTaskMenuOpen()) {
+    closeDesignSprintActionsModal();
+    return;
+  }
+  if (isDesignSprintWrapUpToastVisible()) {
+    openDesignSprintWrapUpFromToast();
+    return;
+  }
+  openDesignSprintActionsModal(null, { centered: true });
+}
+
 function dismissOpenDesignSprintWrapUpForFullscreen() {
   if (!isDesignSprintTimeModalOpen()) return;
   const onWrapUpStep = !designSprintExtendStep || designSprintExtendStep.classList.contains('hidden');
@@ -1264,6 +1355,7 @@ function enterDesignSprintFullscreen() {
   if (!menuOpen) applyFocusWindowSizeImmediate();
   updateDesignSprintFullscreenClock();
   if (!isInitializing) persist();
+  syncDesignSprintInteraction();
 }
 
 function exitDesignSprintFullscreen() {
@@ -1276,6 +1368,7 @@ function exitDesignSprintFullscreen() {
   closeDesignSprintActionsModal();
   if (!menuOpen && state.mode === 'focus') applyFocusWindowSizeImmediate();
   if (!isInitializing) persist();
+  syncDesignSprintInteraction();
 }
 
 function toggleDesignSprintFullscreen() {
@@ -1366,6 +1459,7 @@ function handleDesignSprintDocumentPointerDown(event) {
     closeDesignSprintFullscreenOptions();
   }
   if (!designSprintActionsMenuOpen) return;
+  if (event.target.closest('#design-sprint-menu-cluster')) return;
   if (event.target.closest('#design-sprint-task-menu')) return;
   if (event.target.closest('.design-sprint-segment--current')) return;
   closeDesignSprintActionsModal();
@@ -3922,7 +4016,10 @@ function startQuickStartSession() {
   persist();
   beginFreshSession();
   if (state.designSprintMode) {
-    requestAnimationFrame(() => syncDesignSprintAfterLayout());
+    requestAnimationFrame(() => {
+      syncDesignSprintAfterLayout();
+      openDesignSprintShortcutModal();
+    });
   }
 }
 
@@ -4712,6 +4809,7 @@ function showView(mode) {
     window.slashIt.setWindowMode(mode);
     closeSessionDrawer({ immediate: true });
     updateFullscreenTaskPanel();
+    syncDesignSprintInteraction();
   } else {
     if (isDesignSprintFocus()) {
       clearTimerBarHideTimeout();
@@ -12275,15 +12373,20 @@ function startSlashing() {
   }
 
   state.designSprintMode = resolveDesignSprintModeForSessionStart();
+  const startingFresh = !isSessionInProgress();
   enterQueuedSessionFocus();
   if (state.designSprintMode) {
-    requestAnimationFrame(() => syncDesignSprintAfterLayout());
+    requestAnimationFrame(() => {
+      syncDesignSprintAfterLayout();
+      if (startingFresh) openDesignSprintShortcutModal();
+    });
   }
 }
 
 function backToEdit() {
+  closeDesignSprintShortcutModal();
   closeSessionDrawer({ immediate: true });
-  closeDesignSprintActionsModal();
+  closeDesignSprintActionsModal({ syncInteraction: false });
   stopTimer();
   saveCurrentTaskProgress();
   state.isRunning = false;
@@ -12341,6 +12444,10 @@ designSprintWrapUpExtendBtn?.addEventListener('click', () => {
 designSprintWrapUpContinueBtn?.addEventListener('click', continueDesignSprintWrapUpModal);
 designSprintExtendConfirmBtn?.addEventListener('click', confirmDesignSprintExtendModal);
 designSprintExtendCancelBtn?.addEventListener('click', cancelDesignSprintExtendModal);
+designSprintShortcutOkBtn?.addEventListener('click', closeDesignSprintShortcutModal);
+designSprintShortcutModal?.addEventListener('click', (event) => {
+  if (event.target === designSprintShortcutModal) closeDesignSprintShortcutModal();
+});
 designSprintExtendInput?.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
@@ -12600,6 +12707,7 @@ whatsNewModal.addEventListener('click', (e) => {
   if (e.target === whatsNewModal) closeWhatsNewModal();
 });
 window.slashIt.onOpenWhatsNew(() => openWhatsNewModal());
+window.slashIt.onDesignSprintShortcut(() => handleDesignSprintShortcut());
 window.slashIt.onUpdateInstallPending(() => {
   if (!whatsNewModal.classList.contains('hidden')) {
     dismissWhatsNewModalWithoutSaving();
@@ -12869,6 +12977,10 @@ document.addEventListener('keydown', (e) => {
     }
     if (!completeTaskModal.classList.contains('hidden')) {
       closeCompleteTaskModal();
+      return;
+    }
+    if (isDesignSprintShortcutModalOpen()) {
+      closeDesignSprintShortcutModal();
       return;
     }
     if (designSprintTimeModal && !designSprintTimeModal.classList.contains('hidden')) {

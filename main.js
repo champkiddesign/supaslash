@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, nativeImage, dialog, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, nativeImage, dialog, shell, Menu, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -46,7 +46,8 @@ const CELEBRATION_DURATION_MS = 3500;
 
 const FOCUS_WIDTH_MARGIN = 40;
 const FOCUS_BAR_HEIGHT = 56;
-const DESIGN_SPRINT_BAR_HEIGHT = 32;
+const DESIGN_SPRINT_BAR_HEIGHT = 30;
+const DESIGN_SPRINT_SHORTCUT = 'Control+Alt+S';
 const FOCUS_DRAWER_GAP = 6;
 const FOCUS_DRAWER_BRIDGE = 14;
 const FOCUS_DRAWER_SLOT = 180 + 16 + 6 + 8 + 44;
@@ -76,6 +77,8 @@ let focusBarHeight = FOCUS_BAR_HEIGHT;
 let focusWindowFullscreen = false;
 let focusWindowHiddenByUser = false;
 let focusWindowDesignSprintActive = false;
+let designSprintClickThrough = false;
+let designSprintShortcutRegistered = false;
 let suppressFocusMoveEvent = false;
 
 const dataStore = createDataStore(app);
@@ -466,6 +469,52 @@ function getFocusMaxWidth() {
   return Math.max(getFocusMinWidth(), areaWidth - FOCUS_WIDTH_MARGIN);
 }
 
+function focusMainWindowForDesignSprint() {
+  if (!isLiveWindow(mainWindow)) return;
+  designSprintClickThrough = false;
+  mainWindow.setIgnoreMouseEvents(false);
+  mainWindow.show();
+  mainWindow.moveTop();
+  if (process.platform === 'darwin') app.focus({ steal: true });
+  mainWindow.focus();
+}
+
+function setDesignSprintShortcutEnabled(enabled) {
+  if (enabled) {
+    if (designSprintShortcutRegistered) return true;
+    const registered = globalShortcut.register(DESIGN_SPRINT_SHORTCUT, () => {
+      focusMainWindowForDesignSprint();
+      if (!isLiveWindow(mainWindow)) return;
+      mainWindow.webContents.send('design-sprint-shortcut');
+    });
+    designSprintShortcutRegistered = registered;
+    if (!registered) {
+      console.error('Failed to register Design Sprint shortcut', DESIGN_SPRINT_SHORTCUT);
+    }
+    return registered;
+  }
+  if (designSprintShortcutRegistered) {
+    globalShortcut.unregister(DESIGN_SPRINT_SHORTCUT);
+    designSprintShortcutRegistered = false;
+  }
+  return true;
+}
+
+function applyDesignSprintInteraction({ clickThrough = false, shortcut = false } = {}) {
+  const shortcutReady = setDesignSprintShortcutEnabled(!!shortcut);
+  const passClicks = !!clickThrough;
+  if (isLiveWindow(mainWindow) && passClicks !== designSprintClickThrough) {
+    designSprintClickThrough = passClicks;
+    mainWindow.setIgnoreMouseEvents(passClicks);
+    if (passClicks) mainWindow.blur();
+    else focusMainWindowForDesignSprint();
+  } else if (!passClicks) {
+    designSprintClickThrough = false;
+    if (isLiveWindow(mainWindow)) mainWindow.setIgnoreMouseEvents(false);
+  }
+  return shortcutReady;
+}
+
 function applyFocusWindowChrome({ designSprint = false } = {}) {
   if (!isLiveWindow(mainWindow) || process.platform !== 'darwin') return;
   if (typeof mainWindow.setHasShadow === 'function') {
@@ -742,6 +791,7 @@ function createWindow() {
     alwaysOnTop: false,
     frame: false,
     transparent: true,
+    roundedCorners: false,
     resizable: true,
     maximizable: false,
     backgroundColor: '#00000000',
@@ -753,6 +803,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false,
     },
   });
 
@@ -775,6 +826,8 @@ function createWindow() {
   });
 
   mainWindow.on('closed', () => {
+    setDesignSprintShortcutEnabled(false);
+    designSprintClickThrough = false;
     destroyOverlayWindow();
     destroyDrawerOverlayWindow();
     mainWindow = null;
@@ -817,6 +870,7 @@ app.on('before-quit-for-update', () => {
   isQuitting = true;
 });
 app.on('before-quit', (event) => {
+  setDesignSprintShortcutEnabled(false);
   if (isQuitting || isQuittingForUpdate()) return;
   event.preventDefault();
   isQuitting = true;
@@ -859,6 +913,10 @@ ipcMain.handle('set-focus-width', (_event, contentWidth) => {
   resizeFocusWindow({ width: contentWidth, height: focusBarHeight, preservePosition: focusPositionCustomized });
   return true;
 });
+
+ipcMain.handle('set-design-sprint-interaction', (_event, payload = {}) => (
+  applyDesignSprintInteraction(payload)
+));
 
 ipcMain.handle('set-focus-dimensions', (_event, dimensions = {}) => {
   if (dimensions.designSprint) {
