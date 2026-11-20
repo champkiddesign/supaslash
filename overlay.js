@@ -1,4 +1,5 @@
 const edgeGlow = document.querySelector('.edge-glow');
+const approachGlow = document.querySelector('.approach-glow');
 const celebrationLayer = document.getElementById('celebration-layer');
 
 const CELEBRATION_EMOJIS = ['🎉', '🎊', '✨', '🙌', '🥳', '⭐', '💪', '🔥'];
@@ -31,7 +32,26 @@ function launchCelebration() {
   }
 }
 
+function hideApproachGlow() {
+  if (!approachGlow) return;
+  approachGlow.classList.remove('is-on', 'is-break');
+  approachGlow.style.removeProperty('opacity');
+  approachGlow.style.setProperty('--approach-opacity', '0');
+  approachGlow.setAttribute('aria-hidden', 'true');
+}
+
+function showApproachGlow({ opacity, tone } = {}) {
+  if (!approachGlow) return;
+  const amount = Math.min(1, Math.max(0, Number(opacity) || 0));
+  approachGlow.classList.toggle('is-break', tone === 'break');
+  approachGlow.classList.add('is-on');
+  approachGlow.style.removeProperty('opacity');
+  approachGlow.style.setProperty('--approach-opacity', amount.toFixed(4));
+  approachGlow.setAttribute('aria-hidden', 'false');
+}
+
 window.screenOverlay.onExpiredShow(() => {
+  hideApproachGlow();
   edgeGlow.classList.add('is-visible');
   clearCelebration();
 });
@@ -40,7 +60,16 @@ window.screenOverlay.onExpiredHide(() => {
   edgeGlow.classList.remove('is-visible');
 });
 
+window.screenOverlay.onApproachShow((payload) => {
+  showApproachGlow(payload);
+});
+
+window.screenOverlay.onApproachHide(() => {
+  hideApproachGlow();
+});
+
 window.screenOverlay.onCelebrationStart(() => {
+  hideApproachGlow();
   edgeGlow.classList.remove('is-visible');
   launchCelebration();
 });

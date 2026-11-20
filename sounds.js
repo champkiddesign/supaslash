@@ -102,6 +102,7 @@ const doubleSound = createSoundPool('assets/sounds/double.m4a', 0.55);
 const alarmSound = createSoundPool('assets/sounds/alarm.m4a');
 const completeSound = createSoundPool('assets/sounds/complete.m4a', 0.35);
 const tasksCompleteSound = createSoundPool('assets/sounds/tasks-complete.m4a');
+const designSprintWrapUpSound = createSoundPool('assets/sounds/sprint-wrap-up.mp3');
 
 let warmedUp = false;
 
@@ -115,6 +116,7 @@ function warmUpSounds() {
   alarmSound.warmUp();
   completeSound.warmUp();
   tasksCompleteSound.warmUp();
+  designSprintWrapUpSound.warmUp();
 }
 
 function playClickSound() {
@@ -145,8 +147,13 @@ function playTasksCompleteSound() {
   tasksCompleteSound.play();
 }
 
+function playDesignSprintWrapUpSound() {
+  designSprintWrapUpSound.play();
+}
+
 const HOVER_CLICK_SOUND_SELECTORS = [
   '.settings-menu-item:not(.settings-menu-item--disabled)',
+  '.settings-menu-category',
   '.planned-sessions-filter-option',
   '#timer-bar button:not(:disabled):not(#timer-display)',
   '.session-drawer-task--clickable',

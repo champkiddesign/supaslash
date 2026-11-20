@@ -29,6 +29,10 @@ function loadLocalEnvFile() {
 
 loadLocalEnvFile();
 
+if (process.platform === 'darwin' && !app.isPackaged) {
+  app.setName('SupaSlash');
+}
+
 const { createDataStore } = require('./data-store');
 const { createAttachmentStore } = require('./attachment-store');
 const { createLicenseStore } = require('./license-store');
@@ -48,6 +52,7 @@ const FOCUS_WIDTH_MARGIN = 40;
 const FOCUS_BAR_HEIGHT = 56;
 const DESIGN_SPRINT_BAR_HEIGHT = 30;
 const DESIGN_SPRINT_SHORTCUT = 'Control+Alt+S';
+const DESIGN_SPRINT_FULLSCREEN_SHORTCUT = 'Control+Alt+F';
 const FOCUS_DRAWER_GAP = 6;
 const FOCUS_DRAWER_BRIDGE = 14;
 const FOCUS_DRAWER_SLOT = 180 + 16 + 6 + 8 + 44;
@@ -78,7 +83,12 @@ let focusWindowFullscreen = false;
 let focusWindowHiddenByUser = false;
 let focusWindowDesignSprintActive = false;
 let designSprintClickThrough = false;
-let designSprintShortcutRegistered = false;
+let designSprintForwardMouse = false;
+let designSprintToastCapture = false;
+let designSprintShortcutWanted = false;
+let timerHideShortcutWanted = false;
+let registeredShortcutOwner = null;
+let designSprintFullscreenShortcutRegistered = false;
 let suppressFocusMoveEvent = false;
 
 const dataStore = createDataStore(app);
@@ -96,6 +106,56 @@ function getMainDisplay() {
     x: bounds.x + bounds.width / 2,
     y: bounds.y + bounds.height / 2,
   });
+}
+
+function restoreSprintApproachGlowLayer({ force = false } = {}) {
+  if (overlayMode !== 'approach' || !isLiveWindow(overlayWindow)) return;
+  const overlay = overlayWindow;
+  const bounds = getMainDisplay().bounds;
+  const current = overlay.getBounds();
+  const boundsDiffer = Math.abs(current.x - bounds.x) > 1
+    || Math.abs(current.y - bounds.y) > 1
+    || Math.abs(current.width - bounds.width) > 1
+    || Math.abs(current.height - bounds.height) > 1;
+  if (boundsDiffer) overlay.setBounds(bounds);
+  overlay.setAlwaysOnTop(true, 'screen-saver');
+  if (force || !overlay.isVisible()) overlay.showInactive();
+  if (!isLiveWindow(mainWindow) || !isFloatingMode(currentWindowMode)) return;
+  // Stay one level above the glow so the bar remains clickable, without
+  // dropping back to floating — that reorder hides the glow on macOS.
+  mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+  if (force) mainWindow.moveTop();
+}
+
+function applyMainWindowStacking() {
+  if (!isLiveWindow(mainWindow)) return;
+  if (!isFloatingMode(currentWindowMode)) {
+    mainWindow.setAlwaysOnTop(false);
+    return;
+  }
+  if (overlayMode === 'approach') {
+    restoreSprintApproachGlowLayer();
+    return;
+  }
+  if (focusWindowFullscreen) {
+    // screen-saver sits above the menu bar and Dock, so the window can cover both.
+    mainWindow.setAlwaysOnTop(true, 'screen-saver');
+    return;
+  }
+  mainWindow.setAlwaysOnTop(true, 'floating');
+}
+
+function fitFocusWindowToDisplay() {
+  if (!isLiveWindow(mainWindow)) return;
+  const { x, y, width, height } = getMainDisplay().bounds;
+  // Keep focusBarHeight as the timer bar height. Storing the display height
+  // here makes the next bar width scale off the screen and crash the GPU.
+  mainWindow.setMinimumSize(200, 200);
+  mainWindow.setMaximumSize(width, height);
+  mainWindow.setResizable(false);
+  suppressFocusMoveEvent = true;
+  mainWindow.setBounds({ x, y, width, height }, false);
+  suppressFocusMoveEvent = false;
 }
 
 function createOverlayWindow() {
@@ -137,6 +197,10 @@ function createOverlayWindow() {
 
 function presentOverlayWindow(overlay) {
   if (overlay.isDestroyed()) return;
+  if (overlayMode === 'approach') {
+    restoreSprintApproachGlowLayer();
+    return;
+  }
   overlay.showInactive();
   overlay.setAlwaysOnTop(true, 'screen-saver');
   if (isLiveWindow(mainWindow)) {
@@ -174,8 +238,44 @@ function hideScreenOverlay({ restoreMainWindow = true } = {}) {
     overlayWindow.hide();
   }
   if (restoreMainWindow && isLiveWindow(mainWindow) && isFloatingMode(currentWindowMode)) {
-    mainWindow.setAlwaysOnTop(true, 'floating');
+    applyMainWindowStacking();
   }
+}
+
+function hideSprintApproachGlow({ restoreMainWindow = true } = {}) {
+  if (overlayMode !== 'approach') return;
+  overlayMode = 'none';
+  if (isLiveWindow(overlayWindow)) {
+    overlayWindow.webContents.send('overlay-approach-hide');
+    overlayWindow.hide();
+  }
+  if (restoreMainWindow && isLiveWindow(mainWindow) && isFloatingMode(currentWindowMode)) {
+    applyMainWindowStacking();
+  }
+}
+
+function updateSprintApproachGlow(payload) {
+  if (!payload || typeof payload !== 'object') {
+    hideSprintApproachGlow();
+    return;
+  }
+  const opacity = Number(payload.opacity);
+  const tone = payload.tone === 'break' ? 'break' : 'task';
+  if (!Number.isFinite(opacity) || opacity <= 0) {
+    hideSprintApproachGlow();
+    return;
+  }
+  if (overlayMode === 'expired' || overlayMode === 'celebration') return;
+
+  const overlay = createOverlayWindow();
+  overlayMode = 'approach';
+  runWhenOverlayReady(overlay, () => {
+    if (overlay.isDestroyed() || overlayMode !== 'approach') return;
+    overlay.webContents.send('overlay-approach-show', { opacity, tone });
+    // Re-assert after every update. A later bar resize used to leave the
+    // window "visible" but ordered off screen, so the fade never continued.
+    restoreSprintApproachGlowLayer();
+  });
 }
 
 function hideCelebrationOverlay({ restoreMainWindow = true } = {}) {
@@ -190,7 +290,7 @@ function hideCelebrationOverlay({ restoreMainWindow = true } = {}) {
     overlayWindow.hide();
   }
   if (restoreMainWindow && isLiveWindow(mainWindow) && isFloatingMode(currentWindowMode)) {
-    mainWindow.setAlwaysOnTop(true, 'floating');
+    applyMainWindowStacking();
   }
 }
 
@@ -204,10 +304,11 @@ function hideAllOverlays({ restoreMainWindow = true } = {}) {
   if (isLiveWindow(overlayWindow)) {
     if (mode === 'celebration') overlayWindow.webContents.send('celebration-stop');
     if (mode === 'expired') overlayWindow.webContents.send('overlay-expired-hide');
+    if (mode === 'approach') overlayWindow.webContents.send('overlay-approach-hide');
     overlayWindow.hide();
   }
   if (restoreMainWindow && isLiveWindow(mainWindow) && isFloatingMode(currentWindowMode)) {
-    mainWindow.setAlwaysOnTop(true, 'floating');
+    applyMainWindowStacking();
   }
 }
 
@@ -223,6 +324,9 @@ function showCelebrationOverlay() {
 
   if (overlayMode === 'expired') {
     overlay.webContents.send('overlay-expired-hide');
+  }
+  if (overlayMode === 'approach') {
+    overlay.webContents.send('overlay-approach-hide');
   }
 
   overlayMode = 'celebration';
@@ -380,7 +484,7 @@ function showSessionDrawerOverlay({ drawerWidth, drawerHeight, tasks, sessionTit
       overlay.showInactive();
     }
     overlay.setAlwaysOnTop(true, 'floating', 2);
-    if (isLiveWindow(mainWindow)) {
+    if (isLiveWindow(mainWindow) && !focusWindowFullscreen) {
       mainWindow.setAlwaysOnTop(true, 'floating', 1);
       mainWindow.moveTop();
     }
@@ -472,6 +576,8 @@ function getFocusMaxWidth() {
 function focusMainWindowForDesignSprint() {
   if (!isLiveWindow(mainWindow)) return;
   designSprintClickThrough = false;
+  designSprintForwardMouse = false;
+  designSprintToastCapture = false;
   mainWindow.setIgnoreMouseEvents(false);
   mainWindow.show();
   mainWindow.moveTop();
@@ -479,40 +585,118 @@ function focusMainWindowForDesignSprint() {
   mainWindow.focus();
 }
 
-function setDesignSprintShortcutEnabled(enabled) {
-  if (enabled) {
-    if (designSprintShortcutRegistered) return true;
-    const registered = globalShortcut.register(DESIGN_SPRINT_SHORTCUT, () => {
-      focusMainWindowForDesignSprint();
-      if (!isLiveWindow(mainWindow)) return;
-      mainWindow.webContents.send('design-sprint-shortcut');
-    });
-    designSprintShortcutRegistered = registered;
-    if (!registered) {
-      console.error('Failed to register Design Sprint shortcut', DESIGN_SPRINT_SHORTCUT);
-    }
-    return registered;
+function syncDesignSprintFullscreenShortcut() {
+  const shouldRegister = !!designSprintShortcutWanted;
+  if (shouldRegister === designSprintFullscreenShortcutRegistered) return;
+  if (designSprintFullscreenShortcutRegistered) {
+    globalShortcut.unregister(DESIGN_SPRINT_FULLSCREEN_SHORTCUT);
+    designSprintFullscreenShortcutRegistered = false;
   }
-  if (designSprintShortcutRegistered) {
+  if (!shouldRegister) return;
+  const registered = globalShortcut.register(DESIGN_SPRINT_FULLSCREEN_SHORTCUT, () => {
+    if (!isLiveWindow(mainWindow)) return;
+    focusMainWindowForDesignSprint();
+    mainWindow.webContents.send('design-sprint-fullscreen-shortcut');
+  });
+  if (!registered) {
+    console.error('Failed to register shortcut', DESIGN_SPRINT_FULLSCREEN_SHORTCUT);
+    return;
+  }
+  designSprintFullscreenShortcutRegistered = true;
+}
+
+function syncAppShortcut() {
+  syncDesignSprintFullscreenShortcut();
+  const owner = designSprintShortcutWanted ? 'sprint' : timerHideShortcutWanted ? 'hide' : null;
+  if (owner === registeredShortcutOwner) return true;
+  if (registeredShortcutOwner) {
     globalShortcut.unregister(DESIGN_SPRINT_SHORTCUT);
-    designSprintShortcutRegistered = false;
+    registeredShortcutOwner = null;
   }
+  if (!owner) return true;
+  const registered = globalShortcut.register(DESIGN_SPRINT_SHORTCUT, () => {
+    if (!isLiveWindow(mainWindow)) return;
+    if (registeredShortcutOwner === 'hide') {
+      mainWindow.webContents.send('focus-window-restore-request');
+      return;
+    }
+    focusMainWindowForDesignSprint();
+    mainWindow.webContents.send('design-sprint-shortcut');
+  });
+  if (!registered) {
+    console.error('Failed to register shortcut', DESIGN_SPRINT_SHORTCUT, owner);
+    return false;
+  }
+  registeredShortcutOwner = owner;
   return true;
 }
 
-function applyDesignSprintInteraction({ clickThrough = false, shortcut = false } = {}) {
+function setDesignSprintShortcutEnabled(enabled) {
+  designSprintShortcutWanted = !!enabled;
+  return syncAppShortcut();
+}
+
+function setTimerHideShortcutEnabled(enabled) {
+  timerHideShortcutWanted = !!enabled;
+  return syncAppShortcut();
+}
+
+function clearAppShortcuts() {
+  designSprintShortcutWanted = false;
+  timerHideShortcutWanted = false;
+  syncAppShortcut();
+}
+
+function syncDesignSprintMouseIgnore() {
+  if (!isLiveWindow(mainWindow)) return;
+  if (!designSprintClickThrough || designSprintToastCapture) {
+    mainWindow.setIgnoreMouseEvents(false);
+    return;
+  }
+  if (designSprintForwardMouse) {
+    mainWindow.setIgnoreMouseEvents(true, { forward: true });
+    return;
+  }
+  mainWindow.setIgnoreMouseEvents(true);
+}
+
+function applyDesignSprintInteraction({
+  clickThrough = false,
+  shortcut = false,
+  forwardMouse = false,
+  blurIfFocused = false,
+} = {}) {
   const shortcutReady = setDesignSprintShortcutEnabled(!!shortcut);
   const passClicks = !!clickThrough;
-  if (isLiveWindow(mainWindow) && passClicks !== designSprintClickThrough) {
-    designSprintClickThrough = passClicks;
-    mainWindow.setIgnoreMouseEvents(passClicks);
-    if (passClicks) mainWindow.blur();
-    else focusMainWindowForDesignSprint();
-  } else if (!passClicks) {
+  const forward = passClicks && !!forwardMouse;
+  const wasPassing = designSprintClickThrough;
+
+  if (!passClicks || !forward) designSprintToastCapture = false;
+  designSprintClickThrough = passClicks;
+  designSprintForwardMouse = forward;
+
+  if (!isLiveWindow(mainWindow)) return shortcutReady;
+
+  if (!passClicks) {
+    if (wasPassing) focusMainWindowForDesignSprint();
+    else mainWindow.setIgnoreMouseEvents(false);
     designSprintClickThrough = false;
-    if (isLiveWindow(mainWindow)) mainWindow.setIgnoreMouseEvents(false);
+    designSprintForwardMouse = false;
+    designSprintToastCapture = false;
+    return shortcutReady;
   }
+
+  syncDesignSprintMouseIgnore();
+  if (!wasPassing || (blurIfFocused && mainWindow.isFocused())) mainWindow.blur();
   return shortcutReady;
+}
+
+function setDesignSprintToastCapture(capturing) {
+  if (!isLiveWindow(mainWindow)) return;
+  const next = !!capturing && designSprintClickThrough && designSprintForwardMouse;
+  if (next === designSprintToastCapture) return;
+  designSprintToastCapture = next;
+  syncDesignSprintMouseIgnore();
 }
 
 function applyFocusWindowChrome({ designSprint = false } = {}) {
@@ -525,32 +709,31 @@ function applyFocusWindowChrome({ designSprint = false } = {}) {
   }
 }
 
-function resizeFocusWindow({ width: contentWidth, height: contentHeight, x, y, preservePosition, fullscreen, designSprint } = {}) {
+function resizeFocusWindow({
+  width: contentWidth,
+  height: contentHeight,
+  x,
+  y,
+  preservePosition,
+  fullscreen,
+  designSprint,
+  edge,
+  overlay,
+} = {}) {
   if (!isLiveWindow(mainWindow) || currentWindowMode !== 'focus') return;
 
   if (designSprint && fullscreen) {
     focusWindowDesignSprintActive = true;
     applyFocusWindowChrome({ designSprint: true });
     focusWindowFullscreen = true;
-    const display = getMainDisplay();
-    const { x: areaX, y: areaY, width: areaWidth, height: areaHeight } = display.workArea;
     focusPositionCustomized = false;
-    focusBarHeight = areaHeight;
-    mainWindow.setMinimumSize(200, 200);
-    mainWindow.setMaximumSize(areaWidth, areaHeight);
-    mainWindow.setResizable(false);
     // Leave the native window transparent. An opaque black background sticks
     // on macOS until the next click, which hides the docked bar's fade.
     mainWindow.setBackgroundColor('rgba(0, 0, 0, 0)');
-    suppressFocusMoveEvent = true;
-    mainWindow.setBounds({
-      x: areaX,
-      y: areaY,
-      width: areaWidth,
-      height: areaHeight,
-    }, false);
-    suppressFocusMoveEvent = false;
+    applyMainWindowStacking();
+    fitFocusWindowToDisplay();
     mainWindow.show();
+    restoreSprintApproachGlowLayer({ force: true });
     return;
   }
 
@@ -558,25 +741,47 @@ function resizeFocusWindow({ width: contentWidth, height: contentHeight, x, y, p
     focusWindowDesignSprintActive = true;
     applyFocusWindowChrome({ designSprint: true });
     focusWindowFullscreen = false;
+    applyMainWindowStacking();
     const display = getMainDisplay();
     const { x: areaX, y: areaY, width: areaWidth, height: areaHeight } = display.workArea;
-    const height = Math.max(DESIGN_SPRINT_BAR_HEIGHT, Math.ceil(contentHeight || DESIGN_SPRINT_BAR_HEIGHT));
-    focusBarHeight = height;
+    const dock = edge === 'top' || edge === 'left' || edge === 'right' ? edge : 'bottom';
+    const vertical = !overlay && (dock === 'left' || dock === 'right');
+    const extent = Math.max(DESIGN_SPRINT_BAR_HEIGHT, Math.ceil(contentHeight || DESIGN_SPRINT_BAR_HEIGHT));
     focusPositionCustomized = false;
-    mainWindow.setMinimumSize(400, height);
-    mainWindow.setMaximumSize(areaWidth, height);
     mainWindow.setResizable(false);
-    suppressFocusMoveEvent = true;
-    mainWindow.setBounds({
-      x: areaX,
-      y: areaY + areaHeight - height,
-      width: areaWidth,
-      height,
-    }, false);
-    suppressFocusMoveEvent = false;
     mainWindow.setBackgroundColor('rgba(0, 0, 0, 0)');
+    // Unlock the previous edge's max before the bounds change axes.
+    mainWindow.setMinimumSize(1, 1);
+    mainWindow.setMaximumSize(Math.max(areaWidth, extent), Math.max(areaHeight, extent));
+    suppressFocusMoveEvent = true;
+    if (vertical) {
+      const width = Math.min(extent, areaWidth);
+      focusBarHeight = DESIGN_SPRINT_BAR_HEIGHT;
+      mainWindow.setBounds({
+        x: dock === 'left' ? areaX : areaX + areaWidth - width,
+        y: areaY,
+        width,
+        height: areaHeight,
+      }, false);
+      mainWindow.setMinimumSize(width, 200);
+      mainWindow.setMaximumSize(width, areaHeight);
+    } else {
+      const height = overlay ? extent : Math.min(extent, areaHeight);
+      focusBarHeight = height;
+      const originY = !overlay && dock === 'top' ? areaY : areaY + areaHeight - height;
+      mainWindow.setBounds({
+        x: areaX,
+        y: originY,
+        width: areaWidth,
+        height,
+      }, false);
+      mainWindow.setMinimumSize(400, height);
+      mainWindow.setMaximumSize(areaWidth, height);
+    }
+    suppressFocusMoveEvent = false;
     mainWindow.webContents.invalidate();
     mainWindow.show();
+    restoreSprintApproachGlowLayer({ force: true });
     return;
   }
 
@@ -585,25 +790,21 @@ function resizeFocusWindow({ width: contentWidth, height: contentHeight, x, y, p
 
   if (fullscreen) {
     focusWindowFullscreen = true;
-    const display = getMainDisplay();
-    const { x: areaX, y: areaY, width: areaWidth, height: areaHeight } = display.workArea;
     focusPositionCustomized = false;
-    mainWindow.setMinimumSize(200, 200);
-    mainWindow.setMaximumSize(areaWidth, areaHeight);
-    mainWindow.setResizable(WINDOW_SIZES.focus.resizable);
     mainWindow.setBackgroundColor('#00000000');
-    suppressFocusMoveEvent = true;
-    mainWindow.setBounds({ x: areaX, y: areaY, width: areaWidth, height: areaHeight }, false);
-    suppressFocusMoveEvent = false;
+    applyMainWindowStacking();
+    fitFocusWindowToDisplay();
+    restoreSprintApproachGlowLayer({ force: true });
     return;
   }
 
   focusWindowFullscreen = false;
+  applyMainWindowStacking();
+  const height = Math.max(1, Math.ceil(contentHeight || focusBarHeight));
+  focusBarHeight = height;
   const minWidth = getFocusMinWidth();
   const maxWidth = getFocusMaxWidth();
   const width = Math.max(minWidth, Math.min(Math.ceil(contentWidth || minWidth), maxWidth));
-  const height = Math.max(1, Math.ceil(contentHeight || focusBarHeight));
-  focusBarHeight = height;
   const boundsBefore = mainWindow.getBounds();
   const useCustomPosition = preservePosition || focusPositionCustomized;
 
@@ -634,6 +835,7 @@ function resizeFocusWindow({ width: contentWidth, height: contentHeight, x, y, p
   suppressFocusMoveEvent = true;
   mainWindow.setBounds({ x: nextX, y: nextY, width, height }, false);
   suppressFocusMoveEvent = false;
+  restoreSprintApproachGlowLayer({ force: true });
 }
 
 function isFloatingMode(mode) {
@@ -645,12 +847,17 @@ function applyWindowPresentation(mode) {
   const floating = isFloatingMode(mode);
 
   mainWindow.setVisibleOnAllWorkspaces(floating, floating ? VISIBLE_ON_ALL_WORKSPACES_OPTS : undefined);
-  mainWindow.setAlwaysOnTop(floating, floating ? 'floating' : 'normal');
+  applyMainWindowStacking();
 
   if (process.platform === 'darwin') {
     mainWindow.setWindowButtonVisibility(!floating);
   }
   mainWindow.setMaximizable(false);
+
+  // setVisibleOnAllWorkspaces can drop the window back into the work area.
+  if (mode === 'focus' && focusWindowFullscreen) {
+    fitFocusWindowToDisplay();
+  }
 }
 
 function applyWindowSize(mode, options = {}) {
@@ -671,6 +878,8 @@ function applyWindowSize(mode, options = {}) {
         designSprint: true,
         fullscreen: !!options.fullscreen,
         height: options.height || DESIGN_SPRINT_BAR_HEIGHT,
+        edge: options.edge,
+        overlay: !!options.overlay,
       });
     } else if (options.fullscreen) {
       resizeFocusWindow({ fullscreen: true });
@@ -691,6 +900,7 @@ function applyWindowSize(mode, options = {}) {
       });
     }
   } else {
+    focusWindowFullscreen = false;
     focusWindowDesignSprintActive = false;
     applyFocusWindowChrome({ designSprint: false });
     focusPositionCustomized = false;
@@ -826,8 +1036,10 @@ function createWindow() {
   });
 
   mainWindow.on('closed', () => {
-    setDesignSprintShortcutEnabled(false);
+    clearAppShortcuts();
     designSprintClickThrough = false;
+    designSprintForwardMouse = false;
+    designSprintToastCapture = false;
     destroyOverlayWindow();
     destroyDrawerOverlayWindow();
     mainWindow = null;
@@ -869,12 +1081,36 @@ let isQuitting = false;
 app.on('before-quit-for-update', () => {
   isQuitting = true;
 });
+function requestRendererTimerFlush() {
+  if (!isLiveWindow(mainWindow)) return Promise.resolve();
+  return new Promise((resolve) => {
+    const onFlushed = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+    const timeout = setTimeout(() => {
+      ipcMain.removeListener('timer-progress-flushed', onFlushed);
+      resolve();
+    }, 1500);
+    ipcMain.once('timer-progress-flushed', onFlushed);
+    try {
+      mainWindow.webContents.send('flush-timer-progress');
+    } catch {
+      clearTimeout(timeout);
+      ipcMain.removeListener('timer-progress-flushed', onFlushed);
+      resolve();
+    }
+  });
+}
+
 app.on('before-quit', (event) => {
-  setDesignSprintShortcutEnabled(false);
+  clearAppShortcuts();
   if (isQuitting || isQuittingForUpdate()) return;
   event.preventDefault();
   isQuitting = true;
-  dataStore.flushDocumentsBackup()
+  requestRendererTimerFlush()
+    .catch(() => {})
+    .then(() => dataStore.flushDocumentsBackup())
     .catch((err) => {
       console.error('Failed to flush Documents backup on quit:', err);
     })
@@ -886,6 +1122,8 @@ app.on('before-quit', (event) => {
 ipcMain.handle('check-for-updates', () => checkForUpdates({ manual: true }));
 
 ipcMain.handle('get-app-version', () => app.getVersion());
+
+ipcMain.handle('is-packaged', () => app.isPackaged);
 
 ipcMain.handle('is-update-ready-to-install', () => isUpdateReadyToInstall());
 
@@ -918,6 +1156,20 @@ ipcMain.handle('set-design-sprint-interaction', (_event, payload = {}) => (
   applyDesignSprintInteraction(payload)
 ));
 
+ipcMain.on('set-design-sprint-toast-capture', (_event, capturing) => {
+  setDesignSprintToastCapture(capturing);
+});
+
+ipcMain.handle('get-cursor-in-window', () => {
+  if (!isLiveWindow(mainWindow)) return null;
+  const point = screen.getCursorScreenPoint();
+  const bounds = mainWindow.getContentBounds();
+  return {
+    x: point.x - bounds.x,
+    y: point.y - bounds.y,
+  };
+});
+
 ipcMain.handle('set-focus-dimensions', (_event, dimensions = {}) => {
   if (dimensions.designSprint) {
     focusPositionCustomized = false;
@@ -925,6 +1177,8 @@ ipcMain.handle('set-focus-dimensions', (_event, dimensions = {}) => {
       designSprint: true,
       fullscreen: !!dimensions.fullscreen,
       height: dimensions.height,
+      edge: dimensions.edge,
+      overlay: !!dimensions.overlay,
     });
     return true;
   }
@@ -948,6 +1202,10 @@ ipcMain.handle('set-focus-dimensions', (_event, dimensions = {}) => {
   return true;
 });
 
+ipcMain.handle('set-timer-bar-hide-shortcut', (_event, enabled) => (
+  setTimerHideShortcutEnabled(enabled)
+));
+
 ipcMain.handle('hide-focus-window', () => {
   if (!isLiveWindow(mainWindow) || currentWindowMode !== 'focus') return false;
   focusWindowHiddenByUser = true;
@@ -960,7 +1218,8 @@ ipcMain.handle('show-focus-window', () => {
   if (!isLiveWindow(mainWindow) || currentWindowMode !== 'focus') return false;
   focusWindowHiddenByUser = false;
   mainWindow.showInactive();
-  mainWindow.setAlwaysOnTop(true, 'floating');
+  applyMainWindowStacking();
+  if (focusWindowFullscreen) fitFocusWindowToDisplay();
   return true;
 });
 
@@ -1023,6 +1282,11 @@ ipcMain.handle('set-screen-overlay', (_event, visible) => {
   return true;
 });
 
+ipcMain.handle('set-sprint-approach-glow', (_event, payload) => {
+  updateSprintApproachGlow(payload);
+  return true;
+});
+
 ipcMain.handle('trigger-celebration', () => {
   showCelebrationOverlay();
   return true;
@@ -1072,8 +1336,8 @@ ipcMain.handle('license:open-checkout', async () => {
 });
 
 ipcMain.handle('load-data', () => dataStore.loadData());
-ipcMain.handle('save-data', (_event, data) => {
-  dataStore.saveDataAsync(data);
+ipcMain.handle('save-data', (_event, data, options) => {
+  dataStore.saveDataAsync(data, options);
   return true;
 });
 
@@ -1188,8 +1452,8 @@ ipcMain.handle('restore-data-from-file', async (event) => {
     if (!data) {
       return { canceled: false, error: 'That file is not a valid SupaSlash backup.' };
     }
-    await dataStore.saveDataPipeline(data);
-    return { canceled: false, data };
+    const restored = dataStore.importRestoredData(data, filePaths[0]);
+    return { canceled: false, data: restored };
   } catch (err) {
     console.error('Failed to restore data:', err);
     return { canceled: false, error: 'Could not restore from that backup file.' };

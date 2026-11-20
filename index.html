@@ -46,12 +46,18 @@
 
       <section class="task-section task-section--planned">
         <div class="section-header">
-          <h2 class="section-label section-label--bright" data-tutorial="sessions-panel">Sessions:</h2>
+          <h2 id="planned-sessions-heading" class="section-label section-label--bright" data-tutorial="sessions-panel">Sessions:</h2>
           <div class="section-header-actions">
             <button id="planned-sessions-collapse-all-btn" class="planned-sessions-collapse-all-btn" type="button" aria-label="Expand all sessions" title="Expand all sessions">
               <svg class="planned-sessions-collapse-all-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <polyline points="7 13 12 18 17 13"/>
                 <polyline points="7 6 12 11 17 6"/>
+              </svg>
+            </button>
+            <button id="planned-sessions-saved-btn" class="planned-sessions-saved-btn" type="button" aria-pressed="false" aria-label="Saved for later" title="Saved for later">
+              <svg class="planned-sessions-saved-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"/>
+                <polyline points="12 7 12 12 15 14"/>
               </svg>
             </button>
             <div class="planned-sessions-filter-wrap">
@@ -89,8 +95,8 @@
             type="button"
             role="switch"
             aria-checked="false"
-            aria-label="Design Sprint mode"
-            title="Design Sprint mode"
+            aria-label="Sprint mode"
+            title="Sprint mode"
             disabled
           >
             <span class="design-sprint-toggle-thumb" aria-hidden="true">
@@ -205,15 +211,15 @@
         </div>
         <div class="clear-session-modal-actions">
           <div id="quick-start-design-sprint-row" class="quick-start-design-sprint-row hidden" hidden>
-            <span class="quick-start-design-sprint-label">Design Sprint</span>
+            <span class="quick-start-design-sprint-label">Sprint</span>
             <button
               id="quick-start-design-sprint-btn"
               class="design-sprint-toggle-btn"
               type="button"
               role="switch"
               aria-checked="false"
-              aria-label="Design Sprint"
-              title="Design Sprint off"
+              aria-label="Sprint"
+              title="Sprint off"
             >
               <span class="design-sprint-toggle-thumb" aria-hidden="true">
                 <span class="design-sprint-toggle-icon"></span>
@@ -227,23 +233,17 @@
     </div>
 
     <div id="settings-menu" class="settings-menu hidden" role="menu" aria-label="Settings">
-      <button type="button" id="settings-templates-btn" class="settings-menu-item" role="menuitem">Templates</button>
-      <button type="button" id="settings-labs-btn" class="settings-menu-item" role="menuitem">Labs</button>
-      <button type="button" id="settings-history-btn" class="settings-menu-item" role="menuitem">Session history</button>
-      <button type="button" id="settings-analytics-btn" class="settings-menu-item hidden" role="menuitem">Analytics</button>
-      <button type="button" id="settings-invoice-btn" class="settings-menu-item" role="menuitem">Personal Profile</button>
+      <button type="button" id="settings-templates-btn" class="settings-menu-item" role="menuitem"><span class="settings-menu-item-main"><svg class="settings-menu-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="m220 169.09l-92 53.65l-92-53.65a8 8 0 0 0-8 13.82l96 56a8 8 0 0 0 8.06 0l96-56a8 8 0 1 0-8.06-13.82"/><path fill="currentColor" d="m220 121.09l-92 53.65l-92-53.65a8 8 0 0 0-8 13.82l96 56a8 8 0 0 0 8.06 0l96-56a8 8 0 1 0-8.06-13.82"/><path fill="currentColor" d="m28 86.91l96 56a8 8 0 0 0 8.06 0l96-56a8 8 0 0 0 0-13.82l-96-56a8 8 0 0 0-8.06 0l-96 56a8 8 0 0 0 0 13.82"/></svg><span>Templates</span></span></button>
+      <button type="button" id="settings-labs-btn" class="settings-menu-item" role="menuitem"><span class="settings-menu-item-main"><svg class="settings-menu-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="M221.69 199.77L160 96.92V40h8a8 8 0 0 0 0-16H88a8 8 0 0 0 0 16h8v56.92L34.31 199.77A16 16 0 0 0 48 224h160a16 16 0 0 0 13.72-24.23Zm-90.08-42.91c-15.91-8.05-31.05-12.32-45.22-12.81l24.47-40.8a7.93 7.93 0 0 0 1.14-4.11V40h32v59.14a7.93 7.93 0 0 0 1.14 4.11L183.36 167c-11.96 2.34-29.07 1.34-51.75-10.14"/></svg><span>Labs</span></span></button>
+      <button type="button" id="settings-history-btn" class="settings-menu-item" role="menuitem"><span class="settings-menu-item-main"><svg class="settings-menu-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="M224 128a96 96 0 0 1-161.89 69.82a8 8 0 1 1 11-11.64a80 80 0 1 0-1.68-114.75A439 439 0 0 0 61.35 82l16.31 16.34A8 8 0 0 1 72 112H32a8 8 0 0 1-8-8V64a8 8 0 0 1 13.66-5.66L50 70.7c3.22-3.49 6.54-7 10.06-10.55A96 96 0 0 1 224 128m-96-56a8 8 0 0 0-8 8v48a8 8 0 0 0 3.88 6.86l40 24a8 8 0 1 0 8.24-13.72L136 123.47V80a8 8 0 0 0-8-8"/></svg><span>Session history</span></span></button>
+      <button type="button" id="settings-analytics-btn" class="settings-menu-item hidden" role="menuitem"><span class="settings-menu-item-main"><svg class="settings-menu-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="M232 208a8 8 0 0 1-8 8H32a8 8 0 0 1 0-16h8v-64a8 8 0 0 1 8-8h24a8 8 0 0 1 8 8v64h16V88a8 8 0 0 1 8-8h32a8 8 0 0 1 8 8v112h16V40a8 8 0 0 1 8-8h40a8 8 0 0 1 8 8v160h8a8 8 0 0 1 8 8"/></svg><span>Analytics</span></span></button>
+      <button type="button" id="settings-pomodoro-btn" class="settings-menu-item hidden" role="menuitem"><span class="settings-menu-item-main"><svg class="settings-menu-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="M128 40a96 96 0 1 0 96 96a96.11 96.11 0 0 0-96-96m45.66 61.66l-40 40a8 8 0 0 1-11.32-11.32l40-40a8 8 0 0 1 11.32 11.32M96 16a8 8 0 0 1 8-8h48a8 8 0 0 1 0 16h-48a8 8 0 0 1-8-8"/></svg><span>Pomodoro</span></span></button>
+      <button type="button" id="settings-invoice-btn" class="settings-menu-item" role="menuitem"><span class="settings-menu-item-main"><svg class="settings-menu-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="M230.93 220a8 8 0 0 1-6.93 4H32a8 8 0 0 1-6.92-12c15.23-26.33 38.7-45.21 66.09-54.16a72 72 0 1 1 73.66 0c27.39 8.95 50.86 27.83 66.09 54.16a8 8 0 0 1 .01 8"/></svg><span>Personal Profile</span></span></button>
+      <button type="button" id="settings-sound-effects-btn" class="settings-menu-item" role="menuitemcheckbox" aria-checked="true"><span class="settings-menu-item-main"><svg class="settings-menu-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="M160 32.25v191.44a8.29 8.29 0 0 1-3.91 7.18a8 8 0 0 1-9-.56l-65.57-51a4 4 0 0 1-1.52-3.15V79.84a4 4 0 0 1 1.55-3.15l65.57-51a8 8 0 0 1 10 .16a8.27 8.27 0 0 1 2.88 6.4M60 80H32a16 16 0 0 0-16 16v64a16 16 0 0 0 16 16h28a4 4 0 0 0 4-4V84a4 4 0 0 0-4-4m126.77 20.84a8 8 0 0 0-.72 11.3a24 24 0 0 1 0 31.72a8 8 0 1 0 12 10.58a40 40 0 0 0 0-52.88a8 8 0 0 0-11.31-.72Zm40.89-26.17a8 8 0 1 0-11.92 10.66a64 64 0 0 1 0 85.34a8 8 0 1 0 11.92 10.66a80 80 0 0 0 0-106.66"/></svg><span>Sound effects</span></span><span id="settings-sound-effects-status" class="settings-menu-item-note">On</span></button>
+      <button type="button" id="settings-data-btn" class="settings-menu-item" role="menuitem"><span class="settings-menu-item-main"><svg class="settings-menu-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="M128 24c-53.83 0-96 24.6-96 56v96c0 31.4 42.17 56 96 56s96-24.6 96-56V80c0-31.4-42.17-56-96-56m80 104c0 9.62-7.88 19.43-21.61 26.92C170.93 163.35 150.19 168 128 168s-42.93-4.65-58.39-13.08C55.88 147.43 48 137.62 48 128v-16.64c17.06 15 46.23 24.64 80 24.64s62.94-9.68 80-24.64Zm-21.61 74.92C170.93 211.35 150.19 216 128 216s-42.93-4.65-58.39-13.08C55.88 195.43 48 185.62 48 176v-16.64c17.06 15 46.23 24.64 80 24.64s62.94-9.68 80-24.64V176c0 9.62-7.88 19.43-21.61 26.92"/></svg><span>Data &amp; backup</span></span></button>
       <div class="settings-menu-divider" role="separator"></div>
-      <button type="button" id="settings-sound-effects-btn" class="settings-menu-item" role="menuitemcheckbox" aria-checked="true">
-        <span>Sound effects</span>
-        <span id="settings-sound-effects-status" class="settings-menu-item-note">On</span>
-      </button>
-      <button type="button" id="settings-data-btn" class="settings-menu-item" role="menuitem">Data &amp; backup</button>
-      <button type="button" id="settings-shortcuts-btn" class="settings-menu-item" role="menuitem">Keyboard shortcuts</button>
-      <button type="button" id="settings-tutorial-btn" class="settings-menu-item" role="menuitem">Tutorial</button>
-      <div class="settings-menu-divider" role="separator"></div>
-      <button type="button" id="settings-license-btn" class="settings-menu-item" role="menuitem">License</button>
-      <button type="button" id="settings-check-updates-btn" class="settings-menu-item" role="menuitem">Check for updates</button>
-      <button type="button" id="settings-whats-new-btn" class="settings-menu-item settings-menu-item--whats-new" role="menuitem">What's New</button>
+      <div class="settings-menu-group"><button type="button" class="settings-menu-category" aria-expanded="false" aria-controls="settings-group-help"><span class="settings-menu-item-main"><svg class="settings-menu-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="M128 24a104 104 0 1 0 104 104A104.11 104.11 0 0 0 128 24M96 128a32 32 0 1 1 32 32a32 32 0 0 1-32-32m88.28-67.6l-28.49 28.5a47.84 47.84 0 0 0-55.58 0L71.72 60.4a87.83 87.83 0 0 1 112.56 0M71.72 195.6l28.49-28.5a47.84 47.84 0 0 0 55.58 0l28.49 28.5a87.83 87.83 0 0 1-112.56 0"/></svg><span>Help</span></span><svg class="settings-menu-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button><div id="settings-group-help" class="settings-menu-group-items hidden"><button type="button" id="settings-onboarding-btn" class="settings-menu-item" role="menuitem"><span class="settings-menu-item-main"><svg class="settings-menu-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="M219.31 98.46a88 88 0 1 1-152.23 88.31l-40.93-70.89a16 16 0 0 1 27.69-16L72.4 132a8 8 0 0 0 13.86-8L47 56a16 16 0 0 1 27.69-16L114 108a8 8 0 1 0 13.85-8l-30-52a16 16 0 0 1 27.71-16L166 102.12A48.25 48.25 0 0 0 152 136a47.6 47.6 0 0 0 9.6 28.8a8 8 0 1 0 12.79-9.61a32 32 0 0 1 6.61-44.93a8 8 0 0 0 2.17-10.43L171.71 80a16 16 0 0 1 27.71-16zm-29.37-57A43.74 43.74 0 0 1 216.74 62l.33.57a8 8 0 0 0 13.86-8l-.33-.57a59.64 59.64 0 0 0-36.54-28a8 8 0 0 0-4.12 15.46M79.58 225.72A103.6 103.6 0 0 1 53.93 196a8 8 0 0 0-13.86 8a119.6 119.6 0 0 0 29.6 34.28a8 8 0 0 0 9.91-12.56"/></svg><span>Onboarding</span></span></button><button type="button" id="settings-tutorial-btn" class="settings-menu-item" role="menuitem"><span class="settings-menu-item-main"><svg class="settings-menu-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="M176 207.24a119 119 0 0 0 16-7.73V240a8 8 0 0 1-16 0Zm11.76-88.43l-56-29.87a8 8 0 0 0-7.52 14.12L171 128l17-9.06Zm64-29.87l-120-64a8 8 0 0 0-7.52 0l-120 64a8 8 0 0 0 0 14.12L32 117.87v48.42a15.9 15.9 0 0 0 4.06 10.65C49.16 191.53 78.51 216 128 216a130 130 0 0 0 48-8.76v-76.57l-5-2.67l-43 22.93L43.83 106L25 96l103-54.93L231 96l-18.78 10h-.06L188 118.94a8 8 0 0 1 4 6.93v73.64a115.6 115.6 0 0 0 27.94-22.57a15.9 15.9 0 0 0 4.06-10.65v-48.42l27.76-14.81a8 8 0 0 0 0-14.12"/></svg><span>Tutorial</span></span></button><button type="button" id="settings-shortcuts-btn" class="settings-menu-item" role="menuitem"><span class="settings-menu-item-main"><svg class="settings-menu-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="M224 48H32a16 16 0 0 0-16 16v128a16 16 0 0 0 16 16h192a16 16 0 0 0 16-16V64a16 16 0 0 0-16-16M64 168H48a8 8 0 0 1 0-16h16a8 8 0 0 1 0 16m96 0H96a8 8 0 0 1 0-16h64a8 8 0 0 1 0 16m48 0h-16a8 8 0 0 1 0-16h16a8 8 0 0 1 0 16m0-32H48a8 8 0 0 1 0-16h160a8 8 0 0 1 0 16m0-32H48a8 8 0 0 1 0-16h160a8 8 0 0 1 0 16"/></svg><span>Keyboard shortcuts</span></span></button><button type="button" id="settings-whats-new-btn" class="settings-menu-item settings-menu-item--whats-new" role="menuitem"><span class="settings-menu-item-main"><svg class="settings-menu-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="M208 144a15.78 15.78 0 0 1-10.42 14.94L146 178l-19 51.62a15.92 15.92 0 0 1-29.88 0L78 178l-51.62-19a15.92 15.92 0 0 1 0-29.88L78 110l19-51.62a15.92 15.92 0 0 1 29.88 0L146 110l51.62 19A15.78 15.78 0 0 1 208 144m-56-96h16v16a8 8 0 0 0 16 0V48h16a8 8 0 0 0 0-16h-16V16a8 8 0 0 0-16 0v16h-16a8 8 0 0 0 0 16m88 32h-8v-8a8 8 0 0 0-16 0v8h-8a8 8 0 0 0 0 16h8v8a8 8 0 0 0 16 0v-8h8a8 8 0 0 0 0-16"/></svg><span>What's New</span></span></button></div></div>
+      <div class="settings-menu-group"><button type="button" class="settings-menu-category" aria-expanded="false" aria-controls="settings-group-account"><span class="settings-menu-item-main"><svg class="settings-menu-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="M172 120a44 44 0 1 1-44-44a44.05 44.05 0 0 1 44 44m60 8A104 104 0 1 1 128 24a104.11 104.11 0 0 1 104 104m-16 0a88.09 88.09 0 0 0-91.47-87.93C77.43 41.89 39.87 81.12 40 128.25a87.65 87.65 0 0 0 22.24 58.16A79.7 79.7 0 0 1 84 165.1a4 4 0 0 1 4.83.32a59.83 59.83 0 0 0 78.28 0a4 4 0 0 1 4.83-.32a79.7 79.7 0 0 1 21.79 21.31A87.62 87.62 0 0 0 216 128"/></svg><span>Account</span></span><svg class="settings-menu-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button><div id="settings-group-account" class="settings-menu-group-items hidden"><button type="button" id="settings-license-btn" class="settings-menu-item" role="menuitem"><span class="settings-menu-item-main"><svg class="settings-menu-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="M216.57 39.43a80 80 0 0 0-132.66 81.35L28.69 176A15.86 15.86 0 0 0 24 187.31V216a16 16 0 0 0 16 16h32a8 8 0 0 0 8-8v-16h16a8 8 0 0 0 8-8v-16h16a8 8 0 0 0 5.66-2.34l9.56-9.57A79.7 79.7 0 0 0 160 176h.1a80 80 0 0 0 56.47-136.57M180 92a16 16 0 1 1 16-16a16 16 0 0 1-16 16"/></svg><span>License</span></span></button><button type="button" id="settings-check-updates-btn" class="settings-menu-item" role="menuitem"><span class="settings-menu-item-main"><svg class="settings-menu-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="M224 48v48a8 8 0 0 1-8 8h-48a8 8 0 0 1-5.66-13.66L180.65 72a79.48 79.48 0 0 0-54.72-22.09h-.45a79.52 79.52 0 0 0-55.89 22.8a8 8 0 0 1-11.18-11.44A96 96 0 0 1 192 60.7l18.36-18.36A8 8 0 0 1 224 48m-37.59 135.29a80 80 0 0 1-111.06.71l18.31-18.31A8 8 0 0 0 88 152H40a8 8 0 0 0-8 8v48a8 8 0 0 0 13.66 5.66L64 195.3a95.42 95.42 0 0 0 66 26.76h.53a95.36 95.36 0 0 0 67.07-27.33a8 8 0 0 0-11.18-11.44Z"/></svg><span>Check for updates</span></span></button></div></div>
     </div>
 
     <div id="shortcuts-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-title">
@@ -386,6 +386,9 @@
 
   <!-- Focus Mode -->
   <div id="focus-view" class="view hidden">
+    <div id="timer-hide-toast" class="timer-hide-toast hidden" role="status" aria-live="polite">
+      <p class="timer-hide-toast-message">Timebar hidden for 5m. Press Control–Option–S to show again.</p>
+    </div>
     <div class="focus-stack" id="focus-stack">
       <div class="timer-bar" id="timer-bar">
         <div class="timer-drag-handle" aria-hidden="true" title="Drag to move">
@@ -491,6 +494,12 @@
   </div>
 
   <div id="design-sprint-bar" class="design-sprint-bar hidden" aria-hidden="true">
+    <div id="design-sprint-approach-glow" class="design-sprint-approach-glow" hidden aria-hidden="true">
+      <div class="design-sprint-approach-edge design-sprint-approach-edge--top"></div>
+      <div class="design-sprint-approach-edge design-sprint-approach-edge--bottom"></div>
+      <div class="design-sprint-approach-edge design-sprint-approach-edge--left"></div>
+      <div class="design-sprint-approach-edge design-sprint-approach-edge--right"></div>
+    </div>
     <div id="design-sprint-menu-cluster" class="design-sprint-menu-cluster">
       <img src="assets/supaslash-logo.png" alt="" class="design-sprint-menu-logo" width="447" height="125" />
       <div
@@ -521,8 +530,33 @@
       </button>
       <button id="design-sprint-extend-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Extend</button>
       <button id="design-sprint-skip-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Skip</button>
-      <button id="design-sprint-fullscreen-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Fullscreen</button>
+      <button id="design-sprint-fullscreen-btn" class="design-sprint-task-menu-item" type="button" role="menuitem" title="Fullscreen (Control–Option–F)" aria-keyshortcuts="Control+Alt+F">
+        <span class="design-sprint-task-menu-label">Fullscreen</span>
+        <span class="design-sprint-task-menu-shortcut">⌃⌥F</span>
+      </button>
+      <button id="design-sprint-edge-btn" class="design-sprint-task-menu-item design-sprint-task-menu-item--icon" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Bar orientation, bottom" title="Bar orientation" data-edge="bottom">
+        <svg class="design-sprint-edge-glyph" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
       <button id="design-sprint-dashboard-btn" class="design-sprint-task-menu-item" type="button" role="menuitem">Dashboard</button>
+      <div id="design-sprint-edge-panel" class="design-sprint-edge-panel hidden" role="group" aria-label="Bar orientation">
+        <div class="design-sprint-edge-arrows">
+          <button type="button" class="design-sprint-edge-option" data-design-sprint-edge="top" role="radio" aria-checked="false" aria-label="Top" title="Top">
+            <svg class="design-sprint-edge-glyph design-sprint-edge-glyph--up" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <button type="button" class="design-sprint-edge-option" data-design-sprint-edge="left" role="radio" aria-checked="false" aria-label="Left" title="Left">
+            <svg class="design-sprint-edge-glyph design-sprint-edge-glyph--left" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <button type="button" class="design-sprint-edge-option" data-design-sprint-edge="right" role="radio" aria-checked="false" aria-label="Right" title="Right">
+            <svg class="design-sprint-edge-glyph design-sprint-edge-glyph--right" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <button type="button" class="design-sprint-edge-option is-on" data-design-sprint-edge="bottom" role="radio" aria-checked="true" aria-label="Bottom" title="Bottom">
+            <svg class="design-sprint-edge-glyph" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+        </div>
+        <p class="design-sprint-edge-caption">Moves the bar</p>
+      </div>
     </div>
     </div>
     <div id="design-sprint-wrap-up-toast" class="design-sprint-wrap-up-toast hidden" aria-hidden="true">
@@ -530,13 +564,29 @@
       <button type="button" class="design-sprint-wrap-up-toast-close" aria-label="Close">×</button>
     </div>
     <div id="design-sprint-track" class="design-sprint-track"></div>
-    <div id="design-sprint-fullscreen-timer" class="design-sprint-fullscreen-readout design-sprint-fullscreen-timer hidden" aria-hidden="true"></div>
+    <div id="design-sprint-fullscreen-timer" class="design-sprint-fullscreen-readout design-sprint-fullscreen-timer hidden" aria-hidden="true" aria-label="Timer">
+      <span class="design-sprint-fullscreen-readout-label">Timer</span>
+      <span id="design-sprint-fullscreen-timer-time" class="design-sprint-fullscreen-readout-time"></span>
+    </div>
+    <div id="design-sprint-fullscreen-clock" class="design-sprint-fullscreen-readout design-sprint-fullscreen-clock hidden" aria-hidden="true" aria-label="Clock">
+      <span class="design-sprint-fullscreen-readout-label">Clock</span>
+      <span id="design-sprint-fullscreen-clock-time" class="design-sprint-fullscreen-readout-time"></span>
+    </div>
+    <div id="design-sprint-fullscreen-progress" class="design-sprint-fullscreen-readout design-sprint-fullscreen-progress hidden" aria-hidden="true" aria-label="Time worked">
+      <span class="design-sprint-fullscreen-readout-label">Worked</span>
+      <span id="design-sprint-fullscreen-progress-value" class="design-sprint-fullscreen-readout-time"></span>
+    </div>
     <div id="design-sprint-fullscreen-tools" class="design-sprint-fullscreen-tools">
-      <div id="design-sprint-fullscreen-clock" class="design-sprint-fullscreen-readout design-sprint-fullscreen-clock hidden" aria-hidden="true"></div>
+      <div id="design-sprint-fullscreen-pomodoro" class="design-sprint-fullscreen-pomodoro hidden" aria-hidden="true">
+        <span id="design-sprint-fullscreen-pomodoro-label" class="design-sprint-fullscreen-readout-label">Pomodoro</span>
+        <span id="design-sprint-fullscreen-pomodoro-time" class="design-sprint-fullscreen-readout-time"></span>
+      </div>
       <div class="design-sprint-fullscreen-menu-wrap">
         <div id="design-sprint-fullscreen-options" class="design-sprint-fullscreen-options hidden" role="menu" aria-label="Fullscreen options">
-          <button id="design-sprint-show-time-btn" class="design-sprint-fullscreen-option" type="button" role="menuitemcheckbox" aria-checked="false">Show the time</button>
+          <button id="design-sprint-show-time-btn" class="design-sprint-fullscreen-option" type="button" role="menuitemcheckbox" aria-checked="false">Show the timer</button>
           <button id="design-sprint-show-clock-btn" class="design-sprint-fullscreen-option" type="button" role="menuitemcheckbox" aria-checked="false">Show the clock</button>
+          <button id="design-sprint-show-pomodoro-btn" class="design-sprint-fullscreen-option hidden" type="button" role="menuitemcheckbox" aria-checked="false">Show the pomodoro</button>
+          <button id="design-sprint-show-progress-btn" class="design-sprint-fullscreen-option" type="button" role="menuitemcheckbox" aria-checked="false">Show Percentage Worked</button>
         </div>
         <button id="design-sprint-fullscreen-menu-btn" class="design-sprint-fullscreen-menu-btn" type="button" aria-label="Fullscreen options" aria-haspopup="menu" aria-expanded="false">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -614,6 +664,13 @@
         <path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3.76z"/>
       </svg>
       <span>Pin session</span>
+    </button>
+    <button type="button" id="session-context-save-later" class="task-context-menu-item" role="menuitem">
+      <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"/>
+        <polyline points="12 7 12 12 15 14"/>
+      </svg>
+      <span>Save for later</span>
     </button>
     <button type="button" id="session-context-save-template" class="task-context-menu-item" role="menuitem">
       <svg class="context-menu-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -731,6 +788,10 @@
     <div class="clear-session-modal-card">
       <h3 id="design-sprint-shortcut-title" class="clear-session-modal-title">Welcome to Sprint Mode!</h3>
       <p class="design-sprint-wrap-up-message design-sprint-shortcut-message">Your race against time rests at the bottom of your screen. To exit this mode, press Control–Option–S.</p>
+      <label class="design-sprint-shortcut-dismiss" for="design-sprint-shortcut-dismiss">
+        <input id="design-sprint-shortcut-dismiss" type="checkbox" />
+        <span>Don't show this again</span>
+      </label>
       <div class="clear-session-modal-actions">
         <button id="design-sprint-shortcut-ok-btn" class="clear-session-modal-btn" type="button">Got it</button>
       </div>
@@ -823,6 +884,17 @@
       <div id="labs-modal-body" class="labs-modal-body"></div>
       <div class="labs-modal-actions">
         <button id="labs-close-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="pomodoro-modal" class="clear-session-modal hidden" role="dialog" aria-modal="true" aria-labelledby="pomodoro-modal-title">
+    <div class="clear-session-modal-card pomodoro-modal-card">
+      <h3 id="pomodoro-modal-title" class="clear-session-modal-title">Pomodoro</h3>
+      <p class="pomodoro-modal-desc">A break starts after this much work, even if the current task still has time left.</p>
+      <div id="pomodoro-modal-body"></div>
+      <div class="labs-modal-actions">
+        <button id="pomodoro-close-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel" type="button">Done</button>
       </div>
     </div>
   </div>
@@ -1129,6 +1201,99 @@
       </div>
     </div>
   </div>
+
+  <div id="onboarding-modal" class="clear-session-modal onboarding-modal hidden" role="dialog" aria-modal="true" aria-labelledby="onboarding-title" aria-hidden="true">
+    <div class="clear-session-modal-card onboarding-card">
+      <button type="button" id="onboarding-dismiss-btn" class="onboarding-dismiss hidden" aria-label="Close">×</button>
+      <div class="onboarding-heading">
+        <p id="onboarding-kicker" class="onboarding-kicker">Welcome</p>
+        <h3 id="onboarding-title" class="clear-session-modal-title">Welcome to SupaSlash</h3>
+      </div>
+
+      <div id="onboarding-stage" class="onboarding-stage">
+      <div id="onboarding-step-welcome" class="onboarding-step">
+        <!-- Drop a real visual at assets/onboarding-welcome.png -->
+        <figure class="onboarding-visual">
+          <img class="onboarding-visual-img hidden" alt="" src="assets/onboarding-welcome.png" />
+          <span class="onboarding-visual-placeholder">Welcome</span>
+        </figure>
+        <p class="onboarding-copy">Welcome to SupaSlash, where you can park the chaos, line up what actually matters, and slash through it one task at a time.</p>
+        <p class="onboarding-copy">It’s a floating timer that hangs out on your desktop until you say go. Then it’s just you, the clock, and the next thing. Client work, a side hustle, or the garage you’ve been threatening to organize — name it, time it, and get paid for it if you want. Future-you already likes this plan.</p>
+      </div>
+
+      <div id="onboarding-step-work" class="onboarding-step hidden">
+        <!-- Drop a real visual at assets/onboarding-sprint.png -->
+        <figure class="onboarding-visual">
+          <img class="onboarding-visual-img hidden" alt="" src="assets/onboarding-sprint.png" />
+          <span class="onboarding-visual-placeholder">Sprint</span>
+        </figure>
+        <p class="onboarding-copy">Sprint is focus with a finish line. Every task gets a slice of time, lined up in a bar along the edge of the screen. You race that slice, then roll straight into the next one.</p>
+        <p class="onboarding-copy">Leave it on if you like a little friendly pressure. You can flip it later in Labs.</p>
+        <div class="onboarding-choice">
+          <span class="onboarding-choice-label">Sprint</span>
+          <button type="button" id="onboarding-sprint-btn" class="labs-feature-toggle" role="switch" aria-checked="true" aria-label="Sprint">On</button>
+        </div>
+      </div>
+
+      <div id="onboarding-step-you" class="onboarding-step hidden">
+        <!-- Drop a real visual at assets/onboarding-you.png -->
+        <figure class="onboarding-visual">
+          <img class="onboarding-visual-img hidden" alt="" src="assets/onboarding-you.png" />
+          <span class="onboarding-visual-placeholder">You</span>
+        </figure>
+        <p class="onboarding-copy">Just you — the human doing the slashing. Add your name so SupaSlash knows who to cheer for. Getting paid? Turn Billable on and drop in your hourly rate. We’ll count the hours while you count the wins.</p>
+        <p class="onboarding-copy">Business name, email, address, and logo can wait in Personal Profile. Skip this if you just want to get moving.</p>
+        <div class="onboarding-fields">
+          <div class="onboarding-field">
+            <label class="template-editor-label" for="onboarding-name">Name</label>
+            <input id="onboarding-name" class="template-editor-input" type="text" autocomplete="name" />
+          </div>
+          <div class="onboarding-choice">
+            <span class="onboarding-choice-label">Billable</span>
+            <button type="button" id="onboarding-billable-btn" class="labs-feature-toggle" role="switch" aria-checked="false" aria-label="Billable">Off</button>
+          </div>
+          <div id="onboarding-rate-row" class="billable-rate-row hidden">
+            <label class="billable-field-label" for="onboarding-rate">Hourly rate</label>
+            <div class="billable-rate-input-wrap">
+              <input id="onboarding-rate" class="billable-rate-input" type="text" inputmode="decimal" placeholder="75" autocomplete="off" />
+              <span class="billable-rate-suffix">/hr</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="onboarding-step-session" class="onboarding-step hidden">
+        <!-- Drop a real visual at assets/onboarding-session.png -->
+        <figure class="onboarding-visual">
+          <img class="onboarding-visual-img hidden" alt="" src="assets/onboarding-session.png" />
+          <span class="onboarding-visual-placeholder">First session</span>
+        </figure>
+        <p class="onboarding-copy">Alright, let’s slash something real. Name the session — a client, a project, or a “please just start” pile. Add two or three tasks. With Sprint on, give each one a time like 20m so the bar knows how to slice the hour.</p>
+        <p class="onboarding-copy">Start Session drops you straight into that bar. One task. The clock. Go.</p>
+        <div class="onboarding-fields">
+          <div class="onboarding-field">
+            <label class="template-editor-label" for="onboarding-session-name">Session name</label>
+            <input id="onboarding-session-name" class="template-editor-input" type="text" placeholder="First session" autocomplete="off" />
+          </div>
+          <div class="onboarding-field">
+            <span class="template-editor-label">Tasks</span>
+            <p id="onboarding-time-hint" class="onboarding-hint hidden">Every task needs a time, like 20m.</p>
+            <div id="onboarding-task-list" class="template-editor-task-list"></div>
+            <button type="button" class="templates-add-btn" id="onboarding-add-task-btn">+ Add task</button>
+          </div>
+        </div>
+      </div>
+      </div>
+
+      <div class="clear-session-modal-actions onboarding-actions">
+        <button type="button" id="onboarding-back-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel hidden">Back</button>
+        <button type="button" id="onboarding-skip-btn" class="clear-session-modal-btn clear-session-modal-btn--cancel">Skip</button>
+        <button type="button" id="onboarding-next-btn" class="clear-session-modal-btn">Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="saved-for-later-toast" class="saved-for-later-toast" role="status" aria-hidden="true">Saved for later. Click the clock at the top of Sessions to open them.</div>
 
   <script src="sounds.js"></script>
   <script src="release-notes.js"></script>

@@ -8,6 +8,10 @@ ICNS="$ASSETS/icon.icns"
 ICONSET="$ASSETS/icon.iconset"
 CONVERTED="$ASSETS/icon-source-converted.png"
 
+if [[ ! -f "$SOURCE" && -f "$ASSETS/supaslash-logo.png" ]]; then
+  swift "$ROOT/scripts/extract-app-icon.swift" "$ASSETS/supaslash-logo.png" "$SOURCE"
+fi
+
 if [[ ! -f "$SOURCE" ]]; then
   echo "Missing icon source file:"
   echo "  $SOURCE"

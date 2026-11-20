@@ -13,4 +13,10 @@ contextBridge.exposeInMainWorld('screenOverlay', {
   onCelebrationStop: (callback) => {
     ipcRenderer.on('celebration-stop', () => callback());
   },
+  onApproachShow: (callback) => {
+    ipcRenderer.on('overlay-approach-show', (_event, payload) => callback(payload));
+  },
+  onApproachHide: (callback) => {
+    ipcRenderer.on('overlay-approach-hide', () => callback());
+  },
 });

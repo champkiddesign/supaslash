@@ -42,12 +42,25 @@ const state = {
     pinnedFilters: false,
     analytics: false,
     designSprints: false,
+    pomodoro: false,
   },
+  pomodoro: {
+    workMs: 25 * 60 * 1000,
+    breakMs: 5 * 60 * 1000,
+    breakTitle: 'Break',
+  },
+  pomodoroWorkMs: 0,
+  pomodoroOnBreak: false,
+  pomodoroBreakElapsedMs: 0,
   designSprintMode: false,
   designSprintEnabled: false,
   designSprintFullscreen: false,
   designSprintShowTime: false,
   designSprintShowClock: false,
+  designSprintShowPomodoro: false,
+  designSprintShowProgress: false,
+  designSprintEdge: 'bottom',
+  designSprintShortcutHintDismissed: false,
   invoiceSettings: {
     name: '',
     logoDataUrl: '',
@@ -57,6 +70,7 @@ const state = {
   },
   lastSeenWhatsNewVersion: null,
   lastLaunchedAppVersion: null,
+  onboardingCompleted: false,
   sessionListFilter: 'all',
   sessionListFilters: [],
   pinnedSessionListFilters: [],
@@ -93,6 +107,7 @@ const settingsCheckUpdatesBtn = document.getElementById('settings-check-updates-
 const settingsWhatsNewBtn = document.getElementById('settings-whats-new-btn');
 const settingsHistoryBtn = document.getElementById('settings-history-btn');
 const settingsAnalyticsBtn = document.getElementById('settings-analytics-btn');
+const settingsPomodoroBtn = document.getElementById('settings-pomodoro-btn');
 const settingsTemplatesBtn = document.getElementById('settings-templates-btn');
 const settingsLabsBtn = document.getElementById('settings-labs-btn');
 const analyticsModal = document.getElementById('analytics-modal');
@@ -117,6 +132,28 @@ const analyticsSessionTableFoot = document.getElementById('analytics-session-tab
 const analyticsCompletedTableBody = document.getElementById('analytics-completed-table-body');
 const analyticsCompletedTableFoot = document.getElementById('analytics-completed-table-foot');
 const settingsTutorialBtn = document.getElementById('settings-tutorial-btn');
+const settingsOnboardingBtn = document.getElementById('settings-onboarding-btn');
+const onboardingModal = document.getElementById('onboarding-modal');
+const onboardingKicker = document.getElementById('onboarding-kicker');
+const onboardingTitle = document.getElementById('onboarding-title');
+const onboardingStage = document.getElementById('onboarding-stage');
+const onboardingStepWelcome = document.getElementById('onboarding-step-welcome');
+const onboardingStepWork = document.getElementById('onboarding-step-work');
+const onboardingStepYou = document.getElementById('onboarding-step-you');
+const onboardingStepSession = document.getElementById('onboarding-step-session');
+const onboardingSprintBtn = document.getElementById('onboarding-sprint-btn');
+const onboardingNameInput = document.getElementById('onboarding-name');
+const onboardingBillableBtn = document.getElementById('onboarding-billable-btn');
+const onboardingRateRow = document.getElementById('onboarding-rate-row');
+const onboardingRateInput = document.getElementById('onboarding-rate');
+const onboardingSessionNameInput = document.getElementById('onboarding-session-name');
+const onboardingTaskList = document.getElementById('onboarding-task-list');
+const onboardingTimeHint = document.getElementById('onboarding-time-hint');
+const onboardingAddTaskBtn = document.getElementById('onboarding-add-task-btn');
+const onboardingBackBtn = document.getElementById('onboarding-back-btn');
+const onboardingSkipBtn = document.getElementById('onboarding-skip-btn');
+const onboardingNextBtn = document.getElementById('onboarding-next-btn');
+const onboardingDismissBtn = document.getElementById('onboarding-dismiss-btn');
 const tutorialOverlay = document.getElementById('tutorial-overlay');
 const tutorialDots = document.getElementById('tutorial-dots');
 const tutorialTooltip = document.getElementById('tutorial-tooltip');
@@ -158,6 +195,9 @@ const focusView = document.getElementById('focus-view');
 const doneView = document.getElementById('done-view');
 const plannedSessionsList = document.getElementById('planned-sessions-list');
 const plannedSessionsCollapseAllBtn = document.getElementById('planned-sessions-collapse-all-btn');
+const plannedSessionsSavedBtn = document.getElementById('planned-sessions-saved-btn');
+const plannedSessionsHeading = document.getElementById('planned-sessions-heading');
+const savedForLaterToast = document.getElementById('saved-for-later-toast');
 const plannedSessionsFilterBtn = document.getElementById('planned-sessions-filter-btn');
 const plannedSessionsFilterMenu = document.getElementById('planned-sessions-filter-menu');
 const planSessionBtn = document.getElementById('plan-session-btn');
@@ -184,13 +224,25 @@ const designSprintExtendBtn = document.getElementById('design-sprint-extend-btn'
 const designSprintSkipBtn = document.getElementById('design-sprint-skip-btn');
 const designSprintEditBtn = document.getElementById('design-sprint-edit-btn');
 const designSprintFullscreenBtn = document.getElementById('design-sprint-fullscreen-btn');
+const designSprintEdgeBtn = document.getElementById('design-sprint-edge-btn');
+const designSprintEdgePanel = document.getElementById('design-sprint-edge-panel');
 const designSprintDashboardBtn = document.getElementById('design-sprint-dashboard-btn');
 const designSprintFullscreenTimer = document.getElementById('design-sprint-fullscreen-timer');
+const designSprintFullscreenTimerTime = document.getElementById('design-sprint-fullscreen-timer-time');
 const designSprintFullscreenClock = document.getElementById('design-sprint-fullscreen-clock');
+const designSprintFullscreenClockTime = document.getElementById('design-sprint-fullscreen-clock-time');
+const designSprintFullscreenProgress = document.getElementById('design-sprint-fullscreen-progress');
+const designSprintFullscreenProgressValue = document.getElementById('design-sprint-fullscreen-progress-value');
+const designSprintApproachGlow = document.getElementById('design-sprint-approach-glow');
+const designSprintFullscreenPomodoro = document.getElementById('design-sprint-fullscreen-pomodoro');
+const designSprintFullscreenPomodoroLabel = document.getElementById('design-sprint-fullscreen-pomodoro-label');
+const designSprintFullscreenPomodoroTime = document.getElementById('design-sprint-fullscreen-pomodoro-time');
 const designSprintFullscreenMenuBtn = document.getElementById('design-sprint-fullscreen-menu-btn');
 const designSprintFullscreenOptions = document.getElementById('design-sprint-fullscreen-options');
 const designSprintShowTimeBtn = document.getElementById('design-sprint-show-time-btn');
 const designSprintShowClockBtn = document.getElementById('design-sprint-show-clock-btn');
+const designSprintShowPomodoroBtn = document.getElementById('design-sprint-show-pomodoro-btn');
+const designSprintShowProgressBtn = document.getElementById('design-sprint-show-progress-btn');
 const designSprintTimeModal = document.getElementById('design-sprint-time-modal');
 const designSprintWrapUpStep = document.getElementById('design-sprint-wrap-up-step');
 const designSprintExtendStep = document.getElementById('design-sprint-extend-step');
@@ -203,6 +255,7 @@ const designSprintExtendCancelBtn = document.getElementById('design-sprint-exten
 const designSprintExtendStepMessage = document.getElementById('design-sprint-extend-step-message');
 const designSprintShortcutModal = document.getElementById('design-sprint-shortcut-modal');
 const designSprintShortcutOkBtn = document.getElementById('design-sprint-shortcut-ok-btn');
+const designSprintShortcutDismissInput = document.getElementById('design-sprint-shortcut-dismiss');
 const clearSessionBtn = document.getElementById('clear-session-btn');
 const moveBackToListBtn = document.getElementById('move-back-to-list-btn');
 const clearSessionModal = document.getElementById('clear-session-modal');
@@ -254,6 +307,7 @@ const billableCancelBtn = document.getElementById('billable-cancel-btn');
 const backToEditBtn = document.getElementById('back-to-edit-btn');
 const timerSizeBtn = document.getElementById('timer-size-btn');
 const timerHideBtn = document.getElementById('timer-hide-btn');
+const timerHideToast = document.getElementById('timer-hide-toast');
 const timerActionsToggle = document.getElementById('timer-actions-toggle');
 const timerActionsGroup = document.getElementById('timer-actions-group');
 const pauseBtn = document.getElementById('pause-btn');
@@ -318,6 +372,7 @@ const fullscreenTaskToggleBtn = document.getElementById('fullscreen-task-toggle'
 const sessionContextMenu = document.getElementById('session-context-menu');
 const sessionContextFocusBtn = document.getElementById('session-context-focus');
 const sessionContextPinBtn = document.getElementById('session-context-pin');
+const sessionContextSaveLaterBtn = document.getElementById('session-context-save-later');
 const sessionContextSaveTemplateBtn = document.getElementById('session-context-save-template');
 const templateAutocomplete = document.getElementById('template-autocomplete');
 const saveTemplateModal = document.getElementById('save-template-modal');
@@ -349,6 +404,9 @@ const templatesCloseBtn = document.getElementById('templates-close-btn');
 const labsModal = document.getElementById('labs-modal');
 const labsModalBody = document.getElementById('labs-modal-body');
 const labsCloseBtn = document.getElementById('labs-close-btn');
+const pomodoroModal = document.getElementById('pomodoro-modal');
+const pomodoroModalBody = document.getElementById('pomodoro-modal-body');
+const pomodoroCloseBtn = document.getElementById('pomodoro-close-btn');
 const completeTaskModal = document.getElementById('complete-task-modal');
 const completeTaskNameEl = document.getElementById('complete-task-name');
 const completeTaskDurationInput = document.getElementById('complete-task-duration-input');
@@ -406,6 +464,8 @@ let drawerOpen = false;
 let drawerCloseTimer = null;
 let sessionExpandTimer = null;
 let timerBarHideTimeout = null;
+let timerBarHideNoticeTimeout = null;
+let timerHideShortcutFailureAlerted = false;
 let focusBarWidthCache = null;
 let lastEarningsSplitDisplayText = '';
 let isInitializing = true;
@@ -418,6 +478,9 @@ let historyReportSessionFilter = '';
 let historyReportSessionMenuOpen = false;
 let plannedSessionsFilterMenuOpen = false;
 let sessionFocusId = null;
+let savedForLaterView = false;
+let savedForLaterToastTimer = null;
+const SAVED_FOR_LATER_TOAST_MS = 4000;
 let analyticsPreset = 'last14';
 let analyticsSessionFilter = '';
 let analyticsSessionMenuOpen = false;
@@ -450,6 +513,7 @@ const DESIGN_SPRINT_WRAP_UP_TOAST_EXTRA = 44;
 const DESIGN_SPRINT_TASK_MENU_GAP = 10;
 const DESIGN_SPRINT_TASK_MENU_MIN_EXTRA = 52;
 let designSprintActionsMenuOpen = false;
+let designSprintEdgePanelOpen = false;
 let designSprintMenuCentered = false;
 let designSprintFullscreenOptionsOpen = false;
 let designSprintWallClockInterval = null;
@@ -464,6 +528,8 @@ let designSprintTimeModalFromWrapUp = false;
 const DESIGN_SPRINT_SEGMENT_CHECK_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
 const DESIGN_SPRINT_WRAP_UP_MS = 60 * 1000;
 const TIMER_BAR_HIDE_DURATION_MS = 5 * 60 * 1000;
+const TIMER_BAR_HIDE_NOTICE_MS = 4000;
+const TIMER_BAR_HIDE_NOTICE_WIDTH = 460;
 const FOCUS_DRAWER_GAP = 6;
 const DRAWER_CLOSE_DELAY_MS = 280;
 const SESSION_EXPAND_DELAY_MS = 400;
@@ -652,12 +718,46 @@ function isDesignSprintFocus() {
     && isLabsFeatureEnabled('designSprints');
 }
 
+function normalizeDesignSprintEdge(edge) {
+  if (edge === 'top' || edge === 'left' || edge === 'right') return edge;
+  return 'bottom';
+}
+
+function isDesignSprintVerticalEdge(edge = state.designSprintEdge) {
+  const normalized = normalizeDesignSprintEdge(edge);
+  return normalized === 'left' || normalized === 'right';
+}
+
+function getDesignSprintLayoutEdge() {
+  if (!isDesignSprintFocus() || isDesignSprintFullscreen()) return 'bottom';
+  return normalizeDesignSprintEdge(state.designSprintEdge);
+}
+
+function syncDesignSprintEdgeClass() {
+  const edge = getDesignSprintLayoutEdge();
+  document.body.classList.toggle('design-sprint-edge-top', edge === 'top');
+  document.body.classList.toggle('design-sprint-edge-left', edge === 'left');
+  document.body.classList.toggle('design-sprint-edge-right', edge === 'right');
+  const currentEdge = normalizeDesignSprintEdge(state.designSprintEdge);
+  document.querySelectorAll('[data-design-sprint-edge]').forEach((button) => {
+    const on = button.getAttribute('data-design-sprint-edge') === currentEdge;
+    button.classList.toggle('is-on', on);
+    button.setAttribute('aria-checked', on ? 'true' : 'false');
+  });
+  if (designSprintEdgeBtn) {
+    const edgeLabels = { bottom: 'bottom', top: 'top', left: 'left', right: 'right' };
+    designSprintEdgeBtn.dataset.edge = currentEdge;
+    designSprintEdgeBtn.setAttribute('aria-label', `Bar orientation, ${edgeLabels[currentEdge]}`);
+  }
+}
+
 function isDesignSprintFullscreen() {
   return isDesignSprintFocus() && !!state.designSprintFullscreen;
 }
 
 function syncDesignSprintFullscreenClass() {
   document.body.classList.toggle('design-sprint-fullscreen', isDesignSprintFullscreen());
+  syncDesignSprintEdgeClass();
 }
 
 function getDesignSprintTimeModalOverlayHeight() {
@@ -668,24 +768,49 @@ function getDesignSprintTimeModalOverlayHeight() {
   return 720;
 }
 
-function getDesignSprintWindowHeight() {
-  if (isDesignSprintTimeModalOpen() || isDesignSprintShortcutModalOpen() || designSprintMenuCentered) {
-    return getDesignSprintTimeModalOverlayHeight();
-  }
-  let height = DESIGN_SPRINT_BAR_HEIGHT;
+function isDesignSprintOverlayOpen() {
+  return isDesignSprintTimeModalOpen()
+    || isDesignSprintShortcutModalOpen()
+    || designSprintMenuCentered;
+}
+
+function measureDesignSprintInwardSize(element) {
+  if (!element) return 0;
+  const rect = element.getBoundingClientRect();
+  return Math.ceil(isDesignSprintVerticalEdge() ? rect.width : rect.height);
+}
+
+function getDesignSprintStripExtent() {
+  let extent = DESIGN_SPRINT_BAR_HEIGHT;
   if (isDesignSprintWrapUpToastVisible() && !isDesignSprintFullscreen()) {
-    height += DESIGN_SPRINT_WRAP_UP_TOAST_EXTRA;
+    const toastExtra = isDesignSprintVerticalEdge()
+      ? measureDesignSprintInwardSize(designSprintWrapUpToast) + 16
+      : DESIGN_SPRINT_WRAP_UP_TOAST_EXTRA;
+    extent += Math.max(DESIGN_SPRINT_WRAP_UP_TOAST_EXTRA, toastExtra);
   }
-  if (designSprintActionsMenuOpen) {
-    height = Math.max(
-      height,
+  if (designSprintActionsMenuOpen && !designSprintMenuCentered) {
+    extent = Math.max(
+      extent,
       DESIGN_SPRINT_BAR_HEIGHT + Math.max(
         DESIGN_SPRINT_TASK_MENU_MIN_EXTRA,
         designSprintActionsMenuExtraHeight,
       ),
     );
   }
-  return height;
+  return extent;
+}
+
+function getDesignSprintWindowOptions() {
+  if (isDesignSprintFullscreen()) {
+    return { designSprint: true, fullscreen: true };
+  }
+  const overlay = isDesignSprintOverlayOpen();
+  return {
+    designSprint: true,
+    overlay,
+    edge: normalizeDesignSprintEdge(state.designSprintEdge),
+    height: overlay ? getDesignSprintTimeModalOverlayHeight() : getDesignSprintStripExtent(),
+  };
 }
 
 function syncDesignSprintTimeModalPresentation(open) {
@@ -695,12 +820,7 @@ function syncDesignSprintTimeModalPresentation(open) {
 }
 
 function getFocusWindowModeOptions() {
-  if (isDesignSprintFocus()) {
-    if (isDesignSprintFullscreen()) {
-      return { designSprint: true, fullscreen: true };
-    }
-    return { designSprint: true, height: getDesignSprintWindowHeight() };
-  }
+  if (isDesignSprintFocus()) return getDesignSprintWindowOptions();
   if (isTimerBarFullscreen()) {
     return { fullscreen: true };
   }
@@ -713,17 +833,8 @@ function getFocusWindowModeOptions() {
 
 function getFocusDimensionsPayload(barWidth) {
   if (isDesignSprintFocus()) {
-    if (isDesignSprintFullscreen()) {
-      return {
-        designSprint: true,
-        fullscreen: true,
-        preservePosition: false,
-        focusPositionCustomized: false,
-      };
-    }
     return {
-      designSprint: true,
-      height: getDesignSprintWindowHeight(),
+      ...getDesignSprintWindowOptions(),
       preservePosition: false,
       focusPositionCustomized: false,
     };
@@ -753,6 +864,7 @@ function applyDesignSprintPresentation() {
   }
   document.body.classList.toggle('design-sprint-active', active);
   syncDesignSprintFullscreenClass();
+  syncDesignSprintEdgeClass();
   if (designSprintBar) {
     designSprintBar.classList.toggle('hidden', !active);
     designSprintBar.setAttribute('aria-hidden', active ? 'false' : 'true');
@@ -763,6 +875,7 @@ function applyDesignSprintPresentation() {
     designSprintTrack.innerHTML = '';
   }
   syncDesignSprintInteraction();
+  syncDesignSprintApproachGlow();
 }
 
 function syncDesignSprintAfterLayout() {
@@ -777,6 +890,23 @@ function getDesignSprintTasks() {
 
 function getDesignSprintTotalLimitMs(tasks) {
   return tasks.reduce((sum, task) => sum + (task.limitMs || 0), 0);
+}
+
+function getDesignSprintWorkedMs(tasks) {
+  return tasks.reduce((sum, task) => {
+    const taskIndex = state.sessionTasks.indexOf(task);
+    if (task.completed) return sum + (task.limitMs || 0);
+    if (task.skipped || taskIndex !== state.focusTaskIndex) return sum;
+    const elapsed = Math.max(0, getDesignSprintTaskElapsedMs(task, taskIndex));
+    return sum + Math.min(task.limitMs || 0, elapsed);
+  }, 0);
+}
+
+function getDesignSprintWorkedPercent() {
+  const tasks = getDesignSprintTasks();
+  const total = getDesignSprintTotalLimitMs(tasks);
+  if (!total) return null;
+  return Math.min(100, Math.round((getDesignSprintWorkedMs(tasks) / total) * 100));
 }
 
 function getDesignSprintSegmentState(task, taskIndex) {
@@ -814,6 +944,9 @@ function getDesignSprintSegmentLabelText(task, taskIndex) {
   }
   if (task.skipped) {
     return `${task.text.toUpperCase()} (skipped)`;
+  }
+  if (taskIndex === state.focusTaskIndex && isPomodoroBreakActive()) {
+    return `${getPomodoroBreakTitle().toUpperCase()} (${formatTime(getPomodoroBreakRemainingMs())})`;
   }
   const elapsedMs = getDesignSprintTaskElapsedMs(task, taskIndex);
   if (task.limitMs && (taskIndex === state.focusTaskIndex || elapsedMs > 0)) {
@@ -868,7 +1001,77 @@ function syncDesignSprintSegmentProgressElement(segment, task, taskIndex, segmen
   }
 
   const progressPct = (getDesignSprintProgressRatio(task, taskIndex) * 100).toFixed(2);
-  progressEl.style.width = `${progressPct}%`;
+  progressEl.style.setProperty('--design-sprint-progress', `${progressPct}%`);
+  progressEl.style.width = '';
+}
+
+function getDesignSprintPomodoroMarkPlacements() {
+  if (!isPomodoroEnabled() || isPomodoroBreakActive()) return [];
+  const workMs = getPomodoroWorkLimitMs();
+  let untilBreakMs = workMs - state.pomodoroWorkMs;
+  if (!Number.isFinite(workMs) || workMs < 1000) return [];
+  if (!Number.isFinite(untilBreakMs) || untilBreakMs <= 0) untilBreakMs = workMs;
+
+  const spans = [];
+  let started = false;
+  getDesignSprintTasks().forEach((task) => {
+    const taskIndex = state.sessionTasks.indexOf(task);
+    if (taskIndex === state.focusTaskIndex) started = true;
+    if (!started || task.completed || !task.limitMs) return;
+    const elapsed = taskIndex === state.focusTaskIndex
+      ? Math.max(0, getDesignSprintTaskElapsedMs(task, taskIndex))
+      : 0;
+    const leftover = Math.max(0, task.limitMs - elapsed);
+    if (leftover <= 0) return;
+    spans.push({ taskIndex, elapsed, leftover, limitMs: task.limitMs });
+  });
+
+  const total = spans.reduce((sum, span) => sum + span.leftover, 0);
+  const placements = [];
+  for (let offset = untilBreakMs; offset <= total; offset += workMs) {
+    let remaining = offset;
+    for (const span of spans) {
+      if (remaining > span.leftover) {
+        remaining -= span.leftover;
+        continue;
+      }
+      placements.push({
+        taskIndex: span.taskIndex,
+        ratio: Math.min(1, Math.max(0, (span.elapsed + remaining) / span.limitMs)),
+      });
+      break;
+    }
+  }
+  return placements;
+}
+
+function syncDesignSprintPomodoroMark() {
+  if (!designSprintTrack) return;
+  const placements = getDesignSprintPomodoroMarkPlacements();
+  const existing = [...designSprintTrack.querySelectorAll('.design-sprint-pomodoro-mark')];
+  if (!placements.length) {
+    existing.forEach((mark) => mark.remove());
+    return;
+  }
+
+  const vertical = isDesignSprintVerticalEdge(getDesignSprintLayoutEdge());
+  placements.forEach((placement, index) => {
+    const track = designSprintTrack.querySelector(
+      `[data-task-index="${placement.taskIndex}"] .design-sprint-segment-track`
+    );
+    if (!track) return;
+    let mark = existing[index];
+    if (!mark) {
+      mark = document.createElement('div');
+      mark.className = 'design-sprint-pomodoro-mark';
+      mark.setAttribute('aria-hidden', 'true');
+    }
+    if (mark.parentElement !== track) track.appendChild(mark);
+    const pct = `${(placement.ratio * 100).toFixed(2)}%`;
+    mark.style.left = vertical ? '' : pct;
+    mark.style.top = vertical ? pct : '';
+  });
+  existing.slice(placements.length).forEach((mark) => mark.remove());
 }
 
 function isDesignSprintSegmentInteractive(task, segmentState) {
@@ -889,7 +1092,6 @@ function renderDesignSprintBar() {
   designSprintTrack.innerHTML = tasks.map((task) => {
     const taskIndex = state.sessionTasks.indexOf(task);
     const segmentState = getDesignSprintSegmentState(task, taskIndex);
-    const widthPct = ((task.limitMs / totalLimitMs) * 100).toFixed(4);
     const progressPct = (getDesignSprintProgressRatio(task, taskIndex) * 100).toFixed(2);
     const expired = segmentState === 'current' && state.limitExpired && state.limitExpiredKind === 'task';
     const label = getDesignSprintSegmentLabelText(task, taskIndex);
@@ -898,7 +1100,7 @@ function renderDesignSprintBar() {
     return `
       <div
         class="design-sprint-segment design-sprint-segment--${segmentState}${expired ? ' design-sprint-segment--expired' : ''}"
-        style="flex: ${task.limitMs} 1 0; min-width: 0; width: ${widthPct}%;"
+        style="flex: ${task.limitMs} 1 0; min-width: 0;"
         data-task-index="${taskIndex}"
         role="${interactive ? 'button' : 'presentation'}"
         tabindex="${interactive ? '0' : '-1'}"
@@ -907,12 +1109,14 @@ function renderDesignSprintBar() {
         <div class="design-sprint-segment-label" title="${escapeHtml(label)}">${labelHtml}</div>
         <div class="design-sprint-segment-track">
           ${shouldShowDesignSprintSegmentProgress(task, taskIndex, segmentState)
-    ? `<div class="design-sprint-segment-progress" style="width: ${progressPct}%;"></div>`
+    ? `<div class="design-sprint-segment-progress" style="--design-sprint-progress: ${progressPct}%;"></div>`
     : ''}
         </div>
       </div>
     `;
   }).join('');
+
+  syncDesignSprintPomodoroMark();
 
   if (designSprintMenuCentered) return;
   if (designSprintActionsMenuOpen && designSprintMenuAnchorSegment) {
@@ -958,6 +1162,8 @@ function updateDesignSprintBarProgress() {
     segment.tabIndex = isDesignSprintSegmentInteractive(task, segmentState) ? 0 : -1;
   });
 
+  syncDesignSprintPomodoroMark();
+
   if (designSprintActionsMenuOpen) {
     syncDesignSprintTaskMenuContent();
   }
@@ -976,17 +1182,27 @@ function syncDesignSprintTaskMenuContent() {
     designSprintPauseBtn.title = label;
   }
   if (designSprintFullscreenBtn) {
-    designSprintFullscreenBtn.textContent = isDesignSprintFullscreen()
-      ? 'Exit fullscreen'
-      : 'Fullscreen';
+    const label = isDesignSprintFullscreen() ? 'Exit fullscreen' : 'Fullscreen';
+    const labelEl = designSprintFullscreenBtn.querySelector('.design-sprint-task-menu-label');
+    if (labelEl) labelEl.textContent = label;
+    else designSprintFullscreenBtn.textContent = label;
+    designSprintFullscreenBtn.title = `${label} (Control–Option–F)`;
   }
   if (designSprintSkipBtn) {
-    designSprintSkipBtn.disabled = getIncompleteCount() <= 1;
+    if (isPomodoroBreakActive()) {
+      designSprintSkipBtn.textContent = 'End break';
+      designSprintSkipBtn.disabled = false;
+    } else {
+      designSprintSkipBtn.textContent = 'Skip';
+      designSprintSkipBtn.disabled = getIncompleteCount() <= 1;
+    }
   }
+  if (designSprintCompleteBtn) designSprintCompleteBtn.disabled = isPomodoroBreakActive();
+  if (designSprintExtendBtn) designSprintExtendBtn.disabled = isPomodoroBreakActive();
   return true;
 }
 
-function measureDesignSprintTaskMenuHeight() {
+function measureDesignSprintTaskMenuExtent() {
   if (!designSprintTaskMenu) return DESIGN_SPRINT_TASK_MENU_MIN_EXTRA;
 
   const menu = designSprintTaskMenu;
@@ -994,15 +1210,47 @@ function measureDesignSprintTaskMenuHeight() {
   menu.classList.remove('hidden');
   menu.style.visibility = 'hidden';
   menu.style.pointerEvents = 'none';
-  const menuHeight = Math.ceil(menu.getBoundingClientRect().height);
+  const inward = measureDesignSprintInwardSize(menu);
+  const panelExtra = designSprintEdgePanel
+    && !designSprintEdgePanel.classList.contains('hidden')
+    && !isDesignSprintFullscreen()
+    ? measureDesignSprintInwardSize(designSprintEdgePanel) + 8
+    : 0;
   menu.style.visibility = '';
   menu.style.pointerEvents = '';
   if (wasHidden) menu.classList.add('hidden');
 
   return Math.max(
     DESIGN_SPRINT_TASK_MENU_MIN_EXTRA,
-    menuHeight + DESIGN_SPRINT_TASK_MENU_GAP + 8,
+    inward + panelExtra + DESIGN_SPRINT_TASK_MENU_GAP + 8,
   );
+}
+
+function hideDesignSprintEdgePanel() {
+  designSprintEdgePanelOpen = false;
+  designSprintEdgePanel?.classList.add('hidden');
+  designSprintEdgeBtn?.setAttribute('aria-expanded', 'false');
+}
+
+function setDesignSprintEdgePanelOpen(open) {
+  const next = !!open && !isDesignSprintFullscreen();
+  if (next === designSprintEdgePanelOpen) return;
+  designSprintEdgePanelOpen = next;
+  designSprintEdgePanel?.classList.toggle('hidden', !next);
+  designSprintEdgeBtn?.setAttribute('aria-expanded', next ? 'true' : 'false');
+  if (!designSprintActionsMenuOpen || designSprintMenuCentered || isDesignSprintFullscreen()) return;
+  designSprintActionsMenuExtraHeight = measureDesignSprintTaskMenuExtent();
+  void applyFocusWindowSize();
+}
+
+function clearDesignSprintTaskMenuOffset() {
+  if (!designSprintTaskMenu) return;
+  designSprintTaskMenu.style.left = '';
+  designSprintTaskMenu.style.right = '';
+  designSprintTaskMenu.style.top = '';
+  designSprintTaskMenu.style.bottom = '';
+  designSprintTaskMenu.style.removeProperty('--design-sprint-menu-arrow-x');
+  designSprintTaskMenu.style.removeProperty('--design-sprint-menu-arrow-y');
 }
 
 function positionDesignSprintTaskMenu(segment) {
@@ -1012,15 +1260,40 @@ function positionDesignSprintTaskMenu(segment) {
   const barRect = designSprintBar.getBoundingClientRect();
   const segRect = segment.getBoundingClientRect();
   const menuWidth = designSprintTaskMenu.offsetWidth;
-  const segCenterX = segRect.left + segRect.width / 2;
+  const menuHeight = designSprintTaskMenu.offsetHeight;
+  const edge = getDesignSprintLayoutEdge();
+  clearDesignSprintTaskMenuOffset();
 
+  if (edge === 'left' || edge === 'right') {
+    const segCenterY = segRect.top + segRect.height / 2;
+    let top = segCenterY - menuHeight / 2;
+    const minTop = barRect.top + 8;
+    const maxTop = barRect.bottom - menuHeight - 8;
+    top = Math.max(minTop, Math.min(top, Math.max(minTop, maxTop)));
+    designSprintTaskMenu.style.top = `${top - barRect.top}px`;
+    if (edge === 'left') {
+      designSprintTaskMenu.style.left = `${segRect.right - barRect.left + DESIGN_SPRINT_TASK_MENU_GAP}px`;
+    } else {
+      designSprintTaskMenu.style.right = `${barRect.right - segRect.left + DESIGN_SPRINT_TASK_MENU_GAP}px`;
+    }
+    designSprintTaskMenu.style.setProperty(
+      '--design-sprint-menu-arrow-y',
+      `${segCenterY - top}px`,
+    );
+    return;
+  }
+
+  const segCenterX = segRect.left + segRect.width / 2;
   let left = segCenterX - menuWidth / 2;
   const minLeft = barRect.left + 8;
   const maxLeft = barRect.right - menuWidth - 8;
-  left = Math.max(minLeft, Math.min(left, maxLeft));
-
+  left = Math.max(minLeft, Math.min(left, Math.max(minLeft, maxLeft)));
   designSprintTaskMenu.style.left = `${left - barRect.left}px`;
-  designSprintTaskMenu.style.bottom = `${barRect.bottom - segRect.top + DESIGN_SPRINT_TASK_MENU_GAP}px`;
+  if (edge === 'top') {
+    designSprintTaskMenu.style.top = `${segRect.bottom - barRect.top + DESIGN_SPRINT_TASK_MENU_GAP}px`;
+  } else {
+    designSprintTaskMenu.style.bottom = `${barRect.bottom - segRect.top + DESIGN_SPRINT_TASK_MENU_GAP}px`;
+  }
   designSprintTaskMenu.style.setProperty(
     '--design-sprint-menu-arrow-x',
     `${segCenterX - left}px`,
@@ -1046,13 +1319,12 @@ function openDesignSprintActionsModal(anchorSegment, { centered = false } = {}) 
   designSprintMenuAnchorSegment = segment || null;
   designSprintMenuCentered = centered;
   designSprintActionsMenuOpen = true;
-  designSprintActionsMenuExtraHeight = centered ? 0 : measureDesignSprintTaskMenuHeight();
+  designSprintActionsMenuExtraHeight = centered ? 0 : measureDesignSprintTaskMenuExtent();
   document.body.classList.add('design-sprint-menu-open');
   document.body.classList.toggle('design-sprint-menu-centered', centered);
   designSprintTaskMenu.classList.remove('hidden');
   if (centered) {
-    designSprintTaskMenu.style.left = '';
-    designSprintTaskMenu.style.bottom = '';
+    clearDesignSprintTaskMenuOffset();
     designSprintTaskMenu.classList.add('design-sprint-task-menu--centered', 'design-sprint-task-menu--anchored');
   } else {
     designSprintTaskMenu.classList.remove('design-sprint-task-menu--anchored', 'design-sprint-task-menu--centered');
@@ -1063,8 +1335,7 @@ function openDesignSprintActionsModal(anchorSegment, { centered = false } = {}) 
   const anchorMenu = () => {
     if (!designSprintActionsMenuOpen) return;
     if (designSprintMenuCentered) {
-      designSprintTaskMenu.style.left = '';
-      designSprintTaskMenu.style.bottom = '';
+      clearDesignSprintTaskMenuOffset();
       designSprintTaskMenu.classList.add('design-sprint-task-menu--centered', 'design-sprint-task-menu--anchored');
     } else if (designSprintMenuAnchorSegment) {
       positionDesignSprintTaskMenu(designSprintMenuAnchorSegment);
@@ -1084,11 +1355,11 @@ function closeDesignSprintActionsModal({ syncInteraction = true } = {}) {
   designSprintMenuCentered = false;
   designSprintActionsMenuExtraHeight = 0;
   designSprintMenuAnchorSegment = null;
+  hideDesignSprintEdgePanel();
   document.body.classList.remove('design-sprint-menu-open', 'design-sprint-menu-centered');
   designSprintTaskMenu.classList.add('hidden');
   designSprintTaskMenu.classList.remove('design-sprint-task-menu--anchored', 'design-sprint-task-menu--centered');
-  designSprintTaskMenu.style.left = '';
-  designSprintTaskMenu.style.bottom = '';
+  clearDesignSprintTaskMenuOffset();
   setDesignSprintTaskMenuSegmentHighlight(false);
   if (syncInteraction) syncDesignSprintInteraction();
   if (wasOpen && isDesignSprintFocus()) {
@@ -1106,6 +1377,8 @@ function isDesignSprintShortcutModalOpen() {
 
 function openDesignSprintShortcutModal() {
   if (!designSprintShortcutModal || !isDesignSprintFocus()) return;
+  if (state.designSprintShortcutHintDismissed) return;
+  if (designSprintShortcutDismissInput) designSprintShortcutDismissInput.checked = false;
   designSprintShortcutModal.classList.remove('hidden');
   scheduleFocusDimensionsUpdate();
   syncDesignSprintInteraction();
@@ -1114,9 +1387,13 @@ function openDesignSprintShortcutModal() {
 
 function closeDesignSprintShortcutModal() {
   if (!isDesignSprintShortcutModalOpen()) return;
+  const dismissHint = !!designSprintShortcutDismissInput?.checked;
   designSprintShortcutModal.classList.add('hidden');
   scheduleFocusDimensionsUpdate();
   syncDesignSprintInteraction();
+  if (!dismissHint || state.designSprintShortcutHintDismissed) return;
+  state.designSprintShortcutHintDismissed = true;
+  if (!isInitializing) persist({ skipUndoCheckpoint: true, progressOnly: false });
 }
 
 function showDesignSprintTimeModalStep(step) {
@@ -1154,31 +1431,63 @@ function isDesignSprintWrapUpToastVisible() {
   return !!(designSprintWrapUpToast && !designSprintWrapUpToast.classList.contains('hidden'));
 }
 
-function hideDesignSprintWrapUpToast() {
+function hideDesignSprintWrapUpToast({ blurIfFocused = false } = {}) {
   if (!isDesignSprintWrapUpToastVisible()) return;
   designSprintWrapUpToast.classList.remove('is-shown');
   designSprintWrapUpToast.classList.add('hidden');
   designSprintWrapUpToast.setAttribute('aria-hidden', 'true');
   if (!isDesignSprintFullscreen()) scheduleFocusDimensionsUpdate();
+  syncDesignSprintInteraction({ blurIfFocused });
 }
 
 function positionDesignSprintWrapUpToast() {
   if (!isDesignSprintWrapUpToastVisible() || !designSprintBar) return;
+  const toast = designSprintWrapUpToast;
   const segment = designSprintTrack?.querySelector('.design-sprint-segment--current');
+  const edge = getDesignSprintLayoutEdge();
+  toast.style.right = 'auto';
+  toast.style.bottom = 'auto';
   if (!segment) {
-    designSprintWrapUpToast.style.left = '50%';
-    designSprintWrapUpToast.style.top = '8px';
+    if (edge === 'left') {
+      toast.style.left = '8px';
+      toast.style.top = '50%';
+    } else if (edge === 'right') {
+      toast.style.left = 'auto';
+      toast.style.right = '8px';
+      toast.style.top = '50%';
+    } else if (edge === 'top') {
+      toast.style.left = '50%';
+      toast.style.top = 'auto';
+      toast.style.bottom = '8px';
+    } else {
+      toast.style.left = '50%';
+      toast.style.top = '8px';
+    }
     return;
   }
   const barRect = designSprintBar.getBoundingClientRect();
   const segRect = segment.getBoundingClientRect();
-  const toastWidth = designSprintWrapUpToast.offsetWidth;
-  const toastHeight = designSprintWrapUpToast.offsetHeight;
+  if (edge === 'left' || edge === 'right') {
+    const toastHeight = toast.offsetHeight;
+    const center = segRect.top + segRect.height / 2 - barRect.top;
+    const minTop = toastHeight / 2 + 8;
+    const maxTop = Math.max(minTop, barRect.height - toastHeight / 2 - 8);
+    toast.style.top = `${Math.max(minTop, Math.min(center, maxTop))}px`;
+    toast.style.left = edge === 'left' ? `${segRect.right - barRect.left + 8}px` : 'auto';
+    toast.style.right = edge === 'right' ? `${barRect.right - segRect.left + 8}px` : 'auto';
+    return;
+  }
+  const toastWidth = toast.offsetWidth;
+  const toastHeight = toast.offsetHeight;
   const center = segRect.left + segRect.width / 2 - barRect.left;
   const minLeft = toastWidth / 2 + 8;
   const maxLeft = Math.max(minLeft, barRect.width - toastWidth / 2 - 8);
-  designSprintWrapUpToast.style.left = `${Math.max(minLeft, Math.min(center, maxLeft))}px`;
-  designSprintWrapUpToast.style.top = `${segRect.top - barRect.top - toastHeight - 8}px`;
+  toast.style.left = `${Math.max(minLeft, Math.min(center, maxLeft))}px`;
+  if (edge === 'top') {
+    toast.style.top = `${segRect.bottom - barRect.top + 8}px`;
+  } else {
+    toast.style.top = `${segRect.top - barRect.top - toastHeight - 8}px`;
+  }
 }
 
 function revealDesignSprintWrapUpToast() {
@@ -1188,6 +1497,7 @@ function revealDesignSprintWrapUpToast() {
       if (!isDesignSprintWrapUpToastVisible()) return;
       designSprintWrapUpToast.classList.add('is-shown');
       designSprintWrapUpToast.setAttribute('aria-hidden', 'false');
+      void refreshDesignSprintToastCaptureFromCursor();
     });
   });
 }
@@ -1196,9 +1506,11 @@ function showDesignSprintWrapUpToast() {
   if (!designSprintWrapUpToast) return;
   const wasHidden = designSprintWrapUpToast.classList.contains('hidden');
   if (!wasHidden) return;
+  playDesignSprintWrapUpSound();
   designSprintWrapUpToast.classList.remove('is-shown');
   designSprintWrapUpToast.classList.remove('hidden');
   designSprintWrapUpToast.setAttribute('aria-hidden', 'true');
+  syncDesignSprintInteraction();
   if (!isDesignSprintFullscreen()) {
     void applyFocusWindowSize().then(() => revealDesignSprintWrapUpToast());
     return;
@@ -1208,13 +1520,59 @@ function showDesignSprintWrapUpToast() {
 
 function dismissDesignSprintWrapUpToast() {
   designSprintWrapUpSuppressedForTaskIndex = state.focusTaskIndex;
-  hideDesignSprintWrapUpToast();
+  hideDesignSprintWrapUpToast({ blurIfFocused: true });
 }
 
 function openDesignSprintWrapUpFromToast() {
   designSprintWrapUpPromptTaskIndex = state.focusTaskIndex;
   hideDesignSprintWrapUpToast();
   openDesignSprintWrapUpModal();
+}
+
+let designSprintToastPointerListening = false;
+let designSprintToastCaptureActive = false;
+
+function isPointOverDesignSprintToast(x, y) {
+  if (!designSprintWrapUpToast?.classList.contains('is-shown')) return false;
+  const rect = designSprintWrapUpToast.getBoundingClientRect();
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+function setDesignSprintToastPointerCapture(capturing) {
+  if (!window.slashIt?.setDesignSprintToastCapture) return;
+  if (capturing === designSprintToastCaptureActive) return;
+  designSprintToastCaptureActive = capturing;
+  window.slashIt.setDesignSprintToastCapture(capturing);
+}
+
+function handleDesignSprintToastPointerMove(event) {
+  setDesignSprintToastPointerCapture(isPointOverDesignSprintToast(event.clientX, event.clientY));
+}
+
+function handleDesignSprintToastPointerLeave() {
+  setDesignSprintToastPointerCapture(false);
+}
+
+function syncDesignSprintToastPointerListener() {
+  const listen = shouldDesignSprintPassClicks() && isDesignSprintWrapUpToastVisible();
+  if (listen === designSprintToastPointerListening) return;
+  designSprintToastPointerListening = listen;
+  if (listen) {
+    window.addEventListener('mousemove', handleDesignSprintToastPointerMove, true);
+    window.addEventListener('mouseleave', handleDesignSprintToastPointerLeave, true);
+    return;
+  }
+  window.removeEventListener('mousemove', handleDesignSprintToastPointerMove, true);
+  window.removeEventListener('mouseleave', handleDesignSprintToastPointerLeave, true);
+  setDesignSprintToastPointerCapture(false);
+}
+
+async function refreshDesignSprintToastCaptureFromCursor() {
+  await designSprintInteractionPromise;
+  if (!designSprintToastPointerListening || !window.slashIt?.getCursorInWindow) return;
+  const point = await window.slashIt.getCursorInWindow();
+  if (!point || !designSprintToastPointerListening) return;
+  setDesignSprintToastPointerCapture(isPointOverDesignSprintToast(point.x, point.y));
 }
 
 function openDesignSprintWrapUpModal() {
@@ -1298,17 +1656,25 @@ function shouldDesignSprintPassClicks() {
 }
 
 let designSprintShortcutFailureAlerted = false;
+let designSprintInteractionPromise = Promise.resolve();
 
-function syncDesignSprintInteraction() {
+function syncDesignSprintInteraction({ blurIfFocused = false } = {}) {
   if (!window.slashIt?.setDesignSprintInteraction) return;
   const shortcut = isDesignSprintFocus();
   const clickThrough = shouldDesignSprintPassClicks();
-  window.slashIt.setDesignSprintInteraction({ clickThrough, shortcut }).then((registered) => {
+  const forwardMouse = clickThrough && isDesignSprintWrapUpToastVisible();
+  syncDesignSprintToastPointerListener();
+  designSprintInteractionPromise = window.slashIt.setDesignSprintInteraction({
+    clickThrough,
+    shortcut,
+    forwardMouse,
+    blurIfFocused,
+  }).then((registered) => {
     if (shortcut && registered === false && !designSprintShortcutFailureAlerted) {
       designSprintShortcutFailureAlerted = true;
       showAppAlert(
         'Control–Option–S is already in use, so the sprint menu could not be opened from the keyboard.',
-        { title: 'Design Sprint' },
+        { title: 'Sprint' },
       );
     }
   }).catch((err) => {
@@ -1334,6 +1700,11 @@ function handleDesignSprintShortcut() {
   openDesignSprintActionsModal(null, { centered: true });
 }
 
+function handleDesignSprintFullscreenShortcut() {
+  if (!isDesignSprintFocus()) return;
+  toggleDesignSprintFullscreen();
+}
+
 function dismissOpenDesignSprintWrapUpForFullscreen() {
   if (!isDesignSprintTimeModalOpen()) return;
   const onWrapUpStep = !designSprintExtendStep || designSprintExtendStep.classList.contains('hidden');
@@ -1354,6 +1725,7 @@ function enterDesignSprintFullscreen() {
   closeDesignSprintActionsModal();
   if (!menuOpen) applyFocusWindowSizeImmediate();
   updateDesignSprintFullscreenClock();
+  syncDesignSprintApproachGlow();
   if (!isInitializing) persist();
   syncDesignSprintInteraction();
 }
@@ -1364,6 +1736,7 @@ function exitDesignSprintFullscreen() {
   syncDesignSprintFullscreenClass();
   closeDesignSprintFullscreenOptions();
   updateDesignSprintFullscreenClock();
+  syncDesignSprintApproachGlow();
   const menuOpen = isDesignSprintTaskMenuOpen();
   closeDesignSprintActionsModal();
   if (!menuOpen && state.mode === 'focus') applyFocusWindowSizeImmediate();
@@ -1376,7 +1749,87 @@ function toggleDesignSprintFullscreen() {
   else enterDesignSprintFullscreen();
 }
 
+function setDesignSprintEdge(edge) {
+  const next = normalizeDesignSprintEdge(edge);
+  if (next === normalizeDesignSprintEdge(state.designSprintEdge)) return;
+  state.designSprintEdge = next;
+  syncDesignSprintEdgeClass();
+  if (!isInitializing) persist();
+  if (!isDesignSprintFocus() || isDesignSprintFullscreen()) return;
+  if (designSprintActionsMenuOpen && !designSprintMenuCentered) {
+    designSprintActionsMenuExtraHeight = measureDesignSprintTaskMenuExtent();
+  }
+  void applyFocusWindowSize().then(() => {
+    if (isDesignSprintWrapUpToastVisible()) positionDesignSprintWrapUpToast();
+  });
+}
+
+let designSprintApproachGlowKey = '';
+let designSprintApproachGlowTaskIndex = null;
+
+function getDesignSprintApproachGlowState() {
+  if (!isDesignSprintFocus() || state.limitExpired || isPomodoroBreakActive()) return null;
+
+  let chosen = null;
+  const current = getCurrentTask();
+  if (current?.limitMs && !isTaskOvertimeActive()) {
+    const remaining = current.limitMs - state.elapsedMs;
+    if (remaining > 0 && remaining <= DESIGN_SPRINT_WRAP_UP_MS) {
+      chosen = { remaining, tone: 'task' };
+    }
+  }
+
+  if (isPomodoroEnabled() && getPomodoroWorkLimitMs() > 0) {
+    const untilBreak = getPomodoroWorkLimitMs() - state.pomodoroWorkMs;
+    if (untilBreak > 0 && untilBreak <= DESIGN_SPRINT_WRAP_UP_MS && (!chosen || untilBreak < chosen.remaining)) {
+      chosen = { remaining: untilBreak, tone: 'break' };
+    }
+  }
+
+  if (!chosen) return null;
+  return {
+    opacity: Math.min(1, Math.max(0, 1 - chosen.remaining / DESIGN_SPRINT_WRAP_UP_MS)),
+    tone: chosen.tone,
+    fullscreen: isDesignSprintFullscreen(),
+  };
+}
+
+function applyDesignSprintApproachGlow(next) {
+  const showInPage = !!(next && next.fullscreen && next.opacity > 0);
+  if (designSprintApproachGlow) {
+    designSprintApproachGlow.classList.toggle('is-on', showInPage);
+    designSprintApproachGlow.classList.toggle('is-break', showInPage && next.tone === 'break');
+    designSprintApproachGlow.hidden = !showInPage;
+    designSprintApproachGlow.setAttribute('aria-hidden', showInPage ? 'false' : 'true');
+    if (showInPage) {
+      designSprintApproachGlow.style.setProperty('--approach-opacity', next.opacity.toFixed(3));
+    }
+  }
+  if (!window.slashIt?.setSprintApproachGlow) return;
+  if (!next || next.fullscreen || next.opacity <= 0) {
+    window.slashIt.setSprintApproachGlow(null);
+    return;
+  }
+  window.slashIt.setSprintApproachGlow({ opacity: next.opacity, tone: next.tone });
+}
+
+function syncDesignSprintApproachGlow() {
+  if (state.focusTaskIndex !== designSprintApproachGlowTaskIndex) {
+    designSprintApproachGlowTaskIndex = state.focusTaskIndex;
+    designSprintApproachGlowKey = '';
+  }
+  const next = getDesignSprintApproachGlowState();
+  const key = next
+    ? `${next.tone}:${next.opacity.toFixed(3)}:${next.fullscreen ? 'full' : 'dock'}`
+    : 'off';
+  if (key === designSprintApproachGlowKey) return;
+  designSprintApproachGlowKey = key;
+  applyDesignSprintApproachGlow(next);
+}
+
 function checkDesignSprintTimerMilestones() {
+  syncDesignSprintApproachGlow();
+  if (isPomodoroBreakActive()) return;
   if (!isDesignSprintFocus() || isDesignSprintTimeModalOpen()) return;
   if (!state.isRunning) return;
   const current = getCurrentTask();
@@ -1474,6 +1927,13 @@ function syncDesignSprintFullscreenOption(button, on) {
 function syncDesignSprintShowTimeMenu() {
   syncDesignSprintFullscreenOption(designSprintShowTimeBtn, state.designSprintShowTime);
   syncDesignSprintFullscreenOption(designSprintShowClockBtn, state.designSprintShowClock);
+  const pomodoroAvailable = isPomodoroEnabled();
+  designSprintShowPomodoroBtn?.classList.toggle('hidden', !pomodoroAvailable);
+  syncDesignSprintFullscreenOption(
+    designSprintShowPomodoroBtn,
+    pomodoroAvailable && state.designSprintShowPomodoro
+  );
+  syncDesignSprintFullscreenOption(designSprintShowProgressBtn, state.designSprintShowProgress);
 }
 
 function formatWallClock(date = new Date()) {
@@ -1486,7 +1946,47 @@ function updateDesignSprintFullscreenTimer() {
   designSprintFullscreenTimer.classList.toggle('hidden', !show);
   designSprintFullscreenTimer.setAttribute('aria-hidden', show ? 'false' : 'true');
   if (!show) return;
-  designSprintFullscreenTimer.textContent = formatTime(getTaskDisplayMs(getCurrentTask()));
+  if (designSprintFullscreenTimerTime) {
+    designSprintFullscreenTimerTime.textContent = formatTime(getTaskDisplayMs(getCurrentTask()));
+  }
+}
+
+function updateDesignSprintFullscreenProgress() {
+  if (!designSprintFullscreenProgress) return;
+  const percent = getDesignSprintWorkedPercent();
+  const show = isDesignSprintFullscreen() && !!state.designSprintShowProgress && percent != null;
+  designSprintFullscreenProgress.classList.toggle('hidden', !show);
+  designSprintFullscreenProgress.setAttribute('aria-hidden', show ? 'false' : 'true');
+  if (!show) return;
+  if (designSprintFullscreenProgressValue) {
+    designSprintFullscreenProgressValue.textContent = `${percent}%`;
+  }
+  designSprintFullscreenProgress.setAttribute('aria-label', `${percent}% of sprint time worked`);
+}
+
+function getPomodoroFullscreenDisplayMs() {
+  if (isPomodoroBreakActive()) return getPomodoroBreakRemainingMs();
+  return Math.max(0, getPomodoroWorkLimitMs() - state.pomodoroWorkMs);
+}
+
+function updateDesignSprintFullscreenPomodoro() {
+  if (!designSprintFullscreenPomodoro) return;
+  const show = isDesignSprintFullscreen()
+    && isPomodoroEnabled()
+    && !!state.designSprintShowPomodoro;
+  designSprintFullscreenPomodoro.classList.toggle('hidden', !show);
+  designSprintFullscreenPomodoro.setAttribute('aria-hidden', show ? 'false' : 'true');
+  if (!show) return;
+  const onBreak = isPomodoroBreakActive();
+  const label = onBreak ? getPomodoroBreakTitle() : 'Pomodoro';
+  if (designSprintFullscreenPomodoroLabel) designSprintFullscreenPomodoroLabel.textContent = label;
+  if (designSprintFullscreenPomodoroTime) {
+    designSprintFullscreenPomodoroTime.textContent = formatTime(getPomodoroFullscreenDisplayMs());
+  }
+  designSprintFullscreenPomodoro.setAttribute(
+    'aria-label',
+    onBreak ? `${label} remaining` : 'Time until the next pomodoro break'
+  );
 }
 
 function updateDesignSprintFullscreenWallClock() {
@@ -1495,7 +1995,9 @@ function updateDesignSprintFullscreenWallClock() {
   designSprintFullscreenClock.classList.toggle('hidden', !show);
   designSprintFullscreenClock.setAttribute('aria-hidden', show ? 'false' : 'true');
   if (!show) return;
-  designSprintFullscreenClock.textContent = formatWallClock();
+  if (designSprintFullscreenClockTime) {
+    designSprintFullscreenClockTime.textContent = formatWallClock();
+  }
 }
 
 function syncDesignSprintWallClockInterval() {
@@ -1513,6 +2015,8 @@ function syncDesignSprintWallClockInterval() {
 function updateDesignSprintFullscreenClock() {
   updateDesignSprintFullscreenTimer();
   updateDesignSprintFullscreenWallClock();
+  updateDesignSprintFullscreenPomodoro();
+  updateDesignSprintFullscreenProgress();
   syncDesignSprintWallClockInterval();
 }
 
@@ -1548,11 +2052,74 @@ function toggleDesignSprintShowClock() {
   if (!isInitializing) persist();
 }
 
+function toggleDesignSprintShowPomodoro() {
+  if (!isPomodoroEnabled()) return;
+  state.designSprintShowPomodoro = !state.designSprintShowPomodoro;
+  syncDesignSprintShowTimeMenu();
+  updateDesignSprintFullscreenClock();
+  if (!isInitializing) persist();
+}
+
+function toggleDesignSprintShowProgress() {
+  state.designSprintShowProgress = !state.designSprintShowProgress;
+  syncDesignSprintShowTimeMenu();
+  updateDesignSprintFullscreenClock();
+  if (!isInitializing) persist();
+}
+
 function clearTimerBarHideTimeout() {
   if (timerBarHideTimeout) {
     clearTimeout(timerBarHideTimeout);
     timerBarHideTimeout = null;
   }
+}
+
+function clearTimerBarHideNoticeTimeout() {
+  if (timerBarHideNoticeTimeout) {
+    clearTimeout(timerBarHideNoticeTimeout);
+    timerBarHideNoticeTimeout = null;
+  }
+}
+
+function dismissTimerBarHideNotice() {
+  clearTimerBarHideNoticeTimeout();
+  document.body.classList.remove('timer-bar-hide-notice');
+  timerHideToast?.classList.add('hidden');
+}
+
+function setTimerBarHideShortcut(enabled) {
+  if (!window.slashIt?.setTimerBarHideShortcut) return;
+  window.slashIt.setTimerBarHideShortcut(!!enabled).then((registered) => {
+    if (enabled && registered === false && !timerHideShortcutFailureAlerted) {
+      timerHideShortcutFailureAlerted = true;
+      showAppAlert(
+        'Control–Option–S is already in use, so the timebar cannot be shown again from the keyboard. It still comes back on its own after 5 minutes.',
+        { title: 'Timebar hidden' },
+      );
+    }
+  }).catch((err) => {
+    console.error('Failed to update the timebar hide shortcut:', err);
+  });
+}
+
+function showTimerBarHideNotice() {
+  document.body.classList.add('timer-bar-hide-notice');
+  timerHideToast?.classList.remove('hidden');
+  void window.slashIt.setFocusDimensions({
+    width: TIMER_BAR_HIDE_NOTICE_WIDTH,
+    height: FOCUS_BAR_BASE_HEIGHT,
+    preservePosition: state.focusPositionCustomized,
+    focusPositionCustomized: state.focusPositionCustomized,
+    fullscreen: false,
+    designSprint: false,
+  });
+}
+
+function finishTimerBarHide() {
+  clearTimerBarHideNoticeTimeout();
+  if (state.mode !== 'focus' || state.timerBarSize !== 'hidden' || isDesignSprintFocus()) return;
+  dismissTimerBarHideNotice();
+  window.slashIt.hideFocusWindow();
 }
 
 function invalidateFocusBarWidthCache() {
@@ -1693,6 +2260,8 @@ async function applyFocusWindowSize() {
 function restoreTimerBarFromHide() {
   if (state.timerBarSize !== 'hidden') return;
   clearTimerBarHideTimeout();
+  dismissTimerBarHideNotice();
+  setTimerBarHideShortcut(false);
   state.timerBarSize = state.timerBarSizeBeforeHide || 'normal';
   applyTimerBarSizeClass();
   updateTimerBarControlLabels();
@@ -1707,8 +2276,13 @@ function hideTimerBar() {
   state.timerBarSizeBeforeHide = normalizeTimerBarSize(state.timerBarSize);
   state.timerBarSize = 'hidden';
   closeSessionDrawer({ immediate: true });
-  window.slashIt.hideFocusWindow();
+  applyTimerBarSizeClass();
+  updateTimerBarControlLabels();
+  showTimerBarHideNotice();
+  setTimerBarHideShortcut(true);
   clearTimerBarHideTimeout();
+  clearTimerBarHideNoticeTimeout();
+  timerBarHideNoticeTimeout = setTimeout(finishTimerBarHide, TIMER_BAR_HIDE_NOTICE_MS);
   timerBarHideTimeout = setTimeout(restoreTimerBarFromHide, TIMER_BAR_HIDE_DURATION_MS);
   persist();
 }
@@ -1753,26 +2327,61 @@ function cancelFocusDimensionsUpdate() {
   }
 }
 
+function getDrawerTaskDurationText(task, index, focusIndex) {
+  if (task.completed) {
+    return task.durationMs != null ? formatTime(task.durationMs) : '';
+  }
+  if (index === focusIndex) return formatTime(getTaskDisplayMs(task));
+  if (task.elapsedMs) {
+    return formatTime(getTaskDisplayMsForElapsed(task, task.elapsedMs, task.taskOvertimeMode));
+  }
+  return '';
+}
+
+let lastDrawerSyncSignature = '';
+
+function getDrawerSyncSignature() {
+  const focusIndex = getFocusTaskIndex();
+  const parts = [
+    measureTimerBarWidth(),
+    state.activeSessionName || '',
+    formatTime(getSessionDisplayMs()),
+    focusIndex,
+    state.drawerAddFormOpen ? 1 : 0,
+    isLabsFeatureEnabled('trayAddTask') ? 1 : 0,
+  ];
+  state.sessionTasks.forEach((task, index) => {
+    parts.push(
+      index,
+      task.text,
+      getDrawerTaskStatus(task, index, focusIndex),
+      getDrawerTaskDurationText(task, index, focusIndex),
+    );
+  });
+  return parts.join('\u0001');
+}
+
+function syncOpenSessionDrawer() {
+  if (!drawerOpen) return false;
+  const signature = getDrawerSyncSignature();
+  if (signature === lastDrawerSyncSignature) return false;
+  lastDrawerSyncSignature = signature;
+  void window.slashIt.updateSessionDrawer(getDrawerPayload());
+  return true;
+}
+
 function getDrawerPayload() {
   const focusIndex = getFocusTaskIndex();
   const barWidth = measureTimerBarWidth();
   const drawerWidth = Math.round(barWidth * 0.85);
   const drawerHeight = getDrawerContentHeight();
 
-  const tasks = state.sessionTasks.map((task, index) => {
-    let status = getDrawerTaskStatus(task, index, focusIndex);
-    let durationText = '';
-
-    if (task.completed) {
-      if (task.durationMs != null) durationText = formatTime(task.durationMs);
-    } else if (index === focusIndex) {
-      durationText = formatTime(getTaskDisplayMs(task));
-    } else if (task.elapsedMs) {
-      durationText = formatTime(getTaskDisplayMsForElapsed(task, task.elapsedMs, task.taskOvertimeMode));
-    }
-
-    return { text: task.text, status, durationText, index };
-  });
+  const tasks = state.sessionTasks.map((task, index) => ({
+    text: task.text,
+    status: getDrawerTaskStatus(task, index, focusIndex),
+    durationText: getDrawerTaskDurationText(task, index, focusIndex),
+    index,
+  }));
 
   return {
     drawerWidth,
@@ -1785,8 +2394,19 @@ function getDrawerPayload() {
   };
 }
 
+let drawerHeightCacheKey = '';
+let drawerHeightCacheValue = 0;
+
 function getDrawerContentHeight() {
   const focusIndex = getFocusTaskIndex();
+  const cacheKey = [
+    measureTimerBarWidth(),
+    focusIndex,
+    state.activeSessionName || '',
+    isLabsFeatureEnabled('trayAddTask') ? 1 : 0,
+    state.sessionTasks.map((task) => task.text).join('\u0001'),
+  ].join('\u0002');
+  if (cacheKey === drawerHeightCacheKey) return drawerHeightCacheValue;
 
   const tempTitle = document.createElement('div');
   tempTitle.className = 'session-drawer-title-row';
@@ -1821,7 +2441,9 @@ function getDrawerContentHeight() {
   const listHeight = tempList.scrollHeight;
   document.body.removeChild(tempList);
   const addFooter = isLabsFeatureEnabled('trayAddTask') ? DRAWER_ADD_FOOTER_HEIGHT : 0;
-  return Math.min(180, listHeight) + titleHeight + 16 + addFooter;
+  drawerHeightCacheValue = Math.min(180, listHeight) + titleHeight + 16 + addFooter;
+  drawerHeightCacheKey = cacheKey;
+  return drawerHeightCacheValue;
 }
 
 function getActiveQueueSourceMeta() {
@@ -1859,9 +2481,7 @@ function appendTaskFromTray({ text, limitValue } = {}) {
   }, sourceMeta));
   persist();
 
-  if (drawerOpen) {
-    void window.slashIt.updateSessionDrawer(getDrawerPayload());
-  }
+  syncOpenSessionDrawer();
   if (state.fullscreenTaskPanelOpen) {
     renderSessionDrawer();
     syncFullscreenDrawerAddForm({ focus: true });
@@ -1874,9 +2494,7 @@ function setDrawerAddFormOpen(open) {
   if (state.drawerAddFormOpen) {
     clearTimeout(drawerCloseTimer);
   }
-  if (drawerOpen) {
-    void window.slashIt.updateSessionDrawer(getDrawerPayload());
-  }
+  syncOpenSessionDrawer();
 }
 
 function syncFullscreenDrawerAddForm({ focus = false } = {}) {
@@ -1929,15 +2547,7 @@ function renderSessionDrawer() {
   state.sessionTasks.forEach((task, index) => {
     const status = getDrawerTaskStatus(task, index, focusIndex);
     const statusClass = `session-drawer-task--${status}`;
-    let durationText = '';
-
-    if (task.completed) {
-      if (task.durationMs != null) durationText = formatTime(task.durationMs);
-    } else if (index === focusIndex) {
-      durationText = formatTime(getTaskDisplayMs(task));
-    } else if (task.elapsedMs) {
-      durationText = formatTime(getTaskDisplayMsForElapsed(task, task.elapsedMs, task.taskOvertimeMode));
-    }
+    const durationText = getDrawerTaskDurationText(task, index, focusIndex);
 
     const li = document.createElement('li');
     li.className = `session-drawer-task ${statusClass}`;
@@ -2007,7 +2617,9 @@ async function openSessionDrawer() {
   if (drawerOpen || state.mode !== 'focus' || isTimerBarFullscreen()) return;
   clearTimeout(drawerCloseTimer);
   drawerOpen = true;
+  lastDrawerSyncSignature = '';
   const payload = getDrawerPayload();
+  lastDrawerSyncSignature = getDrawerSyncSignature();
   await window.slashIt.showSessionDrawer(payload);
 }
 
@@ -2016,12 +2628,12 @@ function closeSessionDrawer({ immediate = false } = {}) {
 
   clearTimeout(drawerCloseTimer);
   drawerOpen = false;
+  lastDrawerSyncSignature = '';
   state.drawerAddFormOpen = false;
   void window.slashIt.hideSessionDrawer(immediate);
 }
 
 function scheduleCloseSessionDrawer() {
-  if (state.drawerAddFormOpen) return;
   clearTimeout(drawerCloseTimer);
   drawerCloseTimer = setTimeout(() => {
     closeSessionDrawer();
@@ -2429,6 +3041,7 @@ function normalizePlannedSession(session) {
     billableRoundMinutes: normalizeBillableRoundMinutes(session.billableRoundMinutes),
     billableRoundScope: normalizeBillableRoundScope(session.billableRoundScope),
     pinned: !!session.pinned && id !== BRAINDUMP_SESSION_ID,
+    savedForLater: !!session.savedForLater && id !== BRAINDUMP_SESSION_ID,
   };
 }
 
@@ -2527,20 +3140,32 @@ function sessionNameMatchesFilterPhrase(sessionName, phrase, type) {
   return false;
 }
 
+function isSessionSavedForLater(session) {
+  return !!session?.savedForLater && session.id !== BRAINDUMP_SESSION_ID;
+}
+
+function withoutSavedForLater(sessions) {
+  return sessions.filter((session) => session && !isSessionSavedForLater(session));
+}
+
+function getSavedForLaterSessions() {
+  return state.plannedSessions.filter((session) => isSessionSavedForLater(session));
+}
+
 function getSessionsForCustomFilter(filter) {
   if (!filter) return [];
 
   if (isMembershipSessionFilterType(filter.type)) {
     const selected = new Set(filter.sessionIds);
     if (filter.type === 'include') {
-      return filter.sessionIds.map((id) => getPlannedSession(id)).filter(Boolean);
+      return withoutSavedForLater(filter.sessionIds.map((id) => getPlannedSession(id)).filter(Boolean));
     }
-    return state.plannedSessions.filter((session) => !selected.has(session.id));
+    return withoutSavedForLater(state.plannedSessions.filter((session) => !selected.has(session.id)));
   }
 
-  return state.plannedSessions.filter((session) => (
+  return withoutSavedForLater(state.plannedSessions.filter((session) => (
     sessionNameMatchesFilterPhrase(session.name, filter.phrase, filter.type)
-  ));
+  )));
 }
 
 function normalizePinnedSessionListFilters(saved) {
@@ -2596,6 +3221,7 @@ function removePinnedSessionListFilter(filterId) {
 }
 
 function applySessionListFilter(filterValue) {
+  savedForLaterView = false;
   state.sessionListFilter = normalizeSessionListFilter(filterValue);
   closePlannedSessionsFilterMenu();
   updatePlannedSessionsFilterButtonState();
@@ -2630,7 +3256,7 @@ function getArchivedPlannedSession(sessionId) {
 
 function getPinnedPlannedSessions() {
   return state.plannedSessions.filter(
-    (session) => session.id !== BRAINDUMP_SESSION_ID && session.pinned,
+    (session) => session.id !== BRAINDUMP_SESSION_ID && session.pinned && !isSessionSavedForLater(session),
   );
 }
 
@@ -2646,7 +3272,8 @@ function getRecentPlannedSessionIds(limit = RECENT_SESSIONS_LIMIT) {
   state.sessionHistory.forEach((entry) => {
     const id = getHistoryEntrySourceSessionId(entry);
     if (seen.has(id)) return;
-    if (!getPlannedSession(id)) return;
+    const session = getPlannedSession(id);
+    if (!session || isSessionSavedForLater(session)) return;
     seen.add(id);
     ids.push(id);
   });
@@ -2654,9 +3281,11 @@ function getRecentPlannedSessionIds(limit = RECENT_SESSIONS_LIMIT) {
 }
 
 function getRecentPlannedSessions() {
-  return getRecentPlannedSessionIds()
-    .map((id) => getPlannedSession(id))
-    .filter(Boolean);
+  return withoutSavedForLater(
+    getRecentPlannedSessionIds()
+      .map((id) => getPlannedSession(id))
+      .filter(Boolean),
+  );
 }
 
 function getFirstUnpinnedIndex() {
@@ -2782,6 +3411,19 @@ function appendPinnedSessionListFiltersSection(container, hasContentBelow) {
 }
 
 function getPlannedSessionsRenderPlan() {
+  if (savedForLaterView && !sessionFocusId) {
+    const saved = getSavedForLaterSessions();
+    return {
+      emptyMessage: saved.length === 0 ? 'No sessions saved for later.' : null,
+      sections: saved.length > 0 ? [{
+        label: null,
+        sessions: saved,
+        showDividerBefore: false,
+        showDividerAfter: false,
+      }] : [],
+    };
+  }
+
   if (sessionFocusId) {
     const session = getPlannedSession(sessionFocusId);
     if (!session) {
@@ -2838,7 +3480,7 @@ function getPlannedSessionsRenderPlan() {
   const pinned = getPinnedPlannedSessions();
   const braindump = state.plannedSessions.find((session) => session.id === BRAINDUMP_SESSION_ID);
   const unpinnedRest = state.plannedSessions.filter(
-    (session) => session.id !== BRAINDUMP_SESSION_ID && !session.pinned,
+    (session) => session.id !== BRAINDUMP_SESSION_ID && !session.pinned && !isSessionSavedForLater(session),
   );
   const sections = [];
   const hasBelowPinned = !!(braindump || unpinnedRest.length > 0);
@@ -2859,6 +3501,50 @@ function getPlannedSessionsRenderPlan() {
   }
 
   return { emptyMessage: null, sections };
+}
+
+function syncSavedForLaterChrome() {
+  if (plannedSessionsHeading) {
+    plannedSessionsHeading.textContent = savedForLaterView ? 'Saved for Later Sessions' : 'Sessions:';
+    plannedSessionsHeading.classList.toggle('section-label--saved-for-later', savedForLaterView);
+  }
+  if (plannedSessionsSavedBtn) {
+    plannedSessionsSavedBtn.setAttribute('aria-pressed', savedForLaterView ? 'true' : 'false');
+    plannedSessionsSavedBtn.classList.toggle('planned-sessions-saved-btn--active', savedForLaterView);
+  }
+}
+
+function showSavedForLaterToast() {
+  if (!savedForLaterToast) return;
+  if (savedForLaterToastTimer) clearTimeout(savedForLaterToastTimer);
+  savedForLaterToast.style.setProperty('--saved-for-later-toast-ms', `${SAVED_FOR_LATER_TOAST_MS}ms`);
+  savedForLaterToast.classList.remove('is-shown');
+  savedForLaterToast.setAttribute('aria-hidden', 'true');
+  void savedForLaterToast.offsetWidth;
+  savedForLaterToast.classList.add('is-shown');
+  savedForLaterToast.setAttribute('aria-hidden', 'false');
+  savedForLaterToastTimer = setTimeout(() => {
+    savedForLaterToastTimer = null;
+    savedForLaterToast.classList.remove('is-shown');
+    savedForLaterToast.setAttribute('aria-hidden', 'true');
+  }, SAVED_FOR_LATER_TOAST_MS);
+}
+
+function setSavedForLaterView(open) {
+  savedForLaterView = !!open;
+  if (savedForLaterView) sessionFocusId = null;
+  renderEditView();
+}
+
+function setSessionSavedForLater(sessionId, saved) {
+  if (sessionId === BRAINDUMP_SESSION_ID) return;
+  const session = getPlannedSession(sessionId);
+  if (!session) return;
+  session.savedForLater = !!saved;
+  if (session.savedForLater && sessionFocusId === sessionId) sessionFocusId = null;
+  persist();
+  renderEditView();
+  if (session.savedForLater) showSavedForLaterToast();
 }
 
 function toggleSessionPin(sessionId) {
@@ -2882,7 +3568,7 @@ function toggleSessionPin(sessionId) {
 }
 
 function canReorderPlannedSessions() {
-  if (isSessionFocusActive()) return false;
+  if (savedForLaterView || isSessionFocusActive()) return false;
   if (!isBuiltInSessionListFilter(state.sessionListFilter)) return false;
   return state.sessionListFilter === 'all' || state.sessionListFilter === 'pinned';
 }
@@ -3448,6 +4134,7 @@ function applyLicenseStatus(status = {}) {
   if (!isInitializing && wasLicensed !== licenseState.isLicensed) {
     if (state.mode === 'edit') renderEditView();
     else if (state.mode === 'focus') renderFocusView();
+    if (licenseState.isLicensed) maybeOpenFirstRunOnboarding();
   }
 }
 
@@ -3860,7 +4547,7 @@ function updateQuickStartDesignSprintUi() {
   const on = visible && quickStartDesignSprint;
   quickStartDesignSprintBtn.classList.toggle('design-sprint-toggle-btn--on', on);
   quickStartDesignSprintBtn.setAttribute('aria-checked', on ? 'true' : 'false');
-  quickStartDesignSprintBtn.title = on ? 'Design Sprint on' : 'Design Sprint off';
+  quickStartDesignSprintBtn.title = on ? 'Sprint on' : 'Sprint off';
 }
 
 function toggleQuickStartDesignSprint() {
@@ -3882,7 +4569,7 @@ function updateDesignSprintToggleUi() {
   const on = !!state.designSprintEnabled && isLabsFeatureEnabled('designSprints');
   designSprintToggleBtn.classList.toggle('design-sprint-toggle-btn--on', on);
   designSprintToggleBtn.setAttribute('aria-checked', on ? 'true' : 'false');
-  designSprintToggleBtn.title = on ? 'Design Sprint mode on' : 'Design Sprint mode off';
+  designSprintToggleBtn.title = on ? 'Sprint mode on' : 'Sprint mode off';
 }
 
 function toggleDesignSprintEnabled() {
@@ -3982,8 +4669,8 @@ function startQuickStartSession() {
     const missing = tasks.filter((task) => !task.limitMs || task.limitMs <= 0);
     if (missing.length > 0) {
       const taskList = missing.map((task) => `• ${task.text}`).join('\n');
-      showAppAlert(`Add a time limit to every task before starting a Design Sprint.\n\n${taskList}`, {
-        title: 'Design Sprint',
+      showAppAlert(`Add a time limit to every task before starting a Sprint.\n\n${taskList}`, {
+        title: 'Sprint',
       });
       return;
     }
@@ -4699,6 +5386,7 @@ function isUndoRedoShortcutBlocked() {
   if (!saveTemplateModal.classList.contains('hidden')) return true;
   if (!createSessionFilterModal?.classList.contains('hidden')) return true;
   if (isTaskDetailModalOpen()) return true;
+  if (isOnboardingOpen()) return true;
   return false;
 }
 
@@ -4713,23 +5401,55 @@ function handleUndoRedoShortcuts(e) {
   else undoLastAction();
 }
 
-function persist(options = {}) {
-  saveCurrentTaskProgress();
-  const currentUndoable = captureUndoSnapshot();
-  if (
-    !options.skipUndoCheckpoint
-    && !isApplyingUndoRedo
-    && !isInitializing
-    && state.mode === 'edit'
-  ) {
-    if (lastUndoableSnapshot && !undoSnapshotsEqual(lastUndoableSnapshot, currentUndoable)) {
-      undoStack.push(lastUndoableSnapshot);
-      if (undoStack.length > MAX_UNDO_STACK) undoStack.shift();
-      redoStack = [];
-    }
-    lastUndoableSnapshot = currentUndoable;
+let lastPersistedLogo = null;
+let lastTimerProgressSaveAt = 0;
+let pomodoroWorkAnchorMs = null;
+let pomodoroBreakAnchorMs = null;
+const TIMER_PROGRESS_SAVE_MS = 10000;
+let persistQueue = null;
+
+function buildProgressPayload() {
+  return {
+    sessionTasks: state.sessionTasks,
+    elapsedMs: state.elapsedMs,
+    isRunning: state.isRunning,
+    totalSessionMs: state.totalSessionMs,
+    focusTaskIndex: state.focusTaskIndex,
+    currentIndex: state.currentIndex,
+    limitExpired: state.limitExpired,
+    limitExpiredKind: state.limitExpiredKind,
+    taskOvertimeMode: state.taskOvertimeMode,
+    mode: state.mode,
+    timerView: state.timerView,
+    activeSessionRunId: state.activeSessionRunId,
+    activeSessionStartedAt: state.activeSessionStartedAt,
+    activeSessionName: state.activeSessionName,
+    designSprintMode: !!state.designSprintMode,
+    designSprintFullscreen: !!state.designSprintFullscreen,
+    designSprintShowTime: !!state.designSprintShowTime,
+    designSprintShowClock: !!state.designSprintShowClock,
+    designSprintShowPomodoro: !!state.designSprintShowPomodoro,
+    designSprintShowProgress: !!state.designSprintShowProgress,
+    designSprintEdge: normalizeDesignSprintEdge(state.designSprintEdge),
+    pomodoroWorkMs: state.pomodoroWorkMs,
+    pomodoroOnBreak: !!state.pomodoroOnBreak,
+    pomodoroBreakElapsedMs: state.pomodoroBreakElapsedMs,
+  };
+}
+
+function invoiceSettingsForPersist() {
+  const invoiceSettings = { ...state.invoiceSettings };
+  const logo = typeof invoiceSettings.logoDataUrl === 'string' ? invoiceSettings.logoDataUrl : '';
+  if (lastPersistedLogo !== null && logo === lastPersistedLogo) {
+    delete invoiceSettings.logoDataUrl;
+    return invoiceSettings;
   }
-  window.slashIt.saveData({
+  lastPersistedLogo = logo;
+  return invoiceSettings;
+}
+
+function buildPersistPayload() {
+  return {
     sessionTasks: state.sessionTasks,
     plannedSessions: state.plannedSessions,
     archivedPlannedSessions: state.archivedPlannedSessions,
@@ -4750,6 +5470,14 @@ function persist(options = {}) {
     designSprintFullscreen: !!state.designSprintFullscreen,
     designSprintShowTime: !!state.designSprintShowTime,
     designSprintShowClock: !!state.designSprintShowClock,
+    designSprintShowPomodoro: !!state.designSprintShowPomodoro,
+    designSprintShowProgress: !!state.designSprintShowProgress,
+    designSprintEdge: normalizeDesignSprintEdge(state.designSprintEdge),
+    designSprintShortcutHintDismissed: !!state.designSprintShortcutHintDismissed,
+    pomodoro: normalizePomodoroSettings(state.pomodoro),
+    pomodoroWorkMs: state.pomodoroWorkMs,
+    pomodoroOnBreak: !!state.pomodoroOnBreak,
+    pomodoroBreakElapsedMs: state.pomodoroBreakElapsedMs,
     timerBarSize: state.timerBarSize === 'hidden' ? 'hidden' : state.timerBarSize,
     timerBarSizeBeforeHide: state.timerBarSizeBeforeHide,
     focusPosition: state.focusPosition,
@@ -4759,15 +5487,92 @@ function persist(options = {}) {
     activeSessionStartedAt: state.activeSessionStartedAt,
     listTemplates: state.listTemplates,
     soundEffectsEnabled: window.slashItSounds.isEnabled(),
-    invoiceSettings: state.invoiceSettings,
+    invoiceSettings: invoiceSettingsForPersist(),
     lastSeenWhatsNewVersion: state.lastSeenWhatsNewVersion,
     lastLaunchedAppVersion: state.lastLaunchedAppVersion,
+    onboardingCompleted: !!state.onboardingCompleted,
     sessionListFilter: state.sessionListFilter,
     sessionListFilters: state.sessionListFilters,
     pinnedSessionListFilters: state.pinnedSessionListFilters,
     labsFeatures: state.labsFeatures,
     quickStartRateSettings: state.quickStartRateSettings,
+  };
+}
+
+function commitPersist(options) {
+  if (persistQueue) {
+    const queue = persistQueue;
+    persistQueue = null;
+    const promise = commitPersist({
+      skipBackupRotation: !!options.skipBackupRotation && queue.skipBackupRotation,
+      progressOnly: !!options.progressOnly && queue.progressOnly,
+    });
+    promise.then(queue.resolve, queue.reject);
+    return promise;
+  }
+
+  lastTimerProgressSaveAt = Date.now();
+  const progressOnly = !!options.progressOnly;
+  return window.slashIt.saveData(progressOnly ? buildProgressPayload() : buildPersistPayload(), {
+    rotateBackups: !options.skipBackupRotation,
+    progressOnly,
   });
+}
+
+function enqueuePersist(options = {}) {
+  if (!persistQueue) {
+    let resolve;
+    let reject;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    persistQueue = {
+      progressOnly: true,
+      skipBackupRotation: true,
+      promise,
+      resolve,
+      reject,
+    };
+    queueMicrotask(() => {
+      const queue = persistQueue;
+      if (!queue) return;
+      persistQueue = null;
+      commitPersist({
+        skipBackupRotation: queue.skipBackupRotation,
+        progressOnly: queue.progressOnly,
+      }).then(queue.resolve, queue.reject);
+    });
+  }
+
+  if (!options.progressOnly) persistQueue.progressOnly = false;
+  if (!options.skipBackupRotation) persistQueue.skipBackupRotation = false;
+  return persistQueue.promise;
+}
+
+function persist(options = {}) {
+  saveCurrentTaskProgress();
+  const shouldCheckpoint = !options.skipUndoCheckpoint
+    && !isApplyingUndoRedo
+    && !isInitializing
+    && state.mode === 'edit';
+  if (shouldCheckpoint) {
+    const currentUndoable = captureUndoSnapshot();
+    if (lastUndoableSnapshot && !undoSnapshotsEqual(lastUndoableSnapshot, currentUndoable)) {
+      undoStack.push(lastUndoableSnapshot);
+      if (undoStack.length > MAX_UNDO_STACK) undoStack.shift();
+      redoStack = [];
+    }
+    lastUndoableSnapshot = currentUndoable;
+    return commitPersist({ ...options, progressOnly: false });
+  }
+  return enqueuePersist(options);
+}
+
+function maybePersistRunningTimer() {
+  if (!state.isRunning || isInitializing) return;
+  if (Date.now() - lastTimerProgressSaveAt < TIMER_PROGRESS_SAVE_MS) return;
+  persist({ skipUndoCheckpoint: true, skipBackupRotation: true, progressOnly: true });
 }
 
 function normalizeInvoiceSettings(settings) {
@@ -4801,6 +5606,8 @@ function showView(mode) {
     closeDesignSprintFullscreenOptions();
     cancelFocusDimensionsUpdate();
     clearTimerBarHideTimeout();
+    dismissTimerBarHideNotice();
+    setTimerBarHideShortcut(false);
     if (state.timerBarSize === 'hidden') {
       state.timerBarSize = state.timerBarSizeBeforeHide || 'normal';
       window.slashIt.showFocusWindow();
@@ -4813,6 +5620,8 @@ function showView(mode) {
   } else {
     if (isDesignSprintFocus()) {
       clearTimerBarHideTimeout();
+      dismissTimerBarHideNotice();
+      setTimerBarHideShortcut(false);
       if (state.timerBarSize === 'hidden') {
         state.timerBarSize = state.timerBarSizeBeforeHide || 'normal';
       }
@@ -4825,7 +5634,9 @@ function showView(mode) {
       void window.slashIt.showFocusWindow();
     }
     if (!isDesignSprintFocus() && state.timerBarSize === 'hidden') {
+      dismissTimerBarHideNotice();
       window.slashIt.hideFocusWindow();
+      setTimerBarHideShortcut(true);
       clearTimerBarHideTimeout();
       timerBarHideTimeout = setTimeout(restoreTimerBarFromHide, TIMER_BAR_HIDE_DURATION_MS);
     } else {
@@ -4906,7 +5717,15 @@ function getCurrentTask() {
 
 function updateSkipButtonState() {
   if (!skipBtn) return;
+  if (isPomodoroBreakActive()) {
+    skipBtn.disabled = false;
+    skipBtn.title = 'End break';
+    skipBtn.setAttribute('aria-label', 'End break');
+    return;
+  }
   skipBtn.disabled = getIncompleteCount() <= 1;
+  skipBtn.title = 'Skip task';
+  skipBtn.setAttribute('aria-label', 'Skip task');
 }
 
 function getSessionElapsedMs() {
@@ -4931,6 +5750,7 @@ function resetSessionProgressState() {
   state.activeSessionName = null;
   state.activeSessionRunId = null;
   state.activeSessionStartedAt = null;
+  resetPomodoroRuntime();
 }
 
 function ensureActiveSessionRun(forceNew = false) {
@@ -5198,7 +6018,9 @@ function formatTaskDetailSelectLabel(text) {
 }
 
 function getTaskDetailMoveOptions(currentListId) {
-  const options = state.plannedSessions.map((session) => ({
+  const options = state.plannedSessions.filter((session) => (
+    !isSessionSavedForLater(session) || listIdForSession(session.id) === currentListId
+  )).map((session) => ({
     value: listIdForSession(session.id),
     label: formatTaskDetailSelectLabel(session.name),
   }));
@@ -6286,7 +7108,7 @@ function handlePlannedSessionsFilterOptionClick(event) {
 function renderCreateSessionFilterSessionList() {
   if (!createSessionFilterSessionList) return;
 
-  createSessionFilterSessionList.innerHTML = state.plannedSessions.map((session) => {
+  createSessionFilterSessionList.innerHTML = withoutSavedForLater(state.plannedSessions).map((session) => {
     const isSelected = createSessionFilterSelectedIds.has(session.id);
     return `
       <button
@@ -7110,6 +7932,24 @@ function updateTimerDisplay() {
     state.timerView = 'session';
   }
 
+  if (isPomodoroBreakActive()) {
+    renderPomodoroBreakDisplay();
+    timerBar.classList.toggle('is-running', state.isRunning);
+    pauseBtn.classList.toggle('is-paused', !state.isRunning);
+    pauseBtn.title = state.isRunning ? 'Pause' : 'Resume';
+    pauseBtn.setAttribute('aria-label', state.isRunning ? 'Pause' : 'Resume');
+    if (completeBtn) completeBtn.disabled = true;
+    updateSkipButtonState();
+    updateTimerBarControlLabels();
+    syncOpenSessionDrawer();
+    updateDesignSprintBarProgress();
+    updateDesignSprintFullscreenClock();
+    syncDesignSprintApproachGlow();
+    return;
+  }
+
+  if (completeBtn) completeBtn.disabled = false;
+  document.body.classList.remove('pomodoro-break');
   const current = getCurrentTask();
   const showEarningsRounding = state.timerView === 'earnings' && shouldShowEarningsRoundingDisplay();
   const roundMinutes = showEarningsRounding ? getCurrentTaskRoundMinutes() : null;
@@ -7173,11 +8013,10 @@ function updateTimerDisplay() {
   pauseBtn.setAttribute('aria-label', state.isRunning ? 'Pause' : 'Resume');
   updateSkipButtonState();
   updateTimerBarControlLabels();
-  if (drawerOpen) {
-    void window.slashIt.updateSessionDrawer(getDrawerPayload());
-  }
+  syncOpenSessionDrawer();
   updateDesignSprintBarProgress();
   updateDesignSprintFullscreenClock();
+  syncDesignSprintApproachGlow();
 }
 
 function setExpiredUI(active) {
@@ -7873,6 +8712,14 @@ function showSessionContextMenu(e, sessionId) {
         : 'Pin session';
     }
   }
+  if (sessionContextSaveLaterBtn) {
+    sessionContextSaveLaterBtn.classList.toggle('hidden', isBraindump);
+    if (!isBraindump) {
+      sessionContextSaveLaterBtn.querySelector('span').textContent = isSessionSavedForLater(session)
+        ? 'Move back to sessions'
+        : 'Save for later';
+    }
+  }
 
   positionContextMenu(sessionContextMenu, e.clientX, e.clientY);
 }
@@ -8357,15 +9204,16 @@ function renderPlannedSessions() {
   plannedSessionsList.innerHTML = '';
   updatePlannedSessionsFilterButtonState();
   updateCollapseAllSessionsButton();
+  syncSavedForLaterChrome();
 
   const plan = getPlannedSessionsRenderPlan();
-  appendPlannedSessionsFilterHeading(plannedSessionsList);
+  if (!savedForLaterView) appendPlannedSessionsFilterHeading(plannedSessionsList);
   appendPlannedSessionsFocusBar(plannedSessionsList);
 
   const hasSessionContent = !!plan.emptyMessage || plan.sections.some(
     (section) => (section.sessions || []).length > 0,
   );
-  appendPinnedSessionListFiltersSection(plannedSessionsList, hasSessionContent);
+  if (!savedForLaterView) appendPinnedSessionListFiltersSection(plannedSessionsList, hasSessionContent);
 
   if (plan.emptyMessage) {
     plannedSessionsList.insertAdjacentHTML(
@@ -8430,7 +9278,8 @@ function isSettingsUiOpen() {
     || !createSessionFilterModal?.classList.contains('hidden')
     || !billableModal.classList.contains('hidden')
     || !quickStartModal?.classList.contains('hidden')
-    || !whatsNewModal.classList.contains('hidden');
+    || !whatsNewModal.classList.contains('hidden')
+    || isOnboardingOpen();
 }
 
 function formatRelativeBackupTime(timestamp) {
@@ -8657,6 +9506,19 @@ function showSettingsMenu() {
 function hideSettingsMenu() {
   settingsMenu.classList.add('hidden');
   settingsBtn.setAttribute('aria-expanded', 'false');
+  closeSettingsMenuGroups();
+}
+
+function closeSettingsMenuGroups() {
+  settingsMenu?.querySelectorAll('.settings-menu-category').forEach((button) => {
+    setSettingsMenuGroupOpen(button, false);
+  });
+}
+
+function setSettingsMenuGroupOpen(button, open) {
+  const panel = document.getElementById(button.getAttribute('aria-controls'));
+  button.setAttribute('aria-expanded', open ? 'true' : 'false');
+  panel?.classList.toggle('hidden', !open);
 }
 
 function toggleSettingsMenu() {
@@ -8681,7 +9543,7 @@ const TUTORIAL_STEPS = [
     selector: '[data-tutorial="settings-menu"]',
     arrowPlacement: 'above-heading',
     title: 'Your command center',
-    body: 'Tap the <strong>menu</strong> anytime for the good stuff: <strong>Templates</strong> for reusable task lists, <strong>Session history</strong> for past work and invoices, <strong>Personal Profile</strong> for your business info, <strong>Keyboard shortcuts</strong> for speed, <strong>Sound effects</strong> on/off, and <strong>Data &amp; backup</strong> to protect your progress. Replay this tour anytime from <strong>Tutorial</strong> at the bottom.',
+    body: 'Tap the <strong>menu</strong> anytime for the good stuff: <strong>Templates</strong> for reusable task lists, <strong>Session history</strong> for past work and invoices, <strong>Personal Profile</strong> for your business info, <strong>Keyboard shortcuts</strong> for speed, <strong>Sound effects</strong> on/off, and <strong>Data &amp; backup</strong> to protect your progress. Replay this tour anytime from <strong>Tutorial</strong> under Help.',
   },
   {
     id: 'sessions-panel',
@@ -10929,7 +11791,9 @@ async function shouldDeferWhatsNewAutoShow() {
 }
 
 async function maybeAutoShowWhatsNew() {
+  if (isOnboardingOpen()) return;
   await window.slashIt.waitForInitialUpdateCheck();
+  if (isOnboardingOpen()) return;
   if (await shouldDeferWhatsNewAutoShow()) return;
 
   const version = await window.slashIt.getAppVersion();
@@ -11336,8 +12200,13 @@ const LABS_FEATURES = [
   },
   {
     id: 'designSprints',
-    title: 'Design Sprints',
-    description: 'Start a Design Sprint from the queue, or from Quick Start, when every task has a time limit. Focus mode shows a full-width timeline at the bottom of the screen with proportional segments for each task. Click the current segment for pause, complete, skip, and edit.',
+    title: 'Sprint',
+    description: 'Start a Sprint from the queue, or from Quick Start, when every task has a time limit. Focus mode shows a thin timeline on an edge of the screen, with a proportional slice for each task. Click the current segment for pause, complete, skip, and edit.',
+  },
+  {
+    id: 'pomodoro',
+    title: 'Pomodoro',
+    description: 'Take an automatic break during focus after a set amount of work time. The break keeps its own clock, so it starts even when the current task still has time left. Open Pomodoro in the settings menu to name the break and set how long it lasts. Skip ends it early.',
   },
 ];
 const LABS_FEATURES_STORAGE_KEY = 'supaslash-labs-features';
@@ -11350,6 +12219,7 @@ function normalizeLabsFeatures(saved) {
     pinnedFilters: !!source.pinnedFilters,
     analytics: !!source.analytics,
     designSprints: !!source.designSprints,
+    pomodoro: !!source.pomodoro,
   };
 }
 
@@ -11428,10 +12298,15 @@ function setLabsFeatureEnabled(featureId, enabled) {
     }
   }
 
-  persist();
-  if (drawerOpen) {
-    void window.slashIt.updateSessionDrawer(getDrawerPayload());
+  if (featureId === 'pomodoro') {
+    updatePomodoroMenuVisibility();
+    if (!enabled && state.pomodoroOnBreak) finishPomodoroBreak({ playSound: false });
+    syncDesignSprintShowTimeMenu();
+    updateDesignSprintFullscreenClock();
   }
+
+  persist();
+  syncOpenSessionDrawer();
   if (state.fullscreenTaskPanelOpen) {
     renderSessionDrawer();
   }
@@ -11629,6 +12504,10 @@ function applySavedData(saved, { mergeLabsFromLocal = true } = {}) {
     && !!saved.designSprintFullscreen;
   state.designSprintShowTime = !!saved.designSprintShowTime;
   state.designSprintShowClock = !!saved.designSprintShowClock;
+  state.designSprintShowPomodoro = !!saved.designSprintShowPomodoro;
+  state.designSprintShowProgress = !!saved.designSprintShowProgress;
+  state.designSprintEdge = normalizeDesignSprintEdge(saved.designSprintEdge);
+  state.designSprintShortcutHintDismissed = !!saved.designSprintShortcutHintDismissed;
   state.sessionHistory = Array.isArray(saved.sessionHistory)
     ? saved.sessionHistory.map(normalizeSessionHistoryEntry)
     : [];
@@ -11640,6 +12519,7 @@ function applySavedData(saved, { mergeLabsFromLocal = true } = {}) {
   migrateLegacyTaskTemplates(saved.taskTemplates);
   window.slashItSounds.setEnabled(saved.soundEffectsEnabled !== false);
   state.invoiceSettings = normalizeInvoiceSettings(saved.invoiceSettings);
+  lastPersistedLogo = state.invoiceSettings.logoDataUrl || '';
   state.lastSeenWhatsNewVersion = typeof saved.lastSeenWhatsNewVersion === 'string'
     ? saved.lastSeenWhatsNewVersion
     : null;
@@ -11661,11 +12541,32 @@ function applySavedData(saved, { mergeLabsFromLocal = true } = {}) {
   if (!isLabsFeatureEnabled('designSprints')) {
     state.designSprintEnabled = false;
   }
+  state.pomodoro = normalizePomodoroSettings(saved.pomodoro);
+  state.pomodoroWorkMs = Number.isFinite(saved.pomodoroWorkMs) && saved.pomodoroWorkMs > 0
+    ? saved.pomodoroWorkMs
+    : 0;
+  state.pomodoroOnBreak = !!saved.pomodoroOnBreak && isLabsFeatureEnabled('pomodoro');
+  state.pomodoroBreakElapsedMs = state.pomodoroOnBreak && Number.isFinite(saved.pomodoroBreakElapsedMs)
+    ? Math.max(0, saved.pomodoroBreakElapsedMs)
+    : 0;
+  pomodoroWorkAnchorMs = null;
+  pomodoroBreakAnchorMs = null;
   updateQuickStartButtonVisibility();
   updateDesignSprintToggleVisibility();
   updateDesignSprintToggleUi();
   updateAnalyticsMenuVisibility();
+  updatePomodoroMenuVisibility();
   state.quickStartRateSettings = normalizeQuickStartRateSettings(saved.quickStartRateSettings);
+  if (saved.onboardingCompleted === true) {
+    state.onboardingCompleted = true;
+  } else if (saved.onboardingCompleted === false) {
+    state.onboardingCompleted = false;
+  } else if (installHasBeenUsed(saved)) {
+    state.onboardingCompleted = true;
+    onboardingCompletedNeedsPersist = true;
+  } else {
+    state.onboardingCompleted = false;
+  }
 
   if (saved.timerBarSize === 'hidden') {
     state.timerBarSize = state.timerBarSizeBeforeHide;
@@ -11754,9 +12655,7 @@ function renderEditView() {
 }
 
 function refreshDrawerIfOpen() {
-  if (drawerOpen) {
-    void window.slashIt.updateSessionDrawer(getDrawerPayload());
-  }
+  syncOpenSessionDrawer();
 }
 
 function openClearSessionModal() {
@@ -11954,6 +12853,7 @@ function isEditShortcutBlocked() {
   if (!archiveSessionModal.classList.contains('hidden')) return true;
   if (!billableModal.classList.contains('hidden')) return true;
   if (!quickStartModal?.classList.contains('hidden')) return true;
+  if (isOnboardingOpen()) return true;
   if (isTaskDetailModalOpen()) return true;
   if (isSettingsUiOpen()) return true;
   return false;
@@ -12078,6 +12978,8 @@ function renderFocusView() {
 
 function showDoneView({ playSound = false } = {}) {
   state.designSprintMode = false;
+  resetPomodoroRuntime();
+  document.body.classList.remove('pomodoro-break');
   closeDesignSprintTimeModal();
   closeDesignSprintActionsModal();
   resetDesignSprintWrapUpTaskFlags();
@@ -12117,24 +13019,245 @@ function checkLimitExpiry() {
   }
 }
 
+const POMODORO_DEFAULT_WORK_MS = 25 * 60 * 1000;
+const POMODORO_DEFAULT_BREAK_MS = 5 * 60 * 1000;
+const POMODORO_DEFAULT_TITLE = 'Break';
+const POMODORO_TITLE_MAX = 40;
+
+function normalizePomodoroSettings(saved) {
+  const source = saved && typeof saved === 'object' ? saved : {};
+  const workMs = Number(source.workMs);
+  const breakMs = Number(source.breakMs);
+  const title = typeof source.breakTitle === 'string' ? source.breakTitle.trim().slice(0, POMODORO_TITLE_MAX) : '';
+  return {
+    workMs: Number.isFinite(workMs) && workMs >= 1000 ? Math.round(workMs) : POMODORO_DEFAULT_WORK_MS,
+    breakMs: Number.isFinite(breakMs) && breakMs >= 1000 ? Math.round(breakMs) : POMODORO_DEFAULT_BREAK_MS,
+    breakTitle: title || POMODORO_DEFAULT_TITLE,
+  };
+}
+
+function isPomodoroEnabled() {
+  return isLabsFeatureEnabled('pomodoro');
+}
+
+function isPomodoroBreakActive() {
+  return isPomodoroEnabled() && !!state.pomodoroOnBreak;
+}
+
+function getPomodoroBreakTitle() {
+  return normalizePomodoroSettings(state.pomodoro).breakTitle;
+}
+
+function getPomodoroWorkLimitMs() {
+  return normalizePomodoroSettings(state.pomodoro).workMs;
+}
+
+function getPomodoroBreakLimitMs() {
+  return normalizePomodoroSettings(state.pomodoro).breakMs;
+}
+
+function getPomodoroBreakRemainingMs() {
+  return Math.max(0, getPomodoroBreakLimitMs() - state.pomodoroBreakElapsedMs);
+}
+
+function resetPomodoroRuntime() {
+  state.pomodoroWorkMs = 0;
+  state.pomodoroOnBreak = false;
+  state.pomodoroBreakElapsedMs = 0;
+  pomodoroWorkAnchorMs = null;
+  pomodoroBreakAnchorMs = null;
+}
+
+function freezePomodoroClocks() {
+  if (!state.isRunning) return;
+  if (state.pomodoroOnBreak && pomodoroBreakAnchorMs) {
+    state.pomodoroBreakElapsedMs = Math.max(0, Date.now() - pomodoroBreakAnchorMs);
+  } else if (pomodoroWorkAnchorMs) {
+    state.pomodoroWorkMs = Math.max(0, Date.now() - pomodoroWorkAnchorMs);
+  }
+  pomodoroWorkAnchorMs = null;
+  pomodoroBreakAnchorMs = null;
+}
+
+function renderPomodoroBreakDisplay() {
+  document.body.classList.add('pomodoro-break');
+  if (timerModeLabel) {
+    timerModeLabel.textContent = 'BREAK';
+    timerModeLabel.classList.remove('timer-mode-label--session', 'timer-mode-label--earnings');
+  }
+  timerBar.classList.remove('timer-bar--earnings-split');
+  timerDisplay.classList.remove('timer-display--earnings-split', 'expired');
+  timerDisplay.textContent = formatTime(getPomodoroBreakRemainingMs());
+  timerDisplay.title = getPomodoroBreakTitle();
+  timerDisplay.classList.toggle('paused', !state.isRunning);
+  if (currentTaskEl) currentTaskEl.textContent = getPomodoroBreakTitle().toUpperCase();
+}
+
+function beginPomodoroBreak() {
+  if (state.pomodoroOnBreak || !isPomodoroEnabled() || !getCurrentTask()) return;
+  saveCurrentTaskProgress();
+  state.pomodoroOnBreak = true;
+  state.pomodoroBreakElapsedMs = 0;
+  state.pomodoroWorkMs = 0;
+  pomodoroWorkAnchorMs = null;
+  state.sessionStartMs = null;
+  pomodoroBreakAnchorMs = state.isRunning ? Date.now() : null;
+  hideDesignSprintWrapUpToast();
+  playAlarmSound();
+  if (isDesignSprintFocus()) renderDesignSprintBar();
+  updateTimerDisplay();
+  persist({ skipUndoCheckpoint: true, progressOnly: true });
+}
+
+function finishPomodoroBreak({ playSound = true } = {}) {
+  if (!state.pomodoroOnBreak) return;
+  state.pomodoroOnBreak = false;
+  state.pomodoroBreakElapsedMs = 0;
+  pomodoroBreakAnchorMs = null;
+  state.pomodoroWorkMs = 0;
+  document.body.classList.remove('pomodoro-break');
+  if (state.isRunning) {
+    state.sessionStartMs = Date.now() - state.elapsedMs;
+    pomodoroWorkAnchorMs = isPomodoroEnabled() ? Date.now() : null;
+  } else {
+    state.sessionStartMs = null;
+    pomodoroWorkAnchorMs = null;
+  }
+  if (playSound) playAlarmSound();
+  const current = getCurrentTask();
+  if (currentTaskEl && current) currentTaskEl.textContent = current.text.toUpperCase();
+  if (isDesignSprintFocus()) renderDesignSprintBar();
+  updateTimerDisplay();
+  persist();
+}
+
+function pomodoroFieldValue(field) {
+  const settings = normalizePomodoroSettings(state.pomodoro);
+  if (field === 'title') return settings.breakTitle;
+  if (field === 'break') return formatLimitField(settings.breakMs);
+  return formatLimitField(settings.workMs);
+}
+
+function applyPomodoroField(field, raw) {
+  const next = normalizePomodoroSettings(state.pomodoro);
+  if (field === 'title') {
+    const title = String(raw || '').trim().slice(0, POMODORO_TITLE_MAX);
+    next.breakTitle = title || POMODORO_DEFAULT_TITLE;
+  } else {
+    const parsed = parseManualLimit(raw);
+    if (!parsed || parsed < 1000) return false;
+    if (field === 'break') next.breakMs = parsed;
+    else next.workMs = parsed;
+  }
+  const previous = normalizePomodoroSettings(state.pomodoro);
+  state.pomodoro = next;
+  return previous.workMs !== next.workMs
+    || previous.breakMs !== next.breakMs
+    || previous.breakTitle !== next.breakTitle;
+}
+
+function commitPomodoroField(input) {
+  if (!input) return;
+  const field = input.dataset.pomodoroField;
+  const changed = applyPomodoroField(field, input.value);
+  input.value = pomodoroFieldValue(field);
+  if (changed) persist({ skipUndoCheckpoint: true, progressOnly: false });
+  if (isPomodoroBreakActive() && state.pomodoroBreakElapsedMs >= getPomodoroBreakLimitMs()) {
+    finishPomodoroBreak();
+  }
+}
+
+function renderPomodoroOptionsHtml() {
+  return `
+    <div class="pomodoro-options">
+      <label class="pomodoro-field">
+        <span class="pomodoro-field-label">Every</span>
+        <input class="pomodoro-field-input" data-pomodoro-field="work" type="text" value="${escapeHtml(pomodoroFieldValue('work'))}" autocomplete="off" spellcheck="false" aria-label="Work interval" />
+      </label>
+      <label class="pomodoro-field">
+        <span class="pomodoro-field-label">Break title</span>
+        <input class="pomodoro-field-input" data-pomodoro-field="title" type="text" maxlength="${POMODORO_TITLE_MAX}" value="${escapeHtml(pomodoroFieldValue('title'))}" autocomplete="off" aria-label="Break title" />
+      </label>
+      <label class="pomodoro-field">
+        <span class="pomodoro-field-label">Break length</span>
+        <input class="pomodoro-field-input" data-pomodoro-field="break" type="text" value="${escapeHtml(pomodoroFieldValue('break'))}" autocomplete="off" spellcheck="false" aria-label="Break length" />
+      </label>
+    </div>
+  `;
+}
+
+function updatePomodoroMenuVisibility() {
+  if (!settingsPomodoroBtn) return;
+  const enabled = isLabsFeatureEnabled('pomodoro');
+  settingsPomodoroBtn.classList.toggle('hidden', !enabled);
+  if (!enabled) closePomodoroModal();
+}
+
+function openPomodoroModal() {
+  if (!isLabsFeatureEnabled('pomodoro') || !pomodoroModal) return;
+  hideSettingsMenu();
+  if (pomodoroModalBody) pomodoroModalBody.innerHTML = renderPomodoroOptionsHtml();
+  pomodoroModal.classList.remove('hidden');
+}
+
+function closePomodoroModal() {
+  pomodoroModal?.classList.add('hidden');
+}
+
 function startTimer() {
   if (state.isRunning) return;
   state.isRunning = true;
-  state.sessionStartMs = Date.now() - state.elapsedMs;
+  if (isPomodoroBreakActive()) {
+    state.sessionStartMs = null;
+    pomodoroBreakAnchorMs = Date.now() - state.pomodoroBreakElapsedMs;
+  } else {
+    state.sessionStartMs = Date.now() - state.elapsedMs;
+    pomodoroWorkAnchorMs = isPomodoroEnabled() ? Date.now() - state.pomodoroWorkMs : null;
+  }
+  lastTimerProgressSaveAt = Date.now();
   state.timerInterval = setInterval(() => {
-    state.elapsedMs = Date.now() - state.sessionStartMs;
+    if (isPomodoroBreakActive()) {
+      if (pomodoroBreakAnchorMs) {
+        state.pomodoroBreakElapsedMs = Math.max(0, Date.now() - pomodoroBreakAnchorMs);
+      }
+      if (state.pomodoroBreakElapsedMs >= getPomodoroBreakLimitMs()) {
+        finishPomodoroBreak();
+      } else {
+        updateTimerDisplay();
+        maybePersistRunningTimer();
+      }
+      return;
+    }
+
+    if (state.sessionStartMs) {
+      state.elapsedMs = Date.now() - state.sessionStartMs;
+    }
+    if (isPomodoroEnabled() && pomodoroWorkAnchorMs) {
+      state.pomodoroWorkMs = Math.max(0, Date.now() - pomodoroWorkAnchorMs);
+    }
     checkDesignSprintTimerMilestones();
     checkLimitExpiry();
+    if (state.isRunning
+      && state.mode === 'focus'
+      && !state.limitExpired
+      && !isDesignSprintTimeModalOpen()
+      && isPomodoroEnabled()
+      && getPomodoroWorkLimitMs() > 0
+      && state.pomodoroWorkMs >= getPomodoroWorkLimitMs()) {
+      beginPomodoroBreak();
+    }
     updateTimerDisplay();
+    maybePersistRunningTimer();
   }, 250);
   updateTimerDisplay();
   persist();
 }
 
 function stopTimer() {
-  if (state.isRunning && state.sessionStartMs) {
+  if (state.isRunning && state.sessionStartMs && !state.pomodoroOnBreak) {
     state.elapsedMs = Date.now() - state.sessionStartMs;
   }
+  freezePomodoroClocks();
   saveCurrentTaskProgress();
   state.isRunning = false;
   state.sessionStartMs = null;
@@ -12147,6 +13270,7 @@ function stopTimer() {
 }
 
 function toggleTimerView() {
+  if (isPomodoroBreakActive()) return;
   if (state.timerView === 'task') {
     state.timerView = 'session';
   } else if (state.timerView === 'session') {
@@ -12164,6 +13288,7 @@ function toggleTimer() {
 }
 
 function completeCurrentTask() {
+  if (isPomodoroBreakActive()) return;
   const taskIndex = getFocusTaskIndex();
   if (taskIndex < 0) return;
 
@@ -12205,6 +13330,10 @@ function completeCurrentTask() {
 }
 
 function skipCurrentTask() {
+  if (isPomodoroBreakActive()) {
+    finishPomodoroBreak({ playSound: false });
+    return;
+  }
   const taskIndex = getFocusTaskIndex();
   if (taskIndex < 0 || getIncompleteCount() <= 1) return;
 
@@ -12314,6 +13443,7 @@ function beginFreshSession() {
   });
   resetTaskTimerState();
   state.totalSessionMs = 0;
+  resetPomodoroRuntime();
   state.limitExpired = false;
   setExpiredUI(false);
   state.isRunning = false;
@@ -12365,8 +13495,8 @@ function startSlashing() {
     const missing = getIncompleteTasksMissingLimits();
     if (missing.length > 0) {
       const taskList = missing.map((task) => `• ${task.text}`).join('\n');
-      showAppAlert(`Add a time limit to every queued task before starting a Design Sprint.\n\n${taskList}`, {
-        title: 'Design Sprint',
+      showAppAlert(`Add a time limit to every queued task before starting a Sprint.\n\n${taskList}`, {
+        title: 'Sprint',
       });
       return;
     }
@@ -12466,6 +13596,10 @@ designSprintTimeModal?.addEventListener('click', (e) => {
 designSprintSkipBtn?.addEventListener('click', (event) => {
   event.stopPropagation();
   closeDesignSprintActionsModal();
+  if (isPomodoroBreakActive()) {
+    finishPomodoroBreak({ playSound: false });
+    return;
+  }
   skipCurrentTask();
 });
 designSprintEditBtn?.addEventListener('click', (event) => {
@@ -12485,6 +13619,16 @@ designSprintFullscreenBtn?.addEventListener('click', (event) => {
   event.stopPropagation();
   toggleDesignSprintFullscreen();
 });
+designSprintEdgeBtn?.addEventListener('click', (event) => {
+  event.stopPropagation();
+  setDesignSprintEdgePanelOpen(!designSprintEdgePanelOpen);
+});
+designSprintEdgePanel?.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-design-sprint-edge]');
+  if (!button) return;
+  event.stopPropagation();
+  setDesignSprintEdge(button.getAttribute('data-design-sprint-edge'));
+});
 designSprintFullscreenMenuBtn?.addEventListener('click', (event) => {
   event.stopPropagation();
   toggleDesignSprintFullscreenOptions();
@@ -12497,6 +13641,14 @@ designSprintShowClockBtn?.addEventListener('click', (event) => {
   event.stopPropagation();
   toggleDesignSprintShowClock();
 });
+designSprintShowPomodoroBtn?.addEventListener('click', (event) => {
+  event.stopPropagation();
+  toggleDesignSprintShowPomodoro();
+});
+designSprintShowProgressBtn?.addEventListener('click', (event) => {
+  event.stopPropagation();
+  toggleDesignSprintShowProgress();
+});
 designSprintDashboardBtn?.addEventListener('click', (event) => {
   event.stopPropagation();
   closeDesignSprintActionsModal();
@@ -12504,6 +13656,8 @@ designSprintDashboardBtn?.addEventListener('click', (event) => {
 });
 designSprintTaskMenu?.addEventListener('click', (event) => {
   event.stopPropagation();
+  if (event.target.closest('#design-sprint-edge-btn, #design-sprint-edge-panel')) return;
+  if (designSprintEdgePanelOpen) setDesignSprintEdgePanelOpen(false);
 });
 document.addEventListener('mousedown', handleDesignSprintDocumentPointerDown, true);
 window.addEventListener('resize', () => {
@@ -12527,6 +13681,15 @@ settingsBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   toggleSettingsMenu();
 });
+settingsMenu?.addEventListener('click', (event) => {
+  const category = event.target.closest('.settings-menu-category');
+  if (!category || !settingsMenu.contains(category)) return;
+  event.stopPropagation();
+  const willOpen = category.getAttribute('aria-expanded') !== 'true';
+  closeSettingsMenuGroups();
+  if (willOpen) setSettingsMenuGroupOpen(category, true);
+  positionSettingsMenu();
+});
 settingsDataBtn.addEventListener('click', openDataModal);
 settingsInvoiceBtn.addEventListener('click', openInvoiceSettingsModal);
 settingsLicenseBtn.addEventListener('click', () => openLicenseModal());
@@ -12544,8 +13707,10 @@ settingsTemplatesBtn.addEventListener('click', openTemplatesModal);
 settingsLabsBtn?.addEventListener('click', openLabsModal);
 settingsHistoryBtn.addEventListener('click', () => openHistoryModal());
 settingsAnalyticsBtn?.addEventListener('click', () => openAnalyticsModal());
+settingsPomodoroBtn?.addEventListener('click', openPomodoroModal);
 settingsShortcutsBtn.addEventListener('click', openShortcutsModal);
 settingsTutorialBtn.addEventListener('click', startTutorial);
+settingsOnboardingBtn?.addEventListener('click', () => openOnboarding('settings'));
 settingsSoundEffectsBtn.addEventListener('click', toggleSoundEffects);
 shortcutsCloseBtn.addEventListener('click', closeShortcutsModal);
 dataCloseBtn.addEventListener('click', closeDataModal);
@@ -12620,6 +13785,23 @@ labsCloseBtn?.addEventListener('click', closeLabsModal);
 labsModal?.addEventListener('click', (e) => {
   if (e.target === labsModal) closeLabsModal();
   else handleLabsModalClick(e);
+});
+pomodoroCloseBtn?.addEventListener('click', closePomodoroModal);
+pomodoroModal?.addEventListener('click', (event) => {
+  if (event.target === pomodoroModal) closePomodoroModal();
+});
+pomodoroModal?.addEventListener('focusout', (event) => {
+  const input = event.target.closest('[data-pomodoro-field]');
+  if (!input || !pomodoroModal.contains(input)) return;
+  commitPomodoroField(input);
+});
+pomodoroModal?.addEventListener('keydown', (event) => {
+  const input = event.target.closest('[data-pomodoro-field]');
+  if (!input) return;
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    input.blur();
+  }
 });
 saveTemplateConfirmBtn.addEventListener('click', confirmSaveTemplateModal);
 saveTemplateCancelBtn.addEventListener('click', closeSaveTemplateModal);
@@ -12706,8 +13888,15 @@ whatsNewHistoryList?.addEventListener('click', handleWhatsNewHistoryItemClick);
 whatsNewModal.addEventListener('click', (e) => {
   if (e.target === whatsNewModal) closeWhatsNewModal();
 });
+window.slashIt.onFlushTimerProgress(() => {
+  const pending = state.isRunning
+    ? persist({ skipUndoCheckpoint: true })
+    : Promise.resolve();
+  Promise.resolve(pending).finally(() => window.slashIt.notifyTimerProgressFlushed());
+});
 window.slashIt.onOpenWhatsNew(() => openWhatsNewModal());
 window.slashIt.onDesignSprintShortcut(() => handleDesignSprintShortcut());
+window.slashIt.onDesignSprintFullscreenShortcut(() => handleDesignSprintFullscreenShortcut());
 window.slashIt.onUpdateInstallPending(() => {
   if (!whatsNewModal.classList.contains('hidden')) {
     dismissWhatsNewModalWithoutSaving();
@@ -12912,6 +14101,18 @@ sessionContextPinBtn?.addEventListener('click', () => {
   toggleSessionPin(sessionId);
 });
 
+sessionContextSaveLaterBtn?.addEventListener('click', () => {
+  if (!sessionContextMenuTarget) return;
+  const { sessionId } = sessionContextMenuTarget;
+  const session = getPlannedSession(sessionId);
+  hideSessionContextMenu();
+  setSessionSavedForLater(sessionId, !isSessionSavedForLater(session));
+});
+
+plannedSessionsSavedBtn?.addEventListener('click', () => {
+  setSavedForLaterView(!savedForLaterView);
+});
+
 plannedSessionsFilterBtn?.addEventListener('click', handlePlannedSessionsFilterTriggerClick);
 plannedSessionsFilterMenu?.addEventListener('click', handlePlannedSessionsFilterOptionClick);
 
@@ -12953,6 +14154,12 @@ document.addEventListener('keydown', (e) => {
   }
 
   if (e.key === 'Escape') {
+    if (isOnboardingOpen()) {
+      e.preventDefault();
+      if (onboardingStepIndex > 0) backOnboarding();
+      else if (onboardingCanDismiss()) closeOnboarding();
+      return;
+    }
     hideAllContextMenus();
     hideTemplateAutocomplete();
     if (!taskDetailModal.classList.contains('hidden')) {
@@ -13018,6 +14225,10 @@ document.addEventListener('keydown', (e) => {
     }
     if (labsModal && !labsModal.classList.contains('hidden')) {
       closeLabsModal();
+      return;
+    }
+    if (pomodoroModal && !pomodoroModal.classList.contains('hidden')) {
+      closePomodoroModal();
       return;
     }
     if (!shortcutsModal.classList.contains('hidden')) {
@@ -13242,6 +14453,552 @@ function loadPlannedSessionsFromSaved(saved) {
   state.expandedSessionIds = new Set();
 }
 
+const ONBOARDING_STEPS = [
+  { id: 'welcome', title: 'Welcome to SupaSlash', kicker: 'Welcome' },
+  { id: 'work', title: 'How you want to work', kicker: '2 of 4' },
+  { id: 'you', title: 'You, only if it matters', kicker: '3 of 4' },
+  { id: 'session', title: 'First session', kicker: '4 of 4' },
+];
+const ONBOARDING_DEFAULT_SESSION_NAME = 'First session';
+const ONBOARDING_STARTER_TASKS = 3;
+
+const ONBOARDING_FADE_MS = 240;
+let onboardingMode = null;
+let onboardingStepIndex = 0;
+let onboardingDraft = null;
+let onboardingFading = false;
+let onboardingFadeToken = 0;
+let allowOnboardingPreview = false;
+let onboardingCompletedNeedsPersist = false;
+
+function installHasBeenUsed(saved) {
+  if (!saved || typeof saved !== 'object') return false;
+  const tasks = saved.sessionTasks || saved.tasks || [];
+  if (tasks.length > 0) return true;
+  if (Array.isArray(saved.sessionHistory) && saved.sessionHistory.length > 0) return true;
+  if (Array.isArray(saved.archivedPlannedSessions) && saved.archivedPlannedSessions.length > 0) return true;
+  if (Array.isArray(saved.listTemplates) && saved.listTemplates.length > 0) return true;
+  if (saved.activeSessionRunId) return true;
+  const planned = Array.isArray(saved.plannedSessions) ? saved.plannedSessions : [];
+  if (planned.some((session) => {
+    if (!session) return false;
+    if (session.id !== BRAINDUMP_SESSION_ID) return true;
+    return Array.isArray(session.tasks) && session.tasks.length > 0;
+  })) return true;
+  const invoice = saved.invoiceSettings;
+  if (invoice && typeof invoice === 'object') {
+    if (invoice.name || invoice.businessName || invoice.email || invoice.address || invoice.logoDataUrl) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isOnboardingOpen() {
+  return !!onboardingModal && !onboardingModal.classList.contains('hidden');
+}
+
+function onboardingCanDismiss() {
+  return onboardingMode === 'settings' || onboardingMode === 'preview';
+}
+
+function createOnboardingDraft(mode) {
+  if (mode === 'settings') {
+    const rateSettings = normalizeQuickStartRateSettings(state.quickStartRateSettings);
+    return {
+      designSprint: isLabsFeatureEnabled('designSprints'),
+      profileSkipped: true,
+      name: state.invoiceSettings.name || '',
+      billable: !!rateSettings.hourlyRateEnabled,
+      rate: rateSettings.hourlyRate,
+    };
+  }
+  return {
+    designSprint: true,
+    profileSkipped: true,
+    name: '',
+    billable: false,
+    rate: null,
+  };
+}
+
+function syncOnboardingSwitch(button, on, onLabel, offLabel) {
+  if (!button) return;
+  button.classList.toggle('labs-feature-toggle', true);
+  button.setAttribute('aria-checked', on ? 'true' : 'false');
+  button.textContent = on ? onLabel : offLabel;
+}
+
+function syncOnboardingSprintControl() {
+  syncOnboardingSwitch(onboardingSprintBtn, !!onboardingDraft?.designSprint, 'On', 'Off');
+}
+
+function syncOnboardingBillableControl() {
+  const on = !!onboardingDraft?.billable;
+  syncOnboardingSwitch(onboardingBillableBtn, on, 'On', 'Off');
+  onboardingRateRow?.classList.toggle('hidden', !on);
+}
+
+function syncOnboardingTimeFields() {
+  const show = !!onboardingDraft?.designSprint;
+  onboardingTimeHint?.classList.toggle('hidden', !show);
+  onboardingTaskList?.querySelectorAll('.template-editor-task-limit').forEach((input) => {
+    input.classList.toggle('hidden', !show);
+  });
+}
+
+function onboardingTaskRowMarkup() {
+  const showTime = !!onboardingDraft?.designSprint;
+  return `
+    <div class="template-editor-row" data-task-row>
+      <input class="template-editor-input template-editor-task-text" type="text" value="" placeholder="Task" autocomplete="off" />
+      <input class="template-editor-input template-editor-limit template-editor-task-limit${showTime ? '' : ' hidden'}" type="text" value="" placeholder="20m" autocomplete="off" />
+      <button type="button" class="template-row-btn template-row-btn--danger" data-onboarding-remove-task aria-label="Remove task">×</button>
+    </div>
+  `;
+}
+
+function resetOnboardingTaskList() {
+  if (!onboardingTaskList) return;
+  onboardingTaskList.innerHTML = Array.from({ length: ONBOARDING_STARTER_TASKS }, () => onboardingTaskRowMarkup()).join('');
+}
+
+function appendOnboardingTaskRow({ focus = true } = {}) {
+  if (!onboardingTaskList) return;
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = onboardingTaskRowMarkup().trim();
+  const row = wrapper.firstElementChild;
+  onboardingTaskList.appendChild(row);
+  if (focus) row.querySelector('.template-editor-task-text')?.focus();
+  updateOnboardingStartEnabled();
+}
+
+function collectOnboardingTasks() {
+  if (!onboardingTaskList) return [];
+  return [...onboardingTaskList.querySelectorAll('[data-task-row]')].map((row) => {
+    const text = row.querySelector('.template-editor-task-text')?.value || '';
+    const limitValue = onboardingDraft?.designSprint
+      ? (row.querySelector('.template-editor-task-limit')?.value || '')
+      : '';
+    const parsed = parseTaskInput(text, limitValue);
+    return { text: parsed.text, limitMs: parsed.limitMs };
+  }).filter((task) => task.text);
+}
+
+function updateOnboardingStartEnabled() {
+  if (!onboardingNextBtn) return;
+  const step = ONBOARDING_STEPS[onboardingStepIndex];
+  if (!step || step.id !== 'session') {
+    onboardingNextBtn.disabled = false;
+    return;
+  }
+  onboardingNextBtn.disabled = collectOnboardingTasks().length === 0;
+}
+
+function fillOnboardingForm() {
+  if (onboardingNameInput) onboardingNameInput.value = onboardingDraft?.name || '';
+  if (onboardingRateInput) onboardingRateInput.value = formatHourlyRateField(onboardingDraft?.rate);
+  if (onboardingSessionNameInput) onboardingSessionNameInput.value = '';
+  resetOnboardingTaskList();
+  syncOnboardingSprintControl();
+  syncOnboardingBillableControl();
+}
+
+function onboardingStepElement(stepId) {
+  if (stepId === 'welcome') return onboardingStepWelcome;
+  if (stepId === 'work') return onboardingStepWork;
+  if (stepId === 'you') return onboardingStepYou;
+  if (stepId === 'session') return onboardingStepSession;
+  return null;
+}
+
+function paintOnboardingStep(step, { focus = true } = {}) {
+  if (onboardingKicker) onboardingKicker.textContent = step.kicker;
+  if (onboardingTitle) onboardingTitle.textContent = step.title;
+  onboardingStepWelcome?.classList.toggle('hidden', step.id !== 'welcome');
+  onboardingStepWork?.classList.toggle('hidden', step.id !== 'work');
+  onboardingStepYou?.classList.toggle('hidden', step.id !== 'you');
+  onboardingStepSession?.classList.toggle('hidden', step.id !== 'session');
+  onboardingBackBtn?.classList.toggle('hidden', onboardingStepIndex === 0);
+  onboardingSkipBtn?.classList.toggle('hidden', step.id === 'session');
+  onboardingDismissBtn?.classList.toggle('hidden', !onboardingCanDismiss());
+  if (onboardingNextBtn) {
+    if (step.id === 'session') onboardingNextBtn.textContent = 'Start Session';
+    else if (step.id === 'welcome') onboardingNextBtn.textContent = "Let's go";
+    else onboardingNextBtn.textContent = 'Continue';
+  }
+  if (step.id === 'session') syncOnboardingTimeFields();
+  updateOnboardingStartEnabled();
+  if (focus) requestAnimationFrame(() => focusOnboardingStep());
+}
+
+function finishOnboardingFade(token) {
+  if (token !== onboardingFadeToken) return;
+  onboardingFading = false;
+  onboardingModal?.querySelector('.onboarding-card')?.classList.remove('is-fading');
+  onboardingStage?.classList.remove('is-animating');
+  if (onboardingStage) onboardingStage.style.height = '';
+  onboardingModal?.querySelectorAll('.onboarding-step').forEach((stepEl) => {
+    stepEl.classList.remove('onboarding-step--out', 'onboarding-step--in');
+  });
+  focusOnboardingStep();
+}
+
+function renderOnboardingStep({ animate = true } = {}) {
+  const step = ONBOARDING_STEPS[onboardingStepIndex];
+  if (!step || !onboardingModal) return;
+
+  const nextEl = onboardingStepElement(step.id);
+  const currentEl = onboardingModal.querySelector('.onboarding-step:not(.hidden)');
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const canFade = animate
+    && !reduceMotion
+    && isOnboardingOpen()
+    && currentEl
+    && nextEl
+    && currentEl !== nextEl;
+
+  if (!canFade) {
+    onboardingFadeToken += 1;
+    onboardingFading = false;
+    finishOnboardingFade(onboardingFadeToken);
+    paintOnboardingStep(step);
+    return;
+  }
+
+  const token = ++onboardingFadeToken;
+  onboardingFading = true;
+  const card = onboardingModal.querySelector('.onboarding-card');
+  card?.classList.add('is-fading');
+  currentEl.classList.add('onboarding-step--out');
+
+  window.setTimeout(() => {
+    if (token !== onboardingFadeToken) return;
+    currentEl.classList.add('hidden');
+    currentEl.classList.remove('onboarding-step--out');
+    nextEl.classList.add('onboarding-step--in');
+    paintOnboardingStep(step, { focus: false });
+
+    requestAnimationFrame(() => {
+      if (token !== onboardingFadeToken) return;
+      nextEl.classList.remove('onboarding-step--in');
+      card?.classList.remove('is-fading');
+    });
+
+    window.setTimeout(() => finishOnboardingFade(token), ONBOARDING_FADE_MS + 40);
+  }, ONBOARDING_FADE_MS);
+}
+
+function focusOnboardingStep() {
+  const step = ONBOARDING_STEPS[onboardingStepIndex];
+  if (!step) return;
+  if (step.id === 'welcome' || step.id === 'work') onboardingNextBtn?.focus();
+  else if (step.id === 'you') onboardingNameInput?.focus();
+  else onboardingTaskList?.querySelector('.template-editor-task-text')?.focus();
+}
+
+function mountOnboardingVisuals() {
+  onboardingModal?.querySelectorAll('.onboarding-visual').forEach((figure) => {
+    if (figure.dataset.visualReady === 'true') return;
+    figure.dataset.visualReady = 'true';
+    const img = figure.querySelector('.onboarding-visual-img');
+    const placeholder = figure.querySelector('.onboarding-visual-placeholder');
+    if (!img) return;
+    const showImage = () => {
+      if (!img.naturalWidth) return;
+      img.classList.remove('hidden');
+      placeholder?.classList.add('hidden');
+    };
+    const showPlaceholder = () => {
+      img.classList.add('hidden');
+      placeholder?.classList.remove('hidden');
+    };
+    img.addEventListener('load', showImage);
+    img.addEventListener('error', showPlaceholder);
+    if (img.complete) {
+      if (img.naturalWidth > 0) showImage();
+      else showPlaceholder();
+    }
+  });
+}
+
+function openOnboarding(mode) {
+  if (!onboardingModal) return;
+  if (state.mode !== 'edit') backToEdit();
+  if (isTutorialActive()) stopTutorial();
+  if (whatsNewModal && !whatsNewModal.classList.contains('hidden')) {
+    dismissWhatsNewModalWithoutSaving();
+  }
+  hideSettingsMenu();
+  onboardingMode = mode;
+  onboardingStepIndex = 0;
+  onboardingDraft = createOnboardingDraft(mode);
+  fillOnboardingForm();
+  mountOnboardingVisuals();
+  onboardingModal.classList.remove('hidden');
+  renderOnboardingStep({ animate: false });
+  onboardingModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeOnboarding() {
+  if (!onboardingModal) return;
+  onboardingFadeToken += 1;
+  onboardingFading = false;
+  finishOnboardingFade(onboardingFadeToken);
+  onboardingModal.classList.add('hidden');
+  onboardingModal.setAttribute('aria-hidden', 'true');
+  onboardingMode = null;
+}
+
+function maybeOpenFirstRunOnboarding() {
+  if (isInitializing || state.onboardingCompleted || !isAppLicensed()) return;
+  if (licenseModal && !licenseModal.classList.contains('hidden')) return;
+  if (isOnboardingOpen()) return;
+  openOnboarding('first-run');
+}
+
+function toggleOnboardingSprint() {
+  if (!onboardingDraft) return;
+  onboardingDraft.designSprint = !onboardingDraft.designSprint;
+  syncOnboardingSprintControl();
+  syncOnboardingTimeFields();
+}
+
+function toggleOnboardingBillable() {
+  if (!onboardingDraft) return;
+  onboardingDraft.billable = !onboardingDraft.billable;
+  syncOnboardingBillableControl();
+  if (onboardingDraft.billable) onboardingRateInput?.focus();
+}
+
+function rememberOnboardingProfile() {
+  if (!onboardingDraft) return false;
+  const billable = !!onboardingDraft.billable;
+  const rate = parseHourlyRate(onboardingRateInput?.value);
+  if (billable && !(rate > 0)) {
+    showAppAlert('Enter an hourly rate, or turn billable off.', { title: 'Hourly rate' });
+    onboardingRateInput?.focus();
+    return false;
+  }
+  onboardingDraft.profileSkipped = false;
+  onboardingDraft.name = (onboardingNameInput?.value || '').trim();
+  onboardingDraft.billable = billable;
+  onboardingDraft.rate = billable ? rate : null;
+  return true;
+}
+
+function advanceOnboarding() {
+  if (onboardingFading) return;
+  const step = ONBOARDING_STEPS[onboardingStepIndex];
+  if (!step) return;
+  if (step.id === 'you' && !rememberOnboardingProfile()) return;
+  if (step.id === 'session') {
+    startOnboardingSession();
+    return;
+  }
+  onboardingStepIndex += 1;
+  renderOnboardingStep();
+}
+
+function skipOnboardingStep() {
+  if (onboardingFading) return;
+  const step = ONBOARDING_STEPS[onboardingStepIndex];
+  if (!step || step.id === 'session') return;
+  if (step.id === 'you' && onboardingDraft) onboardingDraft.profileSkipped = true;
+  onboardingStepIndex += 1;
+  renderOnboardingStep();
+}
+
+function backOnboarding() {
+  if (onboardingFading || onboardingStepIndex === 0) return;
+  onboardingStepIndex -= 1;
+  renderOnboardingStep();
+}
+
+function handleOnboardingTaskListClick(event) {
+  const removeBtn = event.target.closest('[data-onboarding-remove-task]');
+  if (!removeBtn || !onboardingTaskList) return;
+  const row = removeBtn.closest('[data-task-row]');
+  if (!row) return;
+  const rows = onboardingTaskList.querySelectorAll('[data-task-row]');
+  if (rows.length <= 1) {
+    const textInput = row.querySelector('.template-editor-task-text');
+    const limitInput = row.querySelector('.template-editor-task-limit');
+    if (textInput) textInput.value = '';
+    if (limitInput) limitInput.value = '';
+    updateOnboardingStartEnabled();
+    textInput?.focus();
+    return;
+  }
+  row.remove();
+  updateOnboardingStartEnabled();
+}
+
+function handleOnboardingFieldKeydown(event) {
+  if (event.key !== 'Enter' && event.code !== 'NumpadEnter') return;
+  const step = ONBOARDING_STEPS[onboardingStepIndex];
+  if (!step || step.id !== 'session') return;
+  const target = event.target;
+  if (!target.matches?.('.template-editor-task-text, .template-editor-task-limit, #onboarding-session-name')) return;
+
+  event.preventDefault();
+  if (event.shiftKey) {
+    if (!onboardingNextBtn?.disabled) startOnboardingSession();
+    return;
+  }
+
+  if (target.id === 'onboarding-session-name') {
+    onboardingTaskList?.querySelector('.template-editor-task-text')?.focus();
+    return;
+  }
+
+  const row = target.closest('[data-task-row]');
+  const next = row?.nextElementSibling;
+  if (next) {
+    next.querySelector('.template-editor-task-text')?.focus();
+    return;
+  }
+  const text = row?.querySelector('.template-editor-task-text')?.value?.trim();
+  if (text) appendOnboardingTaskRow({ focus: true });
+}
+
+function applyOnboardingWorkStyle(enabled) {
+  state.labsFeatures = {
+    ...normalizeLabsFeatures(state.labsFeatures),
+    designSprints: !!enabled,
+  };
+  writeLabsFeaturesToStorage(state.labsFeatures);
+  state.designSprintEnabled = !!enabled;
+  if (!enabled) {
+    state.designSprintFullscreen = false;
+    state.designSprintMode = false;
+  }
+  updateDesignSprintToggleVisibility();
+  updateDesignSprintToggleUi();
+  updateQuickStartDesignSprintUi();
+}
+
+function startOnboardingSession() {
+  const tasks = collectOnboardingTasks();
+  if (tasks.length === 0) return;
+
+  const asDesignSprint = !!onboardingDraft?.designSprint;
+  if (asDesignSprint) {
+    const missing = tasks.filter((task) => !task.limitMs || task.limitMs <= 0);
+    if (missing.length > 0) {
+      showAppAlert('Add a time on every task before starting a Sprint.', { title: 'Sprint' });
+      return;
+    }
+  }
+
+  applyOnboardingWorkStyle(asDesignSprint);
+
+  const profileSkipped = onboardingDraft?.profileSkipped !== false;
+  if (!profileSkipped) {
+    state.invoiceSettings = normalizeInvoiceSettings({
+      ...state.invoiceSettings,
+      name: onboardingDraft.name || '',
+    });
+    state.quickStartRateSettings = normalizeQuickStartRateSettings({
+      ...state.quickStartRateSettings,
+      hourlyRateEnabled: !!onboardingDraft.billable,
+      hourlyRate: onboardingDraft.billable
+        ? onboardingDraft.rate
+        : state.quickStartRateSettings.hourlyRate,
+    });
+  }
+
+  const billable = !profileSkipped && !!onboardingDraft.billable && onboardingDraft.rate > 0;
+  const name = (onboardingSessionNameInput?.value || '').trim() || ONBOARDING_DEFAULT_SESSION_NAME;
+  const id = crypto.randomUUID();
+
+  if (state.sessionListFilter !== 'all') {
+    state.sessionListFilter = 'all';
+    closePlannedSessionsFilterMenu();
+    updatePlannedSessionsFilterButtonState();
+  }
+  savedForLaterView = false;
+
+  state.plannedSessions.push(normalizePlannedSession({
+    id,
+    name,
+    tasks: [],
+    hourlyRateEnabled: billable,
+    hourlyRate: billable ? onboardingDraft.rate : null,
+    billableRoundMinutes: null,
+    billableRoundScope: 'session',
+  }));
+  normalizePlannedSessionOrder();
+  state.expandedSessionIds.add(id);
+
+  if (hasArchivableProgress()) {
+    archiveCurrentSession('abandoned');
+  }
+
+  state.designSprintMode = asDesignSprint;
+  const startedAt = Date.now();
+  const sourceMeta = { sourceSessionId: id, sourceSessionName: name };
+  state.sessionTasks = tasks.map((task, index) => toSessionTaskFromBraindump({
+    ...task,
+    createdAt: startedAt + index,
+  }, sourceMeta));
+  state.currentIndex = 0;
+  resetSessionProgressState();
+  clearSelection();
+  state.onboardingCompleted = true;
+  closeOnboarding();
+  persist();
+  beginFreshSession();
+  if (state.designSprintMode) {
+    requestAnimationFrame(() => {
+      syncDesignSprintAfterLayout();
+      openDesignSprintShortcutModal();
+    });
+  }
+}
+
+function isOnboardingPreviewShortcut(event) {
+  if (!allowOnboardingPreview || event.repeat) return false;
+  const meta = event.metaKey || event.ctrlKey;
+  return meta && event.altKey && event.shiftKey && event.code === 'KeyO';
+}
+
+onboardingSprintBtn?.addEventListener('click', toggleOnboardingSprint);
+onboardingBillableBtn?.addEventListener('click', toggleOnboardingBillable);
+onboardingBackBtn?.addEventListener('click', backOnboarding);
+onboardingSkipBtn?.addEventListener('click', skipOnboardingStep);
+onboardingNextBtn?.addEventListener('click', advanceOnboarding);
+onboardingDismissBtn?.addEventListener('click', closeOnboarding);
+onboardingAddTaskBtn?.addEventListener('click', () => appendOnboardingTaskRow({ focus: true }));
+onboardingTaskList?.addEventListener('input', updateOnboardingStartEnabled);
+onboardingTaskList?.addEventListener('click', handleOnboardingTaskListClick);
+onboardingModal?.addEventListener('keydown', handleOnboardingFieldKeydown);
+onboardingNameInput?.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' && event.code !== 'NumpadEnter') return;
+  event.preventDefault();
+  advanceOnboarding();
+});
+onboardingRateInput?.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' && event.code !== 'NumpadEnter') return;
+  event.preventDefault();
+  advanceOnboarding();
+});
+onboardingModal?.addEventListener('click', (event) => {
+  if (event.target === onboardingModal && onboardingCanDismiss()) closeOnboarding();
+});
+
+// Dev-only replay. Unpackaged builds only, so the shortcut stays out of the release.
+document.addEventListener('keydown', (event) => {
+  if (!isOnboardingPreviewShortcut(event)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (isOnboardingOpen()) {
+    closeOnboarding();
+    return;
+  }
+  openOnboarding('preview');
+}, true);
+
 const APP_PRELOADER_MIN_MS = 200;
 
 function dismissAppPreloader() {
@@ -13273,8 +15030,20 @@ async function init() {
   }
   dismissAppPreloader();
 
+  if (onboardingCompletedNeedsPersist) {
+    persist({ skipUndoCheckpoint: true });
+    onboardingCompletedNeedsPersist = false;
+  }
+
+  try {
+    allowOnboardingPreview = !(await window.slashIt.isPackaged());
+  } catch {
+    allowOnboardingPreview = false;
+  }
+
+  maybeOpenFirstRunOnboarding();
   void refreshLicenseStatus();
-  void maybeAutoShowWhatsNew();
+  if (!isOnboardingOpen()) void maybeAutoShowWhatsNew();
 }
 
 window.addEventListener('resize', () => {

@@ -4,6 +4,33 @@ const fs = require('fs');
 const BACKUP_COUNT = 5;
 const DOCUMENTS_BACKUP_DEBOUNCE_MS = 60000;
 const DATA_FILENAME = 'supaslash-data.json';
+const PROGRESS_FILENAME = 'supaslash-progress.json';
+const LOGO_FILENAME = 'supaslash-invoice-logo.txt';
+const PROGRESS_KEYS = [
+  'sessionTasks',
+  'elapsedMs',
+  'isRunning',
+  'totalSessionMs',
+  'focusTaskIndex',
+  'currentIndex',
+  'limitExpired',
+  'limitExpiredKind',
+  'taskOvertimeMode',
+  'mode',
+  'timerView',
+  'activeSessionRunId',
+  'activeSessionStartedAt',
+  'activeSessionName',
+  'designSprintMode',
+  'designSprintFullscreen',
+  'designSprintShowTime',
+  'designSprintShowClock',
+  'designSprintShowPomodoro',
+  'designSprintShowProgress',
+  'pomodoroWorkMs',
+  'pomodoroOnBreak',
+  'pomodoroBreakElapsedMs',
+];
 const LEGACY_DATA_FILENAME = 'slash-it-data.json';
 const DOCUMENTS_DIR_NAME = 'SupaSlash';
 const LEGACY_DOCUMENTS_DIR_NAME = 'Slash It';
@@ -40,10 +67,15 @@ function parseDataContent(content) {
   }
 }
 
+function isInvoiceLogo(value) {
+  return typeof value === 'string' && value.startsWith('data:image/');
+}
+
 function createDataStore(app) {
   let lastDocumentsBackupAt = null;
   let pendingDocumentsContent = null;
   let documentsBackupTimer = null;
+  let cachedLogo = null;
 
   function getPrimaryPath() {
     return path.join(app.getPath('userData'), DATA_FILENAME);
@@ -63,6 +95,98 @@ function createDataStore(app) {
 
   function getDocumentsDataPath() {
     return path.join(getDocumentsDir(), DATA_FILENAME);
+  }
+
+  function getLogoPath() {
+    return path.join(app.getPath('userData'), LOGO_FILENAME);
+  }
+
+  function getDocumentsLogoPath() {
+    return path.join(getDocumentsDir(), LOGO_FILENAME);
+  }
+
+  function readLogoAt(filePath) {
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      return isInvoiceLogo(content) ? content : '';
+    } catch {
+      return '';
+    }
+  }
+
+  function ensureCachedLogo() {
+    if (cachedLogo === null) cachedLogo = readLogoAt(getLogoPath());
+    return cachedLogo;
+  }
+
+  function writeLogoFile(logo) {
+    atomicWriteSync(getLogoPath(), logo);
+    try {
+      atomicWriteSync(getDocumentsLogoPath(), logo);
+    } catch (err) {
+      console.error('Failed to copy invoice logo to Documents:', err);
+    }
+    cachedLogo = logo;
+  }
+
+  function clearLogoFile() {
+    [getLogoPath(), getDocumentsLogoPath()].forEach((filePath) => {
+      try {
+        fs.unlinkSync(filePath);
+      } catch {
+        // no logo file to remove
+      }
+    });
+    cachedLogo = '';
+  }
+
+  function invoiceSettingsForDisk(invoiceSettings) {
+    const source = invoiceSettings && typeof invoiceSettings === 'object' ? invoiceSettings : {};
+    const next = { ...source };
+    if (!Object.prototype.hasOwnProperty.call(source, 'logoDataUrl')) {
+      delete next.logoDataUrl;
+      return next;
+    }
+    const logo = isInvoiceLogo(source.logoDataUrl) ? source.logoDataUrl : '';
+    delete next.logoDataUrl;
+    if (logo) {
+      if (logo !== ensureCachedLogo()) writeLogoFile(logo);
+      return next;
+    }
+    if (ensureCachedLogo()) clearLogoFile();
+    return next;
+  }
+
+  function attachInvoiceLogo(data) {
+    const source = data.invoiceSettings && typeof data.invoiceSettings === 'object' ? data.invoiceSettings : {};
+    const inline = isInvoiceLogo(source.logoDataUrl) ? source.logoDataUrl : '';
+    const fileLogo = readLogoAt(getLogoPath());
+    const logo = inline || fileLogo;
+    if (inline && inline !== fileLogo) {
+      try {
+        writeLogoFile(inline);
+      } catch (err) {
+        console.error('Failed to migrate invoice logo:', err);
+        cachedLogo = inline;
+      }
+    } else {
+      cachedLogo = logo;
+    }
+    const invoiceSettings = { ...source };
+    if (logo) invoiceSettings.logoDataUrl = logo;
+    else delete invoiceSettings.logoDataUrl;
+    return { ...data, invoiceSettings };
+  }
+
+  function importRestoredData(data, sourcePath) {
+    const source = data.invoiceSettings && typeof data.invoiceSettings === 'object' ? { ...data.invoiceSettings } : {};
+    if (!isInvoiceLogo(source.logoDataUrl) && sourcePath) {
+      const sibling = readLogoAt(path.join(path.dirname(sourcePath), LOGO_FILENAME));
+      if (sibling) source.logoDataUrl = sibling;
+    }
+    const restored = { ...data, invoiceSettings: source };
+    savePrimarySync(restored);
+    return restored;
   }
 
   function getLegacyAppSupportDir(appSupportDirName) {
@@ -203,8 +327,56 @@ function createDataStore(app) {
     return { data: getDefaultData(), source: 'default' };
   }
 
+  function getProgressPath() {
+    return path.join(app.getPath('userData'), PROGRESS_FILENAME);
+  }
+
+  function clearProgressFile() {
+    try {
+      fs.unlinkSync(getProgressPath());
+    } catch {
+      // no progress file to remove
+    }
+  }
+
+  function readProgressFile() {
+    const filePath = getProgressPath();
+    if (!fs.existsSync(filePath)) return null;
+    try {
+      const progress = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      if (!progress || typeof progress !== 'object' || !Number.isFinite(progress.savedAt)) return null;
+      return progress;
+    } catch {
+      return null;
+    }
+  }
+
+  function applyProgressFile(data) {
+    const progress = readProgressFile();
+    if (!progress) return data;
+    if (progress.savedAt <= (data.progressSavedAt || 0)) {
+      clearProgressFile();
+      return data;
+    }
+    const merged = { ...data };
+    PROGRESS_KEYS.forEach((key) => {
+      if (progress[key] !== undefined) merged[key] = progress[key];
+    });
+    return merged;
+  }
+
+  function saveProgressSync(data) {
+    const progress = { savedAt: Date.now() };
+    PROGRESS_KEYS.forEach((key) => {
+      if (data[key] !== undefined) progress[key] = data[key];
+    });
+    const content = JSON.stringify(progress);
+    atomicWriteSync(getProgressPath(), content);
+    return content;
+  }
+
   function loadData() {
-    return loadDataWithFallback().data;
+    return attachInvoiceLogo(applyProgressFile(loadDataWithFallback().data));
   }
 
   async function writeDocumentsBackup(content) {
@@ -250,22 +422,33 @@ function createDataStore(app) {
     }
   }
 
-  function savePrimarySync(data) {
-    const content = JSON.stringify(data, null, 2);
+  function savePrimarySync(data, options = {}) {
+    if (options.progressOnly) {
+      return saveProgressSync(data);
+    }
+
+    const stamped = {
+      ...data,
+      invoiceSettings: invoiceSettingsForDisk(data.invoiceSettings),
+      progressSavedAt: Date.now(),
+    };
+    const content = JSON.stringify(stamped, null, 2);
     const primaryPath = getPrimaryPath();
-    rotateBackups(primaryPath);
+    const rotateBackupsOnSave = options.rotateBackups !== false;
+    if (rotateBackupsOnSave) rotateBackups(primaryPath);
     atomicWriteSync(primaryPath, content);
+    clearProgressFile();
     scheduleDocumentsBackup(content);
     return content;
   }
 
-  async function saveDataPipeline(data) {
-    savePrimarySync(data);
+  async function saveDataPipeline(data, options) {
+    savePrimarySync(data, options);
   }
 
-  function saveDataAsync(data) {
+  function saveDataAsync(data, options) {
     try {
-      savePrimarySync(data);
+      savePrimarySync(data, options);
     } catch (err) {
       console.error('Failed to save data:', err);
     }
@@ -309,6 +492,7 @@ function createDataStore(app) {
     saveDataPipeline,
     saveDataAsync,
     savePrimarySync,
+    importRestoredData,
     flushDocumentsBackup,
     backupDocumentsNow,
     getDataInfo,

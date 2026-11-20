@@ -105,6 +105,96 @@
       50% { opacity: 1; }
     }
 
+    .approach-glow {
+      --approach-rgb: 255, 59, 48;
+      --approach-opacity: 0;
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      visibility: hidden;
+      opacity: 1;
+    }
+
+    .approach-glow.is-on {
+      visibility: visible;
+    }
+
+    .approach-glow.is-break {
+      --approach-rgb: 122, 215, 255;
+    }
+
+    .approach-edge {
+      position: absolute;
+      pointer-events: none;
+      opacity: var(--approach-opacity);
+    }
+
+    .approach-edge-top {
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 56px;
+      background: linear-gradient(
+        to bottom,
+        rgba(var(--approach-rgb), 0.92) 0%,
+        rgba(var(--approach-rgb), 0.55) 35%,
+        rgba(var(--approach-rgb), 0.15) 70%,
+        transparent 100%
+      );
+    }
+
+    .approach-edge-bottom {
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 56px;
+      background: linear-gradient(
+        to top,
+        rgba(var(--approach-rgb), 0.92) 0%,
+        rgba(var(--approach-rgb), 0.55) 35%,
+        rgba(var(--approach-rgb), 0.15) 70%,
+        transparent 100%
+      );
+    }
+
+    .approach-edge-left {
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 56px;
+      background: linear-gradient(
+        to right,
+        rgba(var(--approach-rgb), 0.92) 0%,
+        rgba(var(--approach-rgb), 0.55) 35%,
+        rgba(var(--approach-rgb), 0.15) 70%,
+        transparent 100%
+      );
+    }
+
+    .approach-edge-right {
+      top: 0;
+      bottom: 0;
+      right: 0;
+      width: 56px;
+      background: linear-gradient(
+        to left,
+        rgba(var(--approach-rgb), 0.92) 0%,
+        rgba(var(--approach-rgb), 0.55) 35%,
+        rgba(var(--approach-rgb), 0.15) 70%,
+        transparent 100%
+      );
+    }
+
+    .approach-glow::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      opacity: var(--approach-opacity);
+      box-shadow:
+        inset 0 0 70px 18px rgba(var(--approach-rgb), 0.45),
+        inset 0 0 140px 36px rgba(var(--approach-rgb), 0.18);
+    }
+
     .celebration-layer {
       position: fixed;
       inset: 0;
@@ -148,6 +238,12 @@
     <div class="edge edge-bottom"></div>
     <div class="edge edge-left"></div>
     <div class="edge edge-right"></div>
+  </div>
+  <div class="approach-glow" aria-hidden="true">
+    <div class="approach-edge approach-edge-top"></div>
+    <div class="approach-edge approach-edge-bottom"></div>
+    <div class="approach-edge approach-edge-left"></div>
+    <div class="approach-edge approach-edge-right"></div>
   </div>
   <div id="celebration-layer" class="celebration-layer" aria-hidden="true"></div>
   <script src="overlay.js"></script>

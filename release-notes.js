@@ -1,4 +1,25 @@
 const RELEASES = {
+  '1.0.19': {
+    releasedAt: '2026-11-20',
+    slides: [
+      {
+        title: 'Sprint',
+        description: 'Design Sprint is now just Sprint, everywhere you see it. The docked bar, fullscreen, Labs, and the first-run tour all use the shorter name.',
+      },
+      {
+        title: 'A minute of warning',
+        description: 'During the last minute of a sprint task, a red edge glow fades in around the screen. If a Pomodoro break is coming sooner, the glow is blue. It clears when the minute ends, the task changes, or a break starts.',
+      },
+      {
+        title: 'Percentage worked',
+        description: 'Sprint fullscreen can show how much of the planned time you have worked, counting up from 0. Turn it on from the fullscreen menu: Show Percentage Worked.',
+      },
+      {
+        title: 'Fullscreen, for real',
+        description: 'Timer fullscreen and Sprint fullscreen now cover the menu bar and the Dock. Leaving timer fullscreen no longer stalls the app.',
+      },
+    ],
+  },
   '1.0.18': {
     releasedAt: '2026-11-07',
     hotfix: true,

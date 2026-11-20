@@ -1,12 +1,12 @@
 {
   "name": "supaslash",
   "productName": "SupaSlash",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "description": "A simple floating to-do timer for macOS",
   "main": "main.js",
   "scripts": {
-    "start": "env -u ELECTRON_RUN_AS_NODE electron-forge start",
-    "dev": "env -u ELECTRON_RUN_AS_NODE electron-forge start",
+    "start": "bash scripts/dev-start.sh",
+    "dev": "bash scripts/dev-start.sh",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "make:local": "env -u APPLE_ID -u APPLE_APP_SPECIFIC_PASSWORD -u APPLE_TEAM_ID -u APPLE_SIGNING_IDENTITY SUPASLASH_LOCAL_BUILD=1 electron-forge make",

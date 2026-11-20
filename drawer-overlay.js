@@ -199,6 +199,5 @@ document.body.addEventListener('mouseleave', (e) => {
   const rect = document.body.getBoundingClientRect();
   // Leaving downward toward the timer bar — keep the drawer open.
   if (e.clientY >= rect.bottom - 2) return;
-  if (addFormOpen) return;
   window.drawerOverlay.notifyPointerLeave();
 });
